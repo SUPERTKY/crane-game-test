@@ -42,7 +42,7 @@ const matBox = new CANNON.Material("box");
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matStick, matBox, {
-    friction: 0.35,
+    friction: 0.05,
     restitution: 0.0,
   })
 );

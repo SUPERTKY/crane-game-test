@@ -37,6 +37,68 @@ addEventListener("resize", () => {
 const world = new CANNON.World({
   gravity: new CANNON.Vec3(0, -9.82, 0),
 });
+function addCraneBase({ center = { x: 0, y: 0, z: 0 }, innerW = 1.6, innerD = 1.2, wallH = 0.5, thick = 0.05 } = {}) {
+  // ===== 見た目（three） =====
+  const group = new THREE.Group();
+  group.position.set(center.x, center.y, center.z);
+  scene.add(group);
+
+  // 床（見た目）
+  const floorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(innerW + thick * 2, thick, innerD + thick * 2),
+    new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 1 })
+  );
+  floorMesh.position.set(0, -thick / 2, 0);
+  group.add(floorMesh);
+
+  // 壁（見た目）
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
+
+  const wallL = new THREE.Mesh(new THREE.BoxGeometry(thick, wallH, innerD + thick * 2), wallMat);
+  wallL.position.set(-(innerW / 2 + thick / 2), wallH / 2, 0);
+  group.add(wallL);
+
+  const wallR = new THREE.Mesh(new THREE.BoxGeometry(thick, wallH, innerD + thick * 2), wallMat);
+  wallR.position.set( (innerW / 2 + thick / 2), wallH / 2, 0);
+  group.add(wallR);
+
+  const wallF = new THREE.Mesh(new THREE.BoxGeometry(innerW + thick * 2, wallH, thick), wallMat);
+  wallF.position.set(0, wallH / 2, -(innerD / 2 + thick / 2));
+  group.add(wallF);
+
+  const wallB = new THREE.Mesh(new THREE.BoxGeometry(innerW + thick * 2, wallH, thick), wallMat);
+  wallB.position.set(0, wallH / 2,  (innerD / 2 + thick / 2));
+  group.add(wallB);
+
+  // ===== 物理（cannon-es） =====
+  const baseMat = new CANNON.Material("base");
+
+  // 床（物理）
+  {
+    const shape = new CANNON.Box(new CANNON.Vec3((innerW + thick * 2) / 2, thick / 2, (innerD + thick * 2) / 2));
+    const body = new CANNON.Body({ mass: 0, material: baseMat });
+    body.addShape(shape);
+    body.position.set(center.x, center.y - thick / 2, center.z);
+    world.addBody(body);
+  }
+
+  // 壁（物理）
+  function addWall(w, h, d, x, y, z) {
+    const shape = new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2));
+    const body = new CANNON.Body({ mass: 0, material: baseMat });
+    body.addShape(shape);
+    body.position.set(center.x + x, center.y + y, center.z + z);
+    world.addBody(body);
+  }
+
+  addWall(thick, wallH, innerD + thick * 2, -(innerW / 2 + thick / 2), wallH / 2, 0);
+  addWall(thick, wallH, innerD + thick * 2,  (innerW / 2 + thick / 2), wallH / 2, 0);
+  addWall(innerW + thick * 2, wallH, thick, 0, wallH / 2, -(innerD / 2 + thick / 2));
+  addWall(innerW + thick * 2, wallH, thick, 0, wallH / 2,  (innerD / 2 + thick / 2));
+
+  return group;
+}
+
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.allowSleep = true;
 

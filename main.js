@@ -53,6 +53,8 @@ async function loadScene() {
   const stick1 = stickGltf.scene.clone(true);
   const stick2 = stickGltf.scene.clone(true);
   const box = boxGltf.scene;
+// サイズ調整（例：半分）
+box.scale.set(0.5, 0.5, 0.5);
 
   scene.add(stick1, stick2, box);
 

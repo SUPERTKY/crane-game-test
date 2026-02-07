@@ -1,9 +1,8 @@
 // main.js（配置だけ：棒2本＋箱を棒の上に置く／前から見るカメラ）
 // ※ index.html から <script type="module" src="./main.js"></script> で読み込む想定
 
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-import { GLTFLoader } from "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
-
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 // --- 基本セットアップ ---
 const scene = new THREE.Scene();

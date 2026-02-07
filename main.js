@@ -113,7 +113,7 @@ craneMesh.position.y -= 2;
   scene.add(stick1Mesh, stick2Mesh, boxMesh);
 
   // 棒の“間”を作る（Z方向に離す）
-  const stickGap = 0.6;
+  const stickGap = 1.1;
   stick1Mesh.position.set(0, 0, -stickGap / 2);
   stick2Mesh.position.set(0, 0,  stickGap / 2);
 

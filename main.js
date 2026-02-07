@@ -119,7 +119,21 @@ craneMesh.position.y -= 2;
 
   // ===== 物理：棒（静的）=====
   const stickSize = getBoxSize(stick1Mesh);
-  const stickHalf = new CANNON.Vec3(stickSize.x / 2, stickSize.y / 2, stickSize.z / 2);
+  // ===== 棒の当たり判定を「見た目から自動で細く」作る =====
+const longIsX = stickSize.x >= stickSize.z;
+
+// 太さは「長さの何%にするか」(小さいほど落ちやすくなる)
+// まずは 0.06〜0.12 が扱いやすい
+const thicknessRatio = 0.08;
+
+// 長い方向はそのまま、短い方向（太さ）だけ細くする
+const hx = (longIsX ? stickSize.x : stickSize.x * thicknessRatio) / 2;
+const hz = (longIsX ? stickSize.z * thicknessRatio : stickSize.z) / 2;
+const hy = stickSize.y / 2;
+
+// これが「だいたい棒っぽい」当たり判定
+const stickHalf = new CANNON.Vec3(hx, hy, hz);
+
 
   stick1Body = new CANNON.Body({ mass: 0, material: matStick });
   stick1Body.addShape(new CANNON.Box(stickHalf));

@@ -166,7 +166,8 @@ const stickHalf = new CANNON.Vec3(hx, hy, hz);
   const startY = stickTopY + boxSize.y / 2 + 0.002;
 
   // ★箱は中心(0,*,0)に置く（＝クレーン台の中心）
-  boxBody.position.set(0, startY, 0);
+  boxBody.position.set(0, startY, 0.15); // Zにズラす
+
   boxBody.quaternion.setFromEuler(boxMesh.rotation.x, boxMesh.rotation.y, boxMesh.rotation.z);
   world.addBody(boxBody);
 

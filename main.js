@@ -2,10 +2,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 
-// ========== サイズ調整（全体を小さくしたいならここ） ==========
-const WORLD_SCALE = 0.25; // ← 0.2〜0.5で調整（小さくするほど縮む）
+const WORLD_SCALE = 0.25;
 
-// ========== three 基本 ==========
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xeeeeee);
 
@@ -33,57 +31,77 @@ addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-// ========== 物理（cannon-es） ==========
-const world = new CANNON.World({
-  gravity: new CANNON.Vec3(0, -9.82, 0),
-});
+// ===== 物理 =====
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.allowSleep = true;
 
-// 接触材質（滑りやすさ）
 const matStick = new CANNON.Material("stick");
 const matBox = new CANNON.Material("box");
 
-world.defaultContactMaterial.friction = 0.4;
-world.defaultContactMaterial.restitution = 0.0;
-
 world.addContactMaterial(
   new CANNON.ContactMaterial(matStick, matBox, {
-    friction: 0.35,      // ここを下げると滑りやすい
+    friction: 0.35,
     restitution: 0.0,
   })
 );
 
-// ========== 読み込み ==========
 const loader = new GLTFLoader();
 
-let boxMesh, stick1Mesh, stick2Mesh;
+let boxMesh, stick1Mesh, stick2Mesh, craneMesh;
 let boxBody, stick1Body, stick2Body;
 
+function getBox3(obj3d) {
+  return new THREE.Box3().setFromObject(obj3d);
+}
 function getBoxSize(obj3d) {
-  const box3 = new THREE.Box3().setFromObject(obj3d);
   const size = new THREE.Vector3();
-  box3.getSize(size);
+  getBox3(obj3d).getSize(size);
   return size;
 }
 
+/** 見た目の中心を(0,0,0)へ寄せ、床面(Y最下)を0へ揃える */
+function centerToOriginAndGround(root) {
+  const b = getBox3(root);
+  const center = new THREE.Vector3();
+  b.getCenter(center);
+
+  // 中心を原点へ
+  root.position.sub(center);
+
+  // 床面をY=0へ（最下点を0にする）
+  const b2 = getBox3(root);
+  root.position.y -= b2.min.y;
+}
+
 async function loadScene() {
-  const [stickGltf, boxGltf] = await Promise.all([
+  const [stickGltf, boxGltf, craneGltf] = await Promise.all([
     loader.loadAsync("./models/Stick.glb"),
     loader.loadAsync("./models/box.glb"),
+    loader.loadAsync("./models/Crane_game.glb"), // ★追加
   ]);
 
-  // ---- 見た目メッシュ ----
+  // ===== クレーン台（見た目だけ）=====
+  craneMesh = craneGltf.scene;
+  craneMesh.scale.setScalar(WORLD_SCALE);
+
+  // 台の中心を(0,0,0)へ、床面をY=0へ
+  centerToOriginAndGround(craneMesh);
+
+  // 必要なら向き合わせ（まずは無しでOK。ズレてたらY回転を調整）
+  // craneMesh.rotation.y += Math.PI / 2;
+
+  scene.add(craneMesh);
+
+  // ===== 棒＆箱（見た目）=====
   stick1Mesh = stickGltf.scene.clone(true);
   stick2Mesh = stickGltf.scene.clone(true);
   boxMesh = boxGltf.scene;
 
-  // 全体縮小（見た目）
   stick1Mesh.scale.setScalar(WORLD_SCALE);
   stick2Mesh.scale.setScalar(WORLD_SCALE);
   boxMesh.scale.setScalar(WORLD_SCALE);
 
-  // 横向き（必要なら）
   const yaw = Math.PI / 2;
   stick1Mesh.rotation.y += yaw;
   stick2Mesh.rotation.y += yaw;
@@ -91,14 +109,13 @@ async function loadScene() {
 
   scene.add(stick1Mesh, stick2Mesh, boxMesh);
 
-  // ---- 棒を2本に配置（“間”を作る：Zで離す）----
-  const stickGap = 0.6; // ← 棒の間隔（世界単位。WORLD_SCALEとは別で調整）
+  // 棒の“間”を作る（Z方向に離す）
+  const stickGap = 0.6;
   stick1Mesh.position.set(0, 0, -stickGap / 2);
   stick2Mesh.position.set(0, 0,  stickGap / 2);
 
-  // ---- 物理形状（棒）：見た目の棒の寸法から、当たり判定用の箱を作る ----
-  // ここでは「見た目の棒モデルを包む箱」を当たり判定にします（最小実装で安定）
-  const stickSize = getBoxSize(stick1Mesh); // scale後のサイズ
+  // ===== 物理：棒（静的）=====
+  const stickSize = getBoxSize(stick1Mesh);
   const stickHalf = new CANNON.Vec3(stickSize.x / 2, stickSize.y / 2, stickSize.z / 2);
 
   stick1Body = new CANNON.Body({ mass: 0, material: matStick });
@@ -113,36 +130,36 @@ async function loadScene() {
   stick2Body.quaternion.setFromEuler(stick2Mesh.rotation.x, stick2Mesh.rotation.y, stick2Mesh.rotation.z);
   world.addBody(stick2Body);
 
-  // ---- 物理形状（箱）：見た目の箱モデルを包む箱（動く） ----
+  // ===== 物理：箱（動的）=====
   const boxSize = getBoxSize(boxMesh);
   const boxHalf = new CANNON.Vec3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2);
 
   boxBody = new CANNON.Body({
-    mass: 1.0,              // 重さ（大きいほど動きにくい）
+    mass: 1.0,
     material: matBox,
-    linearDamping: 0.01,    // 空気抵抗
+    linearDamping: 0.01,
     angularDamping: 0.02,
   });
   boxBody.addShape(new CANNON.Box(boxHalf));
 
-  // 箱を棒の上に置く（棒上面 + 箱半分）
-  const stickTopY = Math.max(stick1Mesh.position.y + stickSize.y / 2, stick2Mesh.position.y + stickSize.y / 2);
+  const stickTopY = Math.max(
+    stick1Mesh.position.y + stickSize.y / 2,
+    stick2Mesh.position.y + stickSize.y / 2
+  );
   const startY = stickTopY + boxSize.y / 2 + 0.002;
 
+  // ★箱は中心(0,*,0)に置く（＝クレーン台の中心）
   boxBody.position.set(0, startY, 0);
   boxBody.quaternion.setFromEuler(boxMesh.rotation.x, boxMesh.rotation.y, boxMesh.rotation.z);
   world.addBody(boxBody);
 
-  // 見た目も物理の初期位置へ
   boxMesh.position.set(boxBody.position.x, boxBody.position.y, boxBody.position.z);
 
-  // カメラを少し合わせる
   camera.lookAt(0, stickTopY + 0.15, 0);
 }
 
 loadScene().catch(console.error);
 
-// ========== ループ（物理→描画） ==========
 let lastT;
 function animate(t) {
   requestAnimationFrame(animate);
@@ -151,10 +168,8 @@ function animate(t) {
   const dt = Math.min((t - lastT) / 1000, 1 / 30);
   lastT = t;
 
-  // 物理ステップ
   world.step(1 / 60, dt, 3);
 
-  // 物理→見た目 同期
   if (boxMesh && boxBody) {
     boxMesh.position.copy(boxBody.position);
     boxMesh.quaternion.copy(boxBody.quaternion);

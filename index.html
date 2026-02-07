@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Crane Game 3D</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #111; }
+      #hud {
+        position: fixed; left: 12px; top: 12px;
+        color: #fff; font: 14px/1.4 system-ui, -apple-system, sans-serif;
+        background: rgba(0,0,0,.45); padding: 10px 12px; border-radius: 10px;
+        max-width: 360px;
+      }
+      #hud b { display:block; margin-bottom: 6px; }
+      #hud .small { opacity: .85; font-size: 12px; margin-top: 6px; }
+      canvas { display:block; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <b>3D クレーン（GLB読み込み）</b>
+      操作：W/A/S/D=移動　Q/E=上下　R=リセット<br/>
+      <span class="small">
+        ※ アームを動かすには、Blender側で動かしたいオブジェクトの名前を <code>Arm</code> にすると簡単です。<br/>
+        いまは名前が無くても表示だけはできます。
+      </span>
+    </div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

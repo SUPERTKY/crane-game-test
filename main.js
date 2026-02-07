@@ -1,12 +1,17 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import * as CANNON from "cannon-es";
 
+// ========== サイズ調整（全体を小さくしたいならここ） ==========
+const WORLD_SCALE = 0.25; // ← 0.2〜0.5で調整（小さくするほど縮む）
+
+// ========== three 基本 ==========
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xeeeeee);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 1.4, 2.8);
-camera.lookAt(0, 0.9, 0);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 100);
+camera.position.set(0, 1.0, 2.0);
+camera.lookAt(0, 0.5, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -16,93 +21,11 @@ document.body.style.overflow = "hidden";
 document.body.appendChild(renderer.domElement);
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-
 const dir = new THREE.DirectionalLight(0xffffff, 1.0);
 dir.position.set(2, 3, 2);
 scene.add(dir);
 
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(8, 8),
-  new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 1 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.position.y = 0;
-scene.add(floor);
-
-scene.add(new THREE.AxesHelper(1));
-
-const loader = new GLTFLoader();
-
-async function loadScene() {
-  const [stickGltf, boxGltf] = await Promise.all([
-    loader.loadAsync("./models/Stick.glb"),
-    loader.loadAsync("./models/box.glb"),
-  ]);
-
-  const stick1 = stickGltf.scene.clone(true);
-  const stick2 = stickGltf.scene.clone(true);
-  const box = boxGltf.scene;
-function tint(root, colorHex) {
-  root.traverse((o) => {
-    if (!o.isMesh) return;
-    o.material = o.material.clone();
-    if (o.material.emissive) {
-      o.material.emissive.setHex(colorHex);
-      o.material.emissiveIntensity = 1.0;
-    }
-  });
-}
-
-tint(stick1, 0xff0000); // 赤
-tint(stick2, 0x0000ff); // 青
-
-  // ✅ 箱だけサイズ変更
-  box.scale.set(0.5, 0.5, 0.5);
-
-  // ✅ 横向き（床の上で向きを変える）：Y軸90度
-  const yaw = Math.PI / 2;
-  stick1.rotation.y += yaw;
-  stick2.rotation.y += yaw;
-  box.rotation.y += yaw;
-
-  scene.add(stick1, stick2, box);
-
-  // ✅ 棒の間隔（名前を gap じゃなく stickGap にする）
-  const stickGap = 1.0;
-  stick1.position.set(0, 0, -stickGap / 2);
-stick2.position.set(0, 0,  stickGap / 2);
-
-
-  // --- 箱を棒の上に接地 ---
-  const b1 = new THREE.Box3().setFromObject(stick1);
-  const b2 = new THREE.Box3().setFromObject(stick2);
-  const stickTopY = Math.max(b1.max.y, b2.max.y);
-
-  const bb = new THREE.Box3().setFromObject(box);
-  const boxBottomY = bb.min.y;
-
-  const epsilon = 0.001;
-  box.position.set(0, 0, 0);
-  box.position.y = (stickTopY - boxBottomY) + epsilon;
-
-  camera.lookAt(0, stickTopY + 0.2, 0);
-}
-
-loadScene().catch((e) => {
-  console.error(e);
-  const errText = document.createElement("div");
-  errText.style.position = "fixed";
-  errText.style.left = "12px";
-  errText.style.top = "12px";
-  errText.style.padding = "10px 12px";
-  errText.style.background = "rgba(0,0,0,0.7)";
-  errText.style.color = "#fff";
-  errText.style.fontFamily = "monospace";
-  errText.style.whiteSpace = "pre";
-  errText.textContent =
-    "GLB load failed.\nCheck paths:\n- ./models/Stick.glb\n- ./models/box.glb\nOpen DevTools Console for details.";
-  document.body.appendChild(errText);
-});
+scene.add(new THREE.AxesHelper(0.5));
 
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
@@ -110,8 +33,133 @@ addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-function animate() {
+// ========== 物理（cannon-es） ==========
+const world = new CANNON.World({
+  gravity: new CANNON.Vec3(0, -9.82, 0),
+});
+world.broadphase = new CANNON.SAPBroadphase(world);
+world.allowSleep = true;
+
+// 接触材質（滑りやすさ）
+const matStick = new CANNON.Material("stick");
+const matBox = new CANNON.Material("box");
+
+world.defaultContactMaterial.friction = 0.4;
+world.defaultContactMaterial.restitution = 0.0;
+
+world.addContactMaterial(
+  new CANNON.ContactMaterial(matStick, matBox, {
+    friction: 0.35,      // ここを下げると滑りやすい
+    restitution: 0.0,
+  })
+);
+
+// ========== 読み込み ==========
+const loader = new GLTFLoader();
+
+let boxMesh, stick1Mesh, stick2Mesh;
+let boxBody, stick1Body, stick2Body;
+
+function getBoxSize(obj3d) {
+  const box3 = new THREE.Box3().setFromObject(obj3d);
+  const size = new THREE.Vector3();
+  box3.getSize(size);
+  return size;
+}
+
+async function loadScene() {
+  const [stickGltf, boxGltf] = await Promise.all([
+    loader.loadAsync("./models/Stick.glb"),
+    loader.loadAsync("./models/box.glb"),
+  ]);
+
+  // ---- 見た目メッシュ ----
+  stick1Mesh = stickGltf.scene.clone(true);
+  stick2Mesh = stickGltf.scene.clone(true);
+  boxMesh = boxGltf.scene;
+
+  // 全体縮小（見た目）
+  stick1Mesh.scale.setScalar(WORLD_SCALE);
+  stick2Mesh.scale.setScalar(WORLD_SCALE);
+  boxMesh.scale.setScalar(WORLD_SCALE);
+
+  // 横向き（必要なら）
+  const yaw = Math.PI / 2;
+  stick1Mesh.rotation.y += yaw;
+  stick2Mesh.rotation.y += yaw;
+  boxMesh.rotation.y += yaw;
+
+  scene.add(stick1Mesh, stick2Mesh, boxMesh);
+
+  // ---- 棒を2本に配置（“間”を作る：Zで離す）----
+  const stickGap = 0.6; // ← 棒の間隔（世界単位。WORLD_SCALEとは別で調整）
+  stick1Mesh.position.set(0, 0, -stickGap / 2);
+  stick2Mesh.position.set(0, 0,  stickGap / 2);
+
+  // ---- 物理形状（棒）：見た目の棒の寸法から、当たり判定用の箱を作る ----
+  // ここでは「見た目の棒モデルを包む箱」を当たり判定にします（最小実装で安定）
+  const stickSize = getBoxSize(stick1Mesh); // scale後のサイズ
+  const stickHalf = new CANNON.Vec3(stickSize.x / 2, stickSize.y / 2, stickSize.z / 2);
+
+  stick1Body = new CANNON.Body({ mass: 0, material: matStick });
+  stick1Body.addShape(new CANNON.Box(stickHalf));
+  stick1Body.position.set(stick1Mesh.position.x, stick1Mesh.position.y, stick1Mesh.position.z);
+  stick1Body.quaternion.setFromEuler(stick1Mesh.rotation.x, stick1Mesh.rotation.y, stick1Mesh.rotation.z);
+  world.addBody(stick1Body);
+
+  stick2Body = new CANNON.Body({ mass: 0, material: matStick });
+  stick2Body.addShape(new CANNON.Box(stickHalf));
+  stick2Body.position.set(stick2Mesh.position.x, stick2Mesh.position.y, stick2Mesh.position.z);
+  stick2Body.quaternion.setFromEuler(stick2Mesh.rotation.x, stick2Mesh.rotation.y, stick2Mesh.rotation.z);
+  world.addBody(stick2Body);
+
+  // ---- 物理形状（箱）：見た目の箱モデルを包む箱（動く） ----
+  const boxSize = getBoxSize(boxMesh);
+  const boxHalf = new CANNON.Vec3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2);
+
+  boxBody = new CANNON.Body({
+    mass: 1.0,              // 重さ（大きいほど動きにくい）
+    material: matBox,
+    linearDamping: 0.01,    // 空気抵抗
+    angularDamping: 0.02,
+  });
+  boxBody.addShape(new CANNON.Box(boxHalf));
+
+  // 箱を棒の上に置く（棒上面 + 箱半分）
+  const stickTopY = Math.max(stick1Mesh.position.y + stickSize.y / 2, stick2Mesh.position.y + stickSize.y / 2);
+  const startY = stickTopY + boxSize.y / 2 + 0.002;
+
+  boxBody.position.set(0, startY, 0);
+  boxBody.quaternion.setFromEuler(boxMesh.rotation.x, boxMesh.rotation.y, boxMesh.rotation.z);
+  world.addBody(boxBody);
+
+  // 見た目も物理の初期位置へ
+  boxMesh.position.set(boxBody.position.x, boxBody.position.y, boxBody.position.z);
+
+  // カメラを少し合わせる
+  camera.lookAt(0, stickTopY + 0.15, 0);
+}
+
+loadScene().catch(console.error);
+
+// ========== ループ（物理→描画） ==========
+let lastT;
+function animate(t) {
   requestAnimationFrame(animate);
+
+  if (lastT == null) lastT = t;
+  const dt = Math.min((t - lastT) / 1000, 1 / 30);
+  lastT = t;
+
+  // 物理ステップ
+  world.step(1 / 60, dt, 3);
+
+  // 物理→見た目 同期
+  if (boxMesh && boxBody) {
+    boxMesh.position.copy(boxBody.position);
+    boxMesh.quaternion.copy(boxBody.quaternion);
+  }
+
   renderer.render(scene, camera);
 }
-animate();
+requestAnimationFrame(animate);

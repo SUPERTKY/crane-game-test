@@ -4,12 +4,19 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>crane-game-test</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-  </style>
+  <style>body { margin: 0; overflow: hidden; }</style>
+
+  <!-- ★これを追加： "three" を解決できるようにする -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
-  <!-- ここが最重要：type="module" -->
   <script type="module" src="./main.js"></script>
 </body>
 </html>

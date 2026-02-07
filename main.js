@@ -83,27 +83,27 @@ function centerToOriginAndGround(root) {
  * それ以外の2軸を thicknessRatio 倍に細くする
  */
 function makeStickHalfExtentsFromMesh(stickMesh, thicknessRatio = 0.04) {
-  const s = getBoxSize(stickMesh);
+stick1Mesh.updateWorldMatrix(true, true);
 
-  const axes = [
-    { k: "x", v: s.x },
-    { k: "y", v: s.y },
-    { k: "z", v: s.z },
-  ].sort((a, b) => b.v - a.v);
+const stickSize = getBoxSize(stick1Mesh);
 
-  const longAxis = axes[0].k;
+// x/y/zで一番長い軸＝棒の長手
+const axes = [
+  { k: "x", v: stickSize.x },
+  { k: "y", v: stickSize.y },
+  { k: "z", v: stickSize.z },
+].sort((a, b) => b.v - a.v);
 
-  const half = {
-    x: s.x / 2,
-    y: s.y / 2,
-    z: s.z / 2,
-  };
+const longAxis = axes[0].k;
+const thicknessRatio = 0.04;
 
-  for (const k of ["x", "y", "z"]) {
-    if (k !== longAxis) half[k] *= thicknessRatio;
-  }
+const half = { x: stickSize.x / 2, y: stickSize.y / 2, z: stickSize.z / 2 };
+for (const k of ["x", "y", "z"]) {
+  if (k !== longAxis) half[k] *= thicknessRatio;
+}
 
-  return new CANNON.Vec3(half.x, half.y, half.z);
+const stickHalf = new CANNON.Vec3(half.x, half.y, half.z);
+
 }
 
 async function loadScene() {

@@ -7,12 +7,7 @@ const WORLD_SCALE = 0.25;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xeeeeee);
 
-const camera = new THREE.PerspectiveCamera(
-  60,
-  innerWidth / innerHeight,
-  0.05,
-  100
-);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 100);
 camera.position.set(0, 2, 3.2);
 camera.lookAt(0, 0.4, 0);
 
@@ -69,41 +64,37 @@ function centerToOriginAndGround(root) {
   const center = new THREE.Vector3();
   b.getCenter(center);
 
-  // 中心を原点へ
   root.position.sub(center);
 
-  // 床面をY=0へ（最下点を0にする）
   const b2 = getBox3(root);
   root.position.y -= b2.min.y;
 }
 
 /**
- * ★重要：Stick.glb の向きがどうであっても
- * 「一番長い軸＝棒の長手方向」として判定し、
- * それ以外の2軸を thicknessRatio 倍に細くする
+ * 棒の当たり判定：
+ * - 見た目(回転後)のAABBサイズから「一番長い軸」を長手として採用
+ * - それ以外2軸を thicknessRatio 倍に細くする
  */
 function makeStickHalfExtentsFromMesh(stickMesh, thicknessRatio = 0.04) {
-stick1Mesh.updateWorldMatrix(true, true);
+  // ★回転/スケール/移動を反映させた状態でBox3を取る
+  stickMesh.updateWorldMatrix(true, true);
 
-const stickSize = getBoxSize(stick1Mesh);
+  const s = getBoxSize(stickMesh);
 
-// x/y/zで一番長い軸＝棒の長手
-const axes = [
-  { k: "x", v: stickSize.x },
-  { k: "y", v: stickSize.y },
-  { k: "z", v: stickSize.z },
-].sort((a, b) => b.v - a.v);
+  const axes = [
+    { k: "x", v: s.x },
+    { k: "y", v: s.y },
+    { k: "z", v: s.z },
+  ].sort((a, b) => b.v - a.v);
 
-const longAxis = axes[0].k;
-const thicknessRatio = 0.04;
+  const longAxis = axes[0].k;
 
-const half = { x: stickSize.x / 2, y: stickSize.y / 2, z: stickSize.z / 2 };
-for (const k of ["x", "y", "z"]) {
-  if (k !== longAxis) half[k] *= thicknessRatio;
-}
+  const half = { x: s.x / 2, y: s.y / 2, z: s.z / 2 };
+  for (const k of ["x", "y", "z"]) {
+    if (k !== longAxis) half[k] *= thicknessRatio;
+  }
 
-const stickHalf = new CANNON.Vec3(half.x, half.y, half.z);
-
+  return new CANNON.Vec3(half.x, half.y, half.z);
 }
 
 async function loadScene() {
@@ -129,6 +120,7 @@ async function loadScene() {
   stick2Mesh.scale.setScalar(WORLD_SCALE);
   boxMesh.scale.setScalar(WORLD_SCALE);
 
+  // ★ここで棒を横にしてる（見た目）
   const yaw = Math.PI / 2;
   stick1Mesh.rotation.y += yaw;
   stick2Mesh.rotation.y += yaw;
@@ -136,46 +128,25 @@ async function loadScene() {
 
   scene.add(stick1Mesh, stick2Mesh, boxMesh);
 
-  // 棒の“間”を作る（Z方向に離す）
-  // ★0だと2本が完全に重なって当たり判定が二重になり、
-  //   変に安定したり不自然になりやすいので少し開ける
+  // 棒の間隔
   const stickGap = 0.12;
   stick1Mesh.position.set(0, 0, -stickGap / 2);
-  stick2Mesh.position.set(0, 0, stickGap / 2);
+  stick2Mesh.position.set(0, 0,  stickGap / 2);
 
   // ===== 物理：棒（静的）=====
-  // ★「板」化しない“頑丈な自動判定”に変更
-  const stickHalf = makeStickHalfExtentsFromMesh(stick1Mesh, 0.04);
+  const stickHalf1 = makeStickHalfExtentsFromMesh(stick1Mesh, 0.04);
+  const stickHalf2 = makeStickHalfExtentsFromMesh(stick2Mesh, 0.04);
 
-  const stickSize = getBoxSize(stick1Mesh);
-
-// 「長手＝X」「太さ＝Z/Y」と決め打ち（横棒想定）
-const thicknessRatio = 0.04;
-const half = new CANNON.Vec3(
-  stickSize.x / 2,                 // 長手
-  (stickSize.y / 2) * thicknessRatio, // 厚み（縦）細く
-  (stickSize.z / 2) * thicknessRatio  // 厚み（奥）細く
-);
-
-stick1Body = new CANNON.Body({ mass: 0, material: matStick });
-stick1Body.addShape(new CANNON.Box(half));
-stick1Body.position.copy(stick1Mesh.position);
-stick1Body.quaternion.copy(stick1Mesh.quaternion); // ★Threeの回転をそのまま
-world.addBody(stick1Body);
-
+  stick1Body = new CANNON.Body({ mass: 0, material: matStick });
+  stick1Body.addShape(new CANNON.Box(stickHalf1));
+  stick1Body.position.copy(stick1Mesh.position);
+  stick1Body.quaternion.copy(stick1Mesh.quaternion); // ★回転も同期
+  world.addBody(stick1Body);
 
   stick2Body = new CANNON.Body({ mass: 0, material: matStick });
-  stick2Body.addShape(new CANNON.Box(stickHalf));
-  stick2Body.position.set(
-    stick2Mesh.position.x,
-    stick2Mesh.position.y,
-    stick2Mesh.position.z
-  );
-  stick2Body.quaternion.setFromEuler(
-    stick2Mesh.rotation.x,
-    stick2Mesh.rotation.y,
-    stick2Mesh.rotation.z
-  );
+  stick2Body.addShape(new CANNON.Box(stickHalf2));
+  stick2Body.position.copy(stick2Mesh.position);
+  stick2Body.quaternion.copy(stick2Mesh.quaternion); // ★回転も同期
   world.addBody(stick2Body);
 
   // ===== 物理：箱（動的）=====
@@ -190,22 +161,9 @@ world.addBody(stick1Body);
   });
   boxBody.addShape(new CANNON.Box(boxHalf));
 
-  // ★テスト用：確実に落ちる位置へ（棒から外れた場所）
+  // テスト：絶対落ちる位置（棒の外）
   boxBody.position.set(0.1, 1, 0);
-
-  // もし「棒の上から開始」に戻したいなら下を使ってOK
-  // const stickTopY = Math.max(
-  //   stick1Mesh.position.y + getBoxSize(stick1Mesh).y / 2,
-  //   stick2Mesh.position.y + getBoxSize(stick2Mesh).y / 2
-  // );
-  // const startY = stickTopY + boxSize.y / 2 + 0.05;
-  // boxBody.position.set(0, startY, 0);
-
-  boxBody.quaternion.setFromEuler(
-    boxMesh.rotation.x,
-    boxMesh.rotation.y,
-    boxMesh.rotation.z
-  );
+  boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
 
   boxMesh.position.copy(boxBody.position);

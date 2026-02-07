@@ -89,7 +89,7 @@ async function loadScene() {
   // 台の中心を(0,0,0)へ、床面をY=0へ
   centerToOriginAndGround(craneMesh);
 // 台を少し下げる
-craneMesh.position.y -= 0.5;
+craneMesh.position.y -= 0.7;
 
   // 必要なら向き合わせ（まずは無しでOK。ズレてたらY回転を調整）
   // craneMesh.rotation.y += Math.PI / 2;

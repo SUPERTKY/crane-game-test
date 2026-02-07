@@ -41,6 +41,32 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.7, 0);
 controls.enableDamping = true;
 
+const cameraViews = {
+  front: {
+    position: new THREE.Vector3(0, 1.7, 3.4),
+    target: new THREE.Vector3(0, 0.7, 0),
+    label: "前",
+  },
+  side: {
+    position: new THREE.Vector3(3.4, 1.5, 0),
+    target: new THREE.Vector3(0, 0.7, 0),
+    label: "横",
+  },
+};
+
+let currentCameraView = "front";
+
+function applyCameraView(viewKey) {
+  const view = cameraViews[viewKey];
+  if (!view) return;
+  camera.position.copy(view.position);
+  controls.target.copy(view.target);
+  controls.update();
+  currentCameraView = viewKey;
+  const label = document.querySelector(".camera-label");
+  if (label) label.textContent = `カメラ：${view.label}`;
+}
+
 // --- GLB読み込み（見た目だけの補助） ---
 const loader = new GLTFLoader();
 let decorativeCrane = null;
@@ -237,6 +263,16 @@ function resetGame() {
 }
 
 resetGame();
+
+const cameraToggle = document.getElementById("cameraToggle");
+if (cameraToggle) {
+  cameraToggle.addEventListener("click", () => {
+    const nextView = currentCameraView === "front" ? "side" : "front";
+    applyCameraView(nextView);
+  });
+}
+
+applyCameraView(currentCameraView);
 
 function startDrop() {
   if (game.state !== "move") return;

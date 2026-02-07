@@ -8,7 +8,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xeeeeee);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 100);
-camera.position.set(0, 2, 3.2);
+camera.position.set(0, 1.6, 3.2);
 camera.lookAt(0, 0.4, 0);
 
 
@@ -89,7 +89,7 @@ async function loadScene() {
   // 台の中心を(0,0,0)へ、床面をY=0へ
   centerToOriginAndGround(craneMesh);
 // 台を少し下げる
-craneMesh.position.y -= 1;
+craneMesh.position.y -= 0.5;
 
   // 必要なら向き合わせ（まずは無しでOK。ズレてたらY回転を調整）
   // craneMesh.rotation.y += Math.PI / 2;

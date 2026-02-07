@@ -59,7 +59,7 @@ box.scale.set(0.5, 0.5, 0.5);
   scene.add(stick1, stick2, box);
 
   // --- 配置（棒2本を左右に） ---
-  const gap = 0.55; // 棒間隔（ここを調整）
+  const gap = 1; // 棒間隔（ここを調整）
   stick1.position.set(-gap / 2, 0, 0);
   stick2.position.set(gap / 2, 0, 0);
 

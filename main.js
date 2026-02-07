@@ -53,6 +53,12 @@ async function loadScene() {
   const stick1 = stickGltf.scene.clone(true);
   const stick2 = stickGltf.scene.clone(true);
   const box = boxGltf.scene;
+  // 横向き（床の上で向きを変える）：Y軸に90度
+const yaw = Math.PI / 2;
+stick1.rotation.y += yaw;
+stick2.rotation.y += yaw;
+box.rotation.y += yaw;
+
 // サイズ調整（例：半分）
 box.scale.set(0.5, 0.5, 0.5);
 

@@ -24,7 +24,7 @@ const dir = new THREE.DirectionalLight(0xffffff, 1.0);
 dir.position.set(2, 3, 2);
 scene.add(dir);
 
-scene.add(new THREE.AxesHelper(0.5));
+
 
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;

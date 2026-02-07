@@ -69,8 +69,9 @@ tint(stick2, 0x0000ff); // 青
 
   // ✅ 棒の間隔（名前を gap じゃなく stickGap にする）
   const stickGap = 1.0;
-  stick1.position.set(-stickGap / 2, 0, 0);
-  stick2.position.set( stickGap / 2, 0, 0);
+  stick1.position.set(0, 0, -stickGap / 2);
+stick2.position.set(0, 0,  stickGap / 2);
+
 
   // --- 箱を棒の上に接地 ---
   const b1 = new THREE.Box3().setFromObject(stick1);

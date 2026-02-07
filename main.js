@@ -191,7 +191,7 @@ world.addBody(stick1Body);
   boxBody.addShape(new CANNON.Box(boxHalf));
 
   // ★テスト用：確実に落ちる位置へ（棒から外れた場所）
-  boxBody.position.set(1, 1, 1);
+  boxBody.position.set(0.1, 1, 0);
 
   // もし「棒の上から開始」に戻したいなら下を使ってOK
   // const stickTopY = Math.max(

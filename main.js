@@ -42,6 +42,19 @@ async function loadScene() {
   const stick1 = stickGltf.scene.clone(true);
   const stick2 = stickGltf.scene.clone(true);
   const box = boxGltf.scene;
+function tint(root, colorHex) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone();
+    if (o.material.emissive) {
+      o.material.emissive.setHex(colorHex);
+      o.material.emissiveIntensity = 1.0;
+    }
+  });
+}
+
+tint(stick1, 0xff0000); // 赤
+tint(stick2, 0x0000ff); // 青
 
   // ✅ 箱だけサイズ変更
   box.scale.set(0.5, 0.5, 0.5);

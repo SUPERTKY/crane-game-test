@@ -147,19 +147,22 @@ async function loadScene() {
   // ★「板」化しない“頑丈な自動判定”に変更
   const stickHalf = makeStickHalfExtentsFromMesh(stick1Mesh, 0.04);
 
-  stick1Body = new CANNON.Body({ mass: 0, material: matStick });
-  stick1Body.addShape(new CANNON.Box(stickHalf));
-  stick1Body.position.set(
-    stick1Mesh.position.x,
-    stick1Mesh.position.y,
-    stick1Mesh.position.z
-  );
-  stick1Body.quaternion.setFromEuler(
-    stick1Mesh.rotation.x,
-    stick1Mesh.rotation.y,
-    stick1Mesh.rotation.z
-  );
-  world.addBody(stick1Body);
+  const stickSize = getBoxSize(stick1Mesh);
+
+// 「長手＝X」「太さ＝Z/Y」と決め打ち（横棒想定）
+const thicknessRatio = 0.04;
+const half = new CANNON.Vec3(
+  stickSize.x / 2,                 // 長手
+  (stickSize.y / 2) * thicknessRatio, // 厚み（縦）細く
+  (stickSize.z / 2) * thicknessRatio  // 厚み（奥）細く
+);
+
+stick1Body = new CANNON.Body({ mass: 0, material: matStick });
+stick1Body.addShape(new CANNON.Box(half));
+stick1Body.position.copy(stick1Mesh.position);
+stick1Body.quaternion.copy(stick1Mesh.quaternion); // ★Threeの回転をそのまま
+world.addBody(stick1Body);
+
 
   stick2Body = new CANNON.Body({ mass: 0, material: matStick });
   stick2Body.addShape(new CANNON.Box(stickHalf));

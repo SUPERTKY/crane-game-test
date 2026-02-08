@@ -202,6 +202,7 @@ function makeStickHalfExtentsFromMesh(stickMesh, thicknessRatio = 0.04) {
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
+let clawPivot, clawLPivot, clawRPivot; // ★追加（setClawOpenで使うため）
 
 async function loadScene() {
   const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf] =
@@ -214,60 +215,36 @@ async function loadScene() {
       loader.loadAsync("./models/ClawR.glb"),
     ]);
 
-  // ===== クレーン台（見た目だけ）=====
-  craneMesh = craneGltf.scene;
-  craneMesh.scale.setScalar(WORLD_SCALE);
-  centerToOriginAndGround(craneMesh);
-  craneMesh.position.y -= 2;
-  scene.add(craneMesh);
+// ===== アーム作成 =====
+armMesh   = armGltf.scene;
+clawLMesh = clawLGltf.scene;
+clawRMesh = clawRGltf.scene;
 
-  // ===== アーム作成（左上に配置）=====
-  armMesh   = armGltf.scene;
-  clawLMesh = clawLGltf.scene;
-  clawRMesh = clawRGltf.scene;
-
-// スケール統一（アームだけ上乗せ）
+// スケール（アームだけ上乗せ）
 armMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
 clawLMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
 clawRMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
 
+// グループ化
+armGroup = new THREE.Group();
+armGroup.name = "ArmGroup";
+armGroup.add(armMesh);
 
-  // グループ化（これが「アーム全体」）
-  armGroup = new THREE.Group();
-  armGroup.name = "ArmGroup";
-  armGroup.add(armMesh);
-
-  // まず適当に：アーム先端に爪を付ける（位置は後で微調整）
-  // ※ここはあなたのGLBの作り次第で数値が変わるので、下の「微調整」手順で詰める
-  const clawPivot = new THREE.Object3D();
-  clawPivot.name = "ClawPivot";
-  armMesh.add(clawPivot);
-
-  clawPivot.position.set(0.0, -1, 0.0); // ←「先端」のつもりの仮置き
-
-  clawLMesh.position.set(0.0, 0.0, 0.8);
-  clawRMesh.position.set(0.0, 0.0, -0.8);
-
-  // もし左右が逆/向きが違うなら回転で合わせる
-  // clawLMesh.rotation.y = Math.PI;
-  // clawRMesh.rotation.y = Math.PI;
-
-  // ===== 先端の大ピボット（アーム先端）=====
-const clawPivot = new THREE.Object3D();
+// ===== 先端の大ピボット（アーム先端）=====
+clawPivot = new THREE.Object3D();
 clawPivot.name = "ClawPivot";
 armMesh.add(clawPivot);
-clawPivot.position.set(0.0, 0.25, 0.0); // 先端位置（要調整）
+clawPivot.position.set(0.0, 0.25, 0.0); // ★先端位置（要調整）
 
 // ===== 左右それぞれの回転ピボット =====
-const clawLPivot = new THREE.Object3D();
-const clawRPivot = new THREE.Object3D();
+clawLPivot = new THREE.Object3D();
+clawRPivot = new THREE.Object3D();
 clawLPivot.name = "ClawLPivot";
 clawRPivot.name = "ClawRPivot";
 clawPivot.add(clawLPivot);
 clawPivot.add(clawRPivot);
 
-// ★ヒンジ（回転軸の位置）をここで決める：要調整
-// 例：左右に少し開いた位置が回転中心
+// ★ヒンジ位置（要調整）
 clawLPivot.position.set(-0.12, 0.0, 0.0);
 clawRPivot.position.set( 0.12, 0.0, 0.0);
 
@@ -275,18 +252,15 @@ clawRPivot.position.set( 0.12, 0.0, 0.0);
 clawLPivot.add(clawLMesh);
 clawRPivot.add(clawRMesh);
 
-// ★爪メッシュの“原点”がヒンジに無い場合、ここでずらして合わせる：要調整
-// (爪の見た目がヒンジ位置から離れてる時に使う)
-clawLMesh.position.set(0.0, 0.0, 0.0);
-clawRMesh.position.set(0.0, 0.0, 0.0);
+// ★爪の原点がヒンジに無い場合の補正（要調整）
+clawLMesh.position.set(0, 0, 0);
+clawRMesh.position.set(0, 0, 0);
 
+// 置き場所（左上）
+armGroup.position.set(-1.2, 1.6, 0.6);
+armGroup.rotation.y = Math.PI / 2;
+scene.add(armGroup);
 
-  // 「左上」っぽい場所へ（ワールド座標）
-  // 画面左上=UI的な意味なら3Dではなく、ワールドの左上（カメラから見て）に置くのが現実的
-  armGroup.position.set(-1.2, 1.6, 0.6); // ←ここで左上に寄せる
-  armGroup.rotation.y = Math.PI / 2;     // 向きが合わなければ調整
-
-  scene.add(armGroup);
   
 
   // ===== クレーン台（見た目だけ）=====

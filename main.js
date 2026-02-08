@@ -3,6 +3,55 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 
 const WORLD_SCALE = 0.25;
+// ===== カメラ切替ボタン =====
+const camBtn = document.createElement("button");
+camBtn.type = "button";
+camBtn.title = "カメラ切替";
+camBtn.style.position = "fixed";
+camBtn.style.right = "18px";
+camBtn.style.bottom = "18px";
+camBtn.style.width = "52px";
+camBtn.style.height = "52px";
+camBtn.style.padding = "0";
+camBtn.style.border = "none";
+camBtn.style.borderRadius = "12px";
+camBtn.style.background = "rgba(255,255,255,0.85)";
+camBtn.style.boxShadow = "0 6px 18px rgba(0,0,0,0.18)";
+camBtn.style.cursor = "pointer";
+camBtn.style.display = "grid";
+camBtn.style.placeItems = "center";
+camBtn.style.userSelect = "none";
+camBtn.style.zIndex = "9999";
+
+const camImg = document.createElement("img");
+camImg.src = "./assets/camera.png"; // ここが画像パス
+camImg.alt = "camera";
+camImg.style.width = "70%";
+camImg.style.height = "70%";
+camImg.style.pointerEvents = "none";
+camBtn.appendChild(camImg);
+
+document.body.appendChild(camBtn);
+// ===== カメラ切替ロジック =====
+const FRONT_POS = new THREE.Vector3(0, 2, 3.2);
+const RIGHT_POS = new THREE.Vector3(3.2, 2, 0); // 右から（必要なら数値調整）
+const LOOK_AT = new THREE.Vector3(0, 0.4, 0);
+
+let camMode = 0; // 0: front, 1: right
+
+function applyCamera() {
+  if (camMode === 0) camera.position.copy(FRONT_POS);
+  else camera.position.copy(RIGHT_POS);
+
+  camera.lookAt(LOOK_AT);
+}
+
+applyCamera();
+
+camBtn.addEventListener("click", () => {
+  camMode = 1 - camMode;
+  applyCamera();
+});
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xeeeeee);

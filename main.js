@@ -3,7 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 
 const WORLD_SCALE = 0.25;
-const ARM_BODY_SCALE = 1.0; // 本体だけ（小さくしたいなら 0.6〜1.0）
+const ARM_BODY_SCALE = 0.7; // 本体だけ（小さくしたいなら 0.6〜1.0）
 const CLAW_SCALE     = 1.0; // 爪だけ（必要なら調整）
 const ARM_SCALE = 2; // ←ここを 1.2〜2.0 で調整
 const ARM_ROT_SPEED = 0.8; // rad/sec（0.2〜2.0で調整）

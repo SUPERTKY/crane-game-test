@@ -243,10 +243,10 @@ clawRMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
   clawPivot.name = "ClawPivot";
   armMesh.add(clawPivot);
 
-  clawPivot.position.set(0.0, 0.25, 0.0); // ←「先端」のつもりの仮置き
+  clawPivot.position.set(0.0, -1, 0.0); // ←「先端」のつもりの仮置き
 
-  clawLMesh.position.set(2, 0.0, 0.0);
-  clawRMesh.position.set(-2, 0.0, 0.0);
+  clawLMesh.position.set(2.5, 0.0, 0.0);
+  clawRMesh.position.set(-2.5, 0.0, 0.0);
 
   // もし左右が逆/向きが違うなら回転で合わせる
   // clawLMesh.rotation.y = Math.PI;

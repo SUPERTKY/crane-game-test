@@ -121,27 +121,40 @@ async function loadScene() {
   boxMesh.scale.setScalar(WORLD_SCALE);
 
   // ★ここで棒を横にしてる（見た目）
-  const yaw = Math.PI / 2;
-  stick1Mesh.rotation.y += yaw;
-  stick2Mesh.rotation.y += yaw;
-  boxMesh.rotation.y += yaw;
+const yaw = Math.PI / 2;
+// stick1Mesh.rotation.y += yaw;  ← いったんやめる
+// stick2Mesh.rotation.y += yaw;  ← いったんやめる
+// boxMesh.rotation.y += yaw;     ← これはそのままでもOK（箱は立方体なら影響小）
 
-  scene.add(stick1Mesh, stick2Mesh, boxMesh);
+scene.add(stick1Mesh, stick2Mesh, boxMesh);
 
-  // 棒の間隔
-  const stickGap = 0.12;
-  stick1Mesh.position.set(0, 0, -stickGap / 2);
-  stick2Mesh.position.set(0, 0,  stickGap / 2);
+// 棒の間隔（位置は回転前でも後でもOK）
+const stickGap = 0.12;
+stick1Mesh.position.set(0, 0, -stickGap / 2);
+stick2Mesh.position.set(0, 0,  stickGap / 2);
 
-  // ===== 物理：棒（静的）=====
-  const stickHalf1 = makeStickHalfExtentsFromMesh(stick1Mesh, 0.04);
-  const stickHalf2 = makeStickHalfExtentsFromMesh(stick2Mesh, 0.04);
+// ✅ 1) yawする前に halfExtents を作る
+const stickHalf1 = makeStickHalfExtentsFromMesh(stick1Mesh, 0.04);
+const stickHalf2 = makeStickHalfExtentsFromMesh(stick2Mesh, 0.04);
 
-  stick1Body = new CANNON.Body({ mass: 0, material: matStick });
-  stick1Body.addShape(new CANNON.Box(stickHalf1));
-  stick1Body.position.copy(stick1Mesh.position);
-  stick1Body.quaternion.copy(stick1Mesh.quaternion); // ★回転も同期
-  world.addBody(stick1Body);
+// ✅ 2) その後で見た目をyaw回転する
+stick1Mesh.rotation.y += yaw;
+stick2Mesh.rotation.y += yaw;
+boxMesh.rotation.y += yaw; // 必要なら
+
+// ✅ 3) Body作成→position/quaternion同期（yaw後のquaternionをコピー）
+stick1Body = new CANNON.Body({ mass: 0, material: matStick });
+stick1Body.addShape(new CANNON.Box(stickHalf1));
+stick1Body.position.copy(stick1Mesh.position);
+stick1Body.quaternion.copy(stick1Mesh.quaternion);
+world.addBody(stick1Body);
+
+stick2Body = new CANNON.Body({ mass: 0, material: matStick });
+stick2Body.addShape(new CANNON.Box(stickHalf2));
+stick2Body.position.copy(stick2Mesh.position);
+stick2Body.quaternion.copy(stick2Mesh.quaternion);
+world.addBody(stick2Body);
+
 
   stick2Body = new CANNON.Body({ mass: 0, material: matStick });
   stick2Body.addShape(new CANNON.Box(stickHalf2));

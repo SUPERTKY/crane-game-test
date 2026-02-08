@@ -243,8 +243,8 @@ async function loadScene() {
 
   clawPivot.position.set(0.0, 0.25, 0.0); // ←「先端」のつもりの仮置き
 
-  clawLMesh.position.set(-0.08, 0.0, 0.0);
-  clawRMesh.position.set( 0.08, 0.0, 0.0);
+  clawLMesh.position.set(-1, 0.0, 0.0);
+  clawRMesh.position.set( 1, 0.0, 0.0);
 
   // もし左右が逆/向きが違うなら回転で合わせる
   // clawLMesh.rotation.y = Math.PI;

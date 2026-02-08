@@ -348,19 +348,20 @@ async function loadScene() {
       loader.loadAsync("./models/ClawL.glb"),
       loader.loadAsync("./models/ClawR.glb"),
     ]);
-function addDebugDot(worldPos, size = 0.03) {
+function addDebugDotLocal(parent, localPos, size = 0.03) {
   const geo = new THREE.SphereGeometry(size, 12, 12);
   const mat = new THREE.MeshBasicMaterial({
     color: 0xff00ff,
-    depthTest: false,   // ★奥にあっても描く
+    depthTest: false,
     depthWrite: false,
   });
   const m = new THREE.Mesh(geo, mat);
-  m.renderOrder = 9999; // ★最後に描く
-  m.position.copy(worldPos);
-  scene.add(m);
+  m.renderOrder = 9999;
+  m.position.copy(localPos);   // ★ローカル座標
+  parent.add(m);               // ★親にぶら下げる
   return m;
 }
+
 function getBoxWorld(obj) {
   obj.updateWorldMatrix(true, true);
   return new THREE.Box3().setFromObject(obj); // world AABB

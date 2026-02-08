@@ -4,6 +4,7 @@ import * as CANNON from "cannon-es";
 
 const WORLD_SCALE = 0.25;
 const ARM_SCALE = 2; // ←ここを 1.2〜2.0 で調整
+const ARM_ROT_SPEED = 0.8; // rad/sec（0.2〜2.0で調整）
 
 
 const scene = new THREE.Scene();
@@ -135,6 +136,28 @@ function centerToOriginAndGround(root) {
   const b2 = getBox3(root);
   root.position.y -= b2.min.y;
 }
+function animate(t) {
+  requestAnimationFrame(animate);
+
+  if (lastT == null) lastT = t;
+  const dt = Math.min((t - lastT) / 1000, 1 / 30);
+  lastT = t;
+
+  world.step(1 / 60, dt, 3);
+
+  // アーム回転
+  if (armGroup) {
+    armGroup.rotation.y += ARM_ROT_SPEED * dt;
+  }
+
+  if (boxMesh && boxBody) {
+    boxMesh.position.copy(boxBody.position);
+    boxMesh.quaternion.copy(boxBody.quaternion);
+  }
+
+  renderer.render(scene, camera);
+}
+
 function makeArrowButton(rotationDeg = 0) {
   const btn = document.createElement("button");
   btn.type = "button";

@@ -458,8 +458,8 @@ addDebugDotLocal(clawPivot, hingeR_local, 0.03);
 
 
 // ★爪の原点がヒンジに無い場合の補正（要調整）
-clawLMesh.position.set(0, 0, 0);
-clawRMesh.position.set(0, 0, 0);
+clawLMesh.position.set(0, -1, 0);
+clawRMesh.position.set(0, -1, 0);
 
 // 置き場所（左上）
 armGroup.position.set(-1.2, 1.6, 0.6);

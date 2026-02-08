@@ -261,7 +261,7 @@ clawLPivot.add(clawLMesh);
 clawRPivot.add(clawRMesh);
 
 // ★爪の原点がヒンジに無い場合の補正（要調整）
-clawLMesh.position.set(0, 1, 0);
+clawLMesh.position.set(0, -1, 0);
 clawRMesh.position.set(0, -1, 0);
 
 // 置き場所（左上）

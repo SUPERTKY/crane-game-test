@@ -146,7 +146,6 @@ function makeArrowButton(rotationDeg = 0) {
   const btn = document.createElement("button");
   btn.type = "button";
 
-  // ★背景・枠・影を全部消す
   btn.style.width = "100px";
   btn.style.height = "100px";
   btn.style.border = "none";
@@ -157,6 +156,7 @@ function makeArrowButton(rotationDeg = 0) {
   btn.style.cursor = "pointer";
   btn.style.display = "grid";
   btn.style.placeItems = "center";
+  btn.style.userSelect = "none";
 
   const img = document.createElement("img");
   img.src = "./assets/Arrow.png";
@@ -164,22 +164,31 @@ function makeArrowButton(rotationDeg = 0) {
   img.style.height = "100%";
   img.style.transform = `rotate(${rotationDeg}deg)`;
   img.style.pointerEvents = "none";
-
   btn.appendChild(img);
 
-  // ボタンとしては機能（まだ何も処理しない）
-  btn.addEventListener("click", () => {
-    console.log("Arrow clicked", rotationDeg);
-  });
+  // ★ 有効/無効の見た目＆操作をまとめて切替
+  btn.setEnabled = (enabled) => {
+    btn.disabled = !enabled; // クリック無効化（標準）
+    btn.style.pointerEvents = enabled ? "auto" : "none"; // 念のため
+    btn.style.opacity = enabled ? "1" : "0.45";          // 少し黒っぽく（暗く）
+    btn.style.filter  = enabled ? "none" : "grayscale(1) brightness(0.7)";
+    btn.style.cursor  = enabled ? "pointer" : "default";
+  };
 
   return btn;
 }
 
-const arrowBtn1 = makeArrowButton(0);    // →（そのまま）
+
+const arrowBtn1 = makeArrowButton(0);    // →（回転なし）
 const arrowBtn2 = makeArrowButton(90);   // ↑（90度回転）
 
 arrowUI.appendChild(arrowBtn1);
 arrowUI.appendChild(arrowBtn2);
+
+// ★ 初期状態：→だけ押せる / ↑は押せない（暗い）
+arrowBtn1.setEnabled(true);
+arrowBtn2.setEnabled(false);
+
 
 /**
  * 棒の当たり判定：

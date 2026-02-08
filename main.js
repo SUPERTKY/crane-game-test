@@ -259,11 +259,7 @@ async function loadScene() {
   armGroup.rotation.y = Math.PI / 2;     // 向きが合わなければ調整
 
   scene.add(armGroup);
-  const [stickGltf, boxGltf, craneGltf] = await Promise.all([
-    loader.loadAsync("./models/Stick.glb"),
-    loader.loadAsync("./models/box.glb"),
-    loader.loadAsync("./models/Crane_game.glb"),
-  ]);
+  
 
   // ===== クレーン台（見た目だけ）=====
   craneMesh = craneGltf.scene;

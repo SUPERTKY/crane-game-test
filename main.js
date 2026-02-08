@@ -48,6 +48,8 @@ const loader = new GLTFLoader();
 
 let boxMesh, stick1Mesh, stick2Mesh, craneMesh;
 let boxBody, stick1Body, stick2Body;
+let stick3Mesh, stick4Mesh;
+let stick3Body, stick4Body;
 
 function getBox3(obj3d) {
   return new THREE.Box3().setFromObject(obj3d);
@@ -127,11 +129,34 @@ const yaw = Math.PI / 2;
 // boxMesh.rotation.y += yaw;     ← これはそのままでもOK（箱は立方体なら影響小）
 
 scene.add(stick1Mesh, stick2Mesh, boxMesh);
+stick3Mesh = stickGltf.scene.clone(true);
+stick4Mesh = stickGltf.scene.clone(true);
+
+stick3Mesh.scale.setScalar(WORLD_SCALE);
+stick4Mesh.scale.setScalar(WORLD_SCALE);
+
+// yaw は同じ
+const yaw = Math.PI / 2;
+stick3Mesh.rotation.y += yaw;
+stick4Mesh.rotation.y += yaw;
+
+scene.add(stick3Mesh, stick4Mesh);
 
 // 棒の間隔（位置は回転前でも後でもOK）
 const stickGap = 0.12;
 stick1Mesh.position.set(0, 0, -stickGap / 2);
 stick2Mesh.position.set(0, 0,  stickGap / 2);
+// 低い橋（既存）
+const stickGap = 0.12;
+stick1Mesh.position.set(0, 0, -stickGap / 2);
+stick2Mesh.position.set(0, 0,  stickGap / 2);
+
+// ✅ 高い2本（追加）
+const highY = 0.06;          // ← 橋より少し高い
+const highGap = 0.24;        // ← ここが「幅」(橋より大きく)
+
+stick3Mesh.position.set(0, highY, -highGap / 2);
+stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // ✅ 1) yawする前に halfExtents を作る
 const stickHalf1 = makeStickHalfExtentsFromMesh(stick1Mesh, 0.04);
@@ -154,6 +179,20 @@ stick2Body.addShape(new CANNON.Box(stickHalf2));
 stick2Body.position.copy(stick2Mesh.position);
 stick2Body.quaternion.copy(stick2Mesh.quaternion);
 world.addBody(stick2Body);
+const stickHalf3 = makeStickHalfExtentsFromMesh(stick3Mesh, 0.04);
+const stickHalf4 = makeStickHalfExtentsFromMesh(stick4Mesh, 0.04);
+
+stick3Body = new CANNON.Body({ mass: 0, material: matStick });
+stick3Body.addShape(new CANNON.Box(stickHalf3));
+stick3Body.position.copy(stick3Mesh.position);
+stick3Body.quaternion.copy(stick3Mesh.quaternion);
+world.addBody(stick3Body);
+
+stick4Body = new CANNON.Body({ mass: 0, material: matStick });
+stick4Body.addShape(new CANNON.Box(stickHalf4));
+stick4Body.position.copy(stick4Mesh.position);
+stick4Body.quaternion.copy(stick4Mesh.quaternion);
+world.addBody(stick4Body);
 
 
   stick2Body = new CANNON.Body({ mass: 0, material: matStick });

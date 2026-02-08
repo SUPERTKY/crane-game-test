@@ -200,7 +200,65 @@ function makeStickHalfExtentsFromMesh(stickMesh, thicknessRatio = 0.04) {
   return new CANNON.Vec3(half.x, half.y, half.z);
 }
 
+let armMesh, clawLMesh, clawRMesh, armGroup;
+
 async function loadScene() {
+  const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf] =
+    await Promise.all([
+      loader.loadAsync("./models/Stick.glb"),
+      loader.loadAsync("./models/box.glb"),
+      loader.loadAsync("./models/Crane_game.glb"),
+      loader.loadAsync("./models/Arm_unit.glb"),
+      loader.loadAsync("./models/ClawL.glb"),
+      loader.loadAsync("./models/ClawR.glb"),
+    ]);
+
+  // ===== クレーン台（見た目だけ）=====
+  craneMesh = craneGltf.scene;
+  craneMesh.scale.setScalar(WORLD_SCALE);
+  centerToOriginAndGround(craneMesh);
+  craneMesh.position.y -= 2;
+  scene.add(craneMesh);
+
+  // ===== アーム作成（左上に配置）=====
+  armMesh   = armGltf.scene;
+  clawLMesh = clawLGltf.scene;
+  clawRMesh = clawRGltf.scene;
+
+  // スケール統一
+  armMesh.scale.setScalar(WORLD_SCALE);
+  clawLMesh.scale.setScalar(WORLD_SCALE);
+  clawRMesh.scale.setScalar(WORLD_SCALE);
+
+  // グループ化（これが「アーム全体」）
+  armGroup = new THREE.Group();
+  armGroup.name = "ArmGroup";
+  armGroup.add(armMesh);
+
+  // まず適当に：アーム先端に爪を付ける（位置は後で微調整）
+  // ※ここはあなたのGLBの作り次第で数値が変わるので、下の「微調整」手順で詰める
+  const clawPivot = new THREE.Object3D();
+  clawPivot.name = "ClawPivot";
+  armMesh.add(clawPivot);
+
+  clawPivot.position.set(0.0, 0.25, 0.0); // ←「先端」のつもりの仮置き
+
+  clawLMesh.position.set(-0.08, 0.0, 0.0);
+  clawRMesh.position.set( 0.08, 0.0, 0.0);
+
+  // もし左右が逆/向きが違うなら回転で合わせる
+  // clawLMesh.rotation.y = Math.PI;
+  // clawRMesh.rotation.y = Math.PI;
+
+  clawPivot.add(clawLMesh);
+  clawPivot.add(clawRMesh);
+
+  // 「左上」っぽい場所へ（ワールド座標）
+  // 画面左上=UI的な意味なら3Dではなく、ワールドの左上（カメラから見て）に置くのが現実的
+  armGroup.position.set(-1.2, 1.6, 0.6); // ←ここで左上に寄せる
+  armGroup.rotation.y = Math.PI / 2;     // 向きが合わなければ調整
+
+  scene.add(armGroup);
   const [stickGltf, boxGltf, craneGltf] = await Promise.all([
     loader.loadAsync("./models/Stick.glb"),
     loader.loadAsync("./models/box.glb"),

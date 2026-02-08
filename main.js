@@ -253,16 +253,16 @@ clawPivot.add(clawLPivot);
 clawPivot.add(clawRPivot);
 
 // ★ヒンジ位置（要調整）
-clawLPivot.position.set(0, -0.3, 0.8);
-clawRPivot.position.set(0, -0.3, -0.8);
+clawLPivot.position.set(0, 1, 0.8);
+clawRPivot.position.set(0, 1, -0.8);
 
 // ===== 爪メッシュは「ピボットの子」 =====
 clawLPivot.add(clawLMesh);
 clawRPivot.add(clawRMesh);
 
 // ★爪の原点がヒンジに無い場合の補正（要調整）
-clawLMesh.position.set(0, 0, 0);
-clawRMesh.position.set(0, 0, 0);
+clawLMesh.position.set(0, -1, 0);
+clawRMesh.position.set(0, -1, 0);
 
 // 置き場所（左上）
 armGroup.position.set(-1.2, 1.6, 0.6);

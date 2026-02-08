@@ -49,14 +49,14 @@ const LOOK_AT = new THREE.Vector3(0, 0.4, 0);
 const arrowUI = document.createElement("div");
 arrowUI.style.position = "fixed";
 arrowUI.style.left = "50%";
-arrowUI.style.top = "50%";
+arrowUI.style.top = "65%";
 arrowUI.style.transform = "translate(-50%, -50%)";
 arrowUI.style.display = "flex";
 arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
-arrowUI.style.pointerEvents = "auto";
 
 document.body.appendChild(arrowUI);
+
 
 let camMode = 0;
 

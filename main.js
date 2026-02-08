@@ -7,6 +7,8 @@ const ARM_BODY_SCALE = 0.7; // 本体だけ（小さくしたいなら 0.6〜1.0
 const CLAW_SCALE     = 1.0; // 爪だけ（必要なら調整）
 const ARM_SCALE = 2; // ←ここを 1.2〜2.0 で調整
 const ARM_ROT_SPEED = 0.8; // rad/sec（0.2〜2.0で調整）
+let CLAW_AXIS = "z";   // "x" | "y" | "z" を試す
+let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 
 
 const scene = new THREE.Scene();
@@ -391,15 +393,24 @@ function animate(t) {
 
   world.step(1 / 60, dt, 3);
 
-  // ===== 爪だけ回転（パカパカテスト）=====
-  if (clawLPivot && clawRPivot) {
-    const open = 0.5 + 0.5 * Math.sin(t * 0.002); // 0..1
-    const ang = THREE.MathUtils.lerp(0.05, 0.9, open);
+  // ===== 爪だけ回転（テスト）=====
+if (clawLPivot && clawRPivot) {
+  const open = 0.5 + 0.5 * Math.sin(t * 0.002); // 0..1
+  const ang = THREE.MathUtils.lerp(0.05, 0.9, open) * CLAW_SIGN;
 
-    // ★回転軸はモデル次第：z がダメなら y / x に変える
-    clawLPivot.rotation.z =  ang;   // 左
-    clawRPivot.rotation.z = -ang;   // 右（逆方向）
+  // 軸で切り替え
+  if (CLAW_AXIS === "x") {
+    clawLPivot.rotation.x =  ang;
+    clawRPivot.rotation.x = -ang;
+  } else if (CLAW_AXIS === "y") {
+    clawLPivot.rotation.y =  ang;
+    clawRPivot.rotation.y = -ang;
+  } else { // "z"
+    clawLPivot.rotation.z =  ang;
+    clawRPivot.rotation.z = -ang;
   }
+}
+
 
   if (boxMesh && boxBody) {
     boxMesh.position.copy(boxBody.position);

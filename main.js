@@ -7,7 +7,7 @@ const ARM_BODY_SCALE = 0.7; // 本体だけ（小さくしたいなら 0.6〜1.0
 const CLAW_SCALE     = 1.0; // 爪だけ（必要なら調整）
 const ARM_SCALE = 2; // ←ここを 1.2〜2.0 で調整
 const ARM_ROT_SPEED = 0.8; // rad/sec（0.2〜2.0で調整）
-let CLAW_AXIS = "y";   // "x" | "y" | "z" を試す
+let CLAW_AXIS = "x";   // "x" | "y" | "z" を試す
 let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 
 

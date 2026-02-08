@@ -45,6 +45,18 @@ document.body.appendChild(camBtn);
 const FRONT_POS = new THREE.Vector3(0, 2, 3.2);
 const RIGHT_POS = new THREE.Vector3(3.2, 2, 0);
 const LOOK_AT = new THREE.Vector3(0, 0.4, 0);
+// ===== 中央ボタンコンテナ =====
+const arrowUI = document.createElement("div");
+arrowUI.style.position = "fixed";
+arrowUI.style.left = "50%";
+arrowUI.style.top = "50%";
+arrowUI.style.transform = "translate(-50%, -50%)";
+arrowUI.style.display = "flex";
+arrowUI.style.gap = "18px";
+arrowUI.style.zIndex = "9999";
+arrowUI.style.pointerEvents = "auto";
+
+document.body.appendChild(arrowUI);
 
 let camMode = 0;
 
@@ -122,6 +134,42 @@ function centerToOriginAndGround(root) {
   const b2 = getBox3(root);
   root.position.y -= b2.min.y;
 }
+function makeArrowButton(rotationDeg = 0) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+
+  btn.style.width = "64px";
+  btn.style.height = "64px";
+  btn.style.border = "none";
+  btn.style.padding = "0";
+  btn.style.background = "rgba(255,255,255,0.85)";
+  btn.style.borderRadius = "14px";
+  btn.style.boxShadow = "0 6px 16px rgba(0,0,0,0.18)";
+  btn.style.cursor = "pointer";
+  btn.style.display = "grid";
+  btn.style.placeItems = "center";
+
+  const img = document.createElement("img");
+  img.src = "./assets/Arrow.png";
+  img.style.width = "70%";
+  img.style.height = "70%";
+  img.style.transform = `rotate(${rotationDeg}deg)`;
+  img.style.pointerEvents = "none";
+
+  btn.appendChild(img);
+
+  // まだ処理は書かないが、ボタンとしては機能させる
+  btn.addEventListener("click", () => {
+    console.log("Arrow button clicked", rotationDeg);
+  });
+
+  return btn;
+}
+const arrowBtn1 = makeArrowButton(0);    // →（そのまま）
+const arrowBtn2 = makeArrowButton(90);   // ↑（90度回転）
+
+arrowUI.appendChild(arrowBtn1);
+arrowUI.appendChild(arrowBtn2);
 
 /**
  * 棒の当たり判定：

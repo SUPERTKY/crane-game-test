@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 
 const WORLD_SCALE = 0.25;
+const ARM_SCALE = 2; // ←ここを 1.2〜2.0 で調整
 
 
 const scene = new THREE.Scene();
@@ -225,10 +226,11 @@ async function loadScene() {
   clawLMesh = clawLGltf.scene;
   clawRMesh = clawRGltf.scene;
 
-  // スケール統一
-  armMesh.scale.setScalar(WORLD_SCALE);
-  clawLMesh.scale.setScalar(WORLD_SCALE);
-  clawRMesh.scale.setScalar(WORLD_SCALE);
+// スケール統一（アームだけ上乗せ）
+armMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
+clawLMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
+clawRMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
+
 
   // グループ化（これが「アーム全体」）
   armGroup = new THREE.Group();
@@ -243,8 +245,8 @@ async function loadScene() {
 
   clawPivot.position.set(0.0, 0.25, 0.0); // ←「先端」のつもりの仮置き
 
-  clawLMesh.position.set(-1, 0.0, 0.0);
-  clawRMesh.position.set( 1, 0.0, 0.0);
+  clawLMesh.position.set(2, 0.0, 0.0);
+  clawRMesh.position.set(-2, 0.0, 0.0);
 
   // もし左右が逆/向きが違うなら回転で合わせる
   // clawLMesh.rotation.y = Math.PI;

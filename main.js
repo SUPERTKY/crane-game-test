@@ -136,27 +136,7 @@ function centerToOriginAndGround(root) {
   const b2 = getBox3(root);
   root.position.y -= b2.min.y;
 }
-function animate(t) {
-  requestAnimationFrame(animate);
 
-  if (lastT == null) lastT = t;
-  const dt = Math.min((t - lastT) / 1000, 1 / 30);
-  lastT = t;
-
-  world.step(1 / 60, dt, 3);
-
-  // アーム回転
-  if (armGroup) {
-    armGroup.rotation.y += ARM_ROT_SPEED * dt;
-  }
-
-  if (boxMesh && boxBody) {
-    boxMesh.position.copy(boxBody.position);
-    boxMesh.quaternion.copy(boxBody.quaternion);
-  }
-
-  renderer.render(scene, camera);
-}
 
 function makeArrowButton(rotationDeg = 0) {
   const btn = document.createElement("button");
@@ -398,6 +378,7 @@ function setClawOpen(v01) {
 loadScene().catch(console.error);
 
 let lastT;
+
 function animate(t) {
   requestAnimationFrame(animate);
 
@@ -407,6 +388,11 @@ function animate(t) {
 
   world.step(1 / 60, dt, 3);
 
+  // ✅ アーム回転（ここを追加）
+  if (armGroup) {
+    armGroup.rotation.y += ARM_ROT_SPEED * dt;
+  }
+
   if (boxMesh && boxBody) {
     boxMesh.position.copy(boxBody.position);
     boxMesh.quaternion.copy(boxBody.quaternion);
@@ -414,4 +400,5 @@ function animate(t) {
 
   renderer.render(scene, camera);
 }
+
 requestAnimationFrame(animate);

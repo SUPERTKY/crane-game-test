@@ -134,12 +134,12 @@ const yaw = Math.PI / 2;
 scene.add(stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh, boxMesh);
 
 // ---- 位置（回転前でもOK）----
-const stickGap = 0.12;   // 低い橋の間隔
+const stickGap = 1;   // 低い橋の間隔
 stick1Mesh.position.set(0, 0, -stickGap / 2);
 stick2Mesh.position.set(0, 0,  stickGap / 2);
 
-const highY = 0.06;      // 高さ
-const highGap = 0.24;    // ★「幅」= 2本の距離（橋より大きく）
+const highY = 0.3;      // 高さ
+const highGap = 1.3;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 

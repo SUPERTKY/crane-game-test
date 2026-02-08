@@ -134,12 +134,12 @@ const yaw = Math.PI / 2;
 scene.add(stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh, boxMesh);
 
 // ---- 位置（回転前でもOK）----
-const stickGap = 1;   // 低い橋の間隔
+const stickGap = 0.5;   // 低い橋の間隔
 stick1Mesh.position.set(0, 0, -stickGap / 2);
 stick2Mesh.position.set(0, 0,  stickGap / 2);
 
 const highY = 0.3;      // 高さ
-const highGap = 1.3;    // ★「幅」= 2本の距離（橋より大きく）
+const highGap = 0.8;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
@@ -194,7 +194,7 @@ world.addBody(stick4Body);
   boxBody.addShape(new CANNON.Box(boxHalf));
 
   // テスト：絶対落ちる位置（棒の外）
-  boxBody.position.set(0, 0.5, 0.2);
+  boxBody.position.set(0, 0.5, 0);
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
 

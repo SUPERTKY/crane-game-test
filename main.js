@@ -348,11 +348,54 @@ async function loadScene() {
       loader.loadAsync("./models/ClawL.glb"),
       loader.loadAsync("./models/ClawR.glb"),
     ]);
-function addAxes(obj, size = 0.2) {
-  const ax = new THREE.AxesHelper(size);
-  obj.add(ax);
-  return ax;
+function addDebugDot(worldPos, size = 0.03) {
+  const geo = new THREE.SphereGeometry(size, 12, 12);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xff00ff,
+    depthTest: false,   // ★奥にあっても描く
+    depthWrite: false,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = 9999; // ★最後に描く
+  m.position.copy(worldPos);
+  scene.add(m);
+  return m;
 }
+function getBoxWorld(obj) {
+  obj.updateWorldMatrix(true, true);
+  return new THREE.Box3().setFromObject(obj); // world AABB
+}
+
+// Box3の「上端・中心（X,Zは中心）」をworld座標で返す
+function boxTopCenterWorld(box) {
+  return new THREE.Vector3(
+    (box.min.x + box.max.x) * 0.5,
+    box.max.y,
+    (box.min.z + box.max.z) * 0.5
+  );
+}
+
+// Box3の「内側面中心」をworldで返す
+// side: "minZ" / "maxZ" / "minX" / "maxX"
+function boxSideCenterWorld(box, side) {
+  const cx = (box.min.x + box.max.x) * 0.5;
+  const cy = (box.min.y + box.max.y) * 0.5;
+  const cz = (box.min.z + box.max.z) * 0.5;
+
+  if (side === "minZ") return new THREE.Vector3(cx, cy, box.min.z);
+  if (side === "maxZ") return new THREE.Vector3(cx, cy, box.max.z);
+  if (side === "minX") return new THREE.Vector3(box.min.x, cy, cz);
+  if (side === "maxX") return new THREE.Vector3(box.max.x, cy, cz);
+  return new THREE.Vector3(cx, cy, cz);
+}
+
+// world点を parent（ここではclawPivot）のローカルにして pivot.position に置く
+function placePivotAtWorld(pivot, parent, worldPoint) {
+  const p = worldPoint.clone();
+  parent.worldToLocal(p);
+  pivot.position.copy(p);
+}
+
 
 // ===== アーム作成 =====
 armMesh   = armGltf.scene;
@@ -391,10 +434,24 @@ clawRPivot.position.set(0, -1, 0);
 // ===== 爪メッシュは「ピボットの子」 =====
 clawLPivot.add(clawLMesh);
 clawRPivot.add(clawRMesh);
-addAxes(clawPivot, 0.3);
-addAxes(clawLPivot, 0.2);
-addAxes(clawRPivot, 0.2);
-addAxes(clawLMesh, 0.2);
+  // ===== 左右ヒンジ（ピボット）を自動配置 =====
+const boxL = getBoxWorld(clawLMesh);
+const boxR = getBoxWorld(clawRMesh);
+
+// どの点をヒンジにするかはモデル次第。
+// まずは「上端中心」をヒンジ候補にする（迷ったらこれが安定）
+const hingeL_world = boxTopCenterWorld(boxL);
+const hingeR_world = boxTopCenterWorld(boxR);
+
+// ピボットを clawPivot のローカルに変換して配置
+placePivotAtWorld(clawLPivot, clawPivot, hingeL_world);
+placePivotAtWorld(clawRPivot, clawPivot, hingeR_world);
+
+// 見えるデバッグ点（隠れても見える）
+addDebugDot(hingeL_world, 0.03);
+addDebugDot(hingeR_world, 0.03);
+
+
 
 // ★爪の原点がヒンジに無い場合の補正（要調整）
 clawLMesh.position.set(0, -1, 0.4);

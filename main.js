@@ -9,6 +9,16 @@ const ARM_SCALE = 2; // ←ここを 1.2〜2.0 で調整
 const ARM_ROT_SPEED = 0.8; // rad/sec（0.2〜2.0で調整）
 let CLAW_AXIS = "x";   // "x" | "y" | "z" を試す
 let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
+const ARM_MOVE_X = 0.25; // 横移動量（x）
+const ARM_MOVE_Z = 0.25; // 前移動量（z）
+const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
+
+let moveTarget = null; // THREE.Vector3
+let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
+function requestArmMove(dx, dz) {
+  if (!armGroup) return;
+  moveTarget = armGroup.position.clone().add(new THREE.Vector3(dx, 0, dz));
+}
 
 
 const scene = new THREE.Scene();
@@ -185,9 +195,42 @@ const arrowBtn2 = makeArrowButton(90);   // ↑（90度回転）
 arrowUI.appendChild(arrowBtn1);
 arrowUI.appendChild(arrowBtn2);
 
-// ★ 初期状態：→だけ押せる / ↑は押せない（暗い）
+// 初期：→だけ押せる
 arrowBtn1.setEnabled(true);
 arrowBtn2.setEnabled(false);
+
+// クリック処理（順番制御）
+arrowBtn1.addEventListener("click", () => {
+  // phase 0: 最初の→
+  if (phase === 0) {
+    requestArmMove(+ARM_MOVE_X, 0); // 横移動
+    arrowBtn1.setEnabled(false);
+    arrowBtn2.setEnabled(true);
+    phase = 1;
+    return;
+  }
+
+  // phase 2: 最後の→（押したら終了で両方無効）
+  if (phase === 2) {
+    requestArmMove(+ARM_MOVE_X, 0); // 横移動
+    arrowBtn1.setEnabled(false);
+    arrowBtn2.setEnabled(false);
+    phase = 3;
+    return;
+  }
+});
+
+arrowBtn2.addEventListener("click", () => {
+  // phase 1: ↑
+  if (phase === 1) {
+    requestArmMove(0, -ARM_MOVE_Z); // 前移動（※z方向の「前」は環境次第なので後述）
+    arrowBtn2.setEnabled(false);
+    arrowBtn1.setEnabled(true);
+    phase = 2;
+    return;
+  }
+});
+
 
 
 /**
@@ -417,6 +460,24 @@ if (clawLPivot && clawRPivot) {
   } else { // "z"
     clawLPivot.rotation.z =  ang;
     clawRPivot.rotation.z = -ang;
+  }
+}
+// ===== アーム移動（スムーズ）=====
+if (armGroup && moveTarget) {
+  const to = moveTarget.clone().sub(armGroup.position);
+  const dist = to.length();
+
+  if (dist < 0.001) {
+    armGroup.position.copy(moveTarget);
+    moveTarget = null;
+  } else {
+    const step = ARM_MOVE_SPEED * dt;
+    if (step >= dist) {
+      armGroup.position.copy(moveTarget);
+      moveTarget = null;
+    } else {
+      armGroup.position.add(to.multiplyScalar(step / dist));
+    }
   }
 }
 

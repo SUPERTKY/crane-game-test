@@ -348,6 +348,11 @@ async function loadScene() {
       loader.loadAsync("./models/ClawL.glb"),
       loader.loadAsync("./models/ClawR.glb"),
     ]);
+function addAxes(obj, size = 0.2) {
+  const ax = new THREE.AxesHelper(size);
+  obj.add(ax);
+  return ax;
+}
 
 // ===== アーム作成 =====
 armMesh   = armGltf.scene;
@@ -386,6 +391,10 @@ clawRPivot.position.set(0, -1, 0);
 // ===== 爪メッシュは「ピボットの子」 =====
 clawLPivot.add(clawLMesh);
 clawRPivot.add(clawRMesh);
+addAxes(clawPivot, 0.3);
+addAxes(clawLPivot, 0.2);
+addAxes(clawRPivot, 0.2);
+addAxes(clawLMesh, 0.2);
 
 // ★爪の原点がヒンジに無い場合の補正（要調整）
 clawLMesh.position.set(0, -1, 0.4);

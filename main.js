@@ -252,8 +252,34 @@ clawRMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
   // clawLMesh.rotation.y = Math.PI;
   // clawRMesh.rotation.y = Math.PI;
 
-  clawPivot.add(clawLMesh);
-  clawPivot.add(clawRMesh);
+  // ===== 先端の大ピボット（アーム先端）=====
+const clawPivot = new THREE.Object3D();
+clawPivot.name = "ClawPivot";
+armMesh.add(clawPivot);
+clawPivot.position.set(0.0, 0.25, 0.0); // 先端位置（要調整）
+
+// ===== 左右それぞれの回転ピボット =====
+const clawLPivot = new THREE.Object3D();
+const clawRPivot = new THREE.Object3D();
+clawLPivot.name = "ClawLPivot";
+clawRPivot.name = "ClawRPivot";
+clawPivot.add(clawLPivot);
+clawPivot.add(clawRPivot);
+
+// ★ヒンジ（回転軸の位置）をここで決める：要調整
+// 例：左右に少し開いた位置が回転中心
+clawLPivot.position.set(-0.12, 0.0, 0.0);
+clawRPivot.position.set( 0.12, 0.0, 0.0);
+
+// ===== 爪メッシュは「ピボットの子」 =====
+clawLPivot.add(clawLMesh);
+clawRPivot.add(clawRMesh);
+
+// ★爪メッシュの“原点”がヒンジに無い場合、ここでずらして合わせる：要調整
+// (爪の見た目がヒンジ位置から離れてる時に使う)
+clawLMesh.position.set(0.0, 0.0, 0.0);
+clawRMesh.position.set(0.0, 0.0, 0.0);
+
 
   // 「左上」っぽい場所へ（ワールド座標）
   // 画面左上=UI的な意味なら3Dではなく、ワールドの左上（カメラから見て）に置くのが現実的
@@ -358,6 +384,18 @@ world.addBody(stick4Body);
   boxMesh.position.copy(boxBody.position);
 
   camera.lookAt(0, 0.4, 0);
+}
+let clawOpen01 = 0; // 0=閉じる, 1=開く
+
+function setClawOpen(v01) {
+  clawOpen01 = THREE.MathUtils.clamp(v01, 0, 1);
+
+  // 開き角（ラジアン）0.0〜0.9 くらいで調整
+  const ang = THREE.MathUtils.lerp(0.05, 0.9, clawOpen01);
+
+  // 回転軸はモデル次第：z / y / x どれが正しいか試してOK
+  clawLPivot.rotation.z =  ang;   // 左は＋
+  clawRPivot.rotation.z = -ang;   // 右は−
 }
 
 loadScene().catch(console.error);

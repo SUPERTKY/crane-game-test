@@ -429,8 +429,8 @@ clawPivot.add(clawLPivot);
 clawPivot.add(clawRPivot);
 
 // ★ヒンジ位置（要調整）
-clawLPivot.position.set(0, -1, 0);
-clawRPivot.position.set(0, -1, 0);
+clawLPivot.position.set(0, 0, 0);
+clawRPivot.position.set(0, 0, 0);
 
 // ===== 爪メッシュは「ピボットの子」 =====
 clawLPivot.add(clawLMesh);
@@ -448,15 +448,18 @@ const hingeR_world = boxTopCenterWorld(boxR);
 placePivotAtWorld(clawLPivot, clawPivot, hingeL_world);
 placePivotAtWorld(clawRPivot, clawPivot, hingeR_world);
 
-// 見えるデバッグ点（隠れても見える）
-addDebugDot(hingeL_world, 0.03);
-addDebugDot(hingeR_world, 0.03);
+const hingeL_local = clawPivot.worldToLocal(hingeL_world.clone());
+const hingeR_local = clawPivot.worldToLocal(hingeR_world.clone());
+
+addDebugDotLocal(clawPivot, hingeL_local, 0.03);
+addDebugDotLocal(clawPivot, hingeR_local, 0.03);
+
 
 
 
 // ★爪の原点がヒンジに無い場合の補正（要調整）
-clawLMesh.position.set(0, -1, 0.4);
-clawRMesh.position.set(0, -1, -0.4);
+clawLMesh.position.set(0, 0, 0);
+clawRMesh.position.set(0, 0, 0);
 
 // 置き場所（左上）
 armGroup.position.set(-1.2, 1.6, 0.6);

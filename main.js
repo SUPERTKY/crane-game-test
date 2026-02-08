@@ -9,9 +9,12 @@ const ARM_SCALE = 2; // ←ここを 1.2〜2.0 で調整
 const ARM_ROT_SPEED = 0.8; // rad/sec（0.2〜2.0で調整）
 let CLAW_AXIS = "x";   // "x" | "y" | "z" を試す
 let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
-const ARM_MOVE_X = 0.25; // 横移動量（x）
-const ARM_MOVE_Z = 0.25; // 前移動量（z）
 const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
+const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
+const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
+
+let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
+let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
 
 let moveTarget = null; // THREE.Vector3
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
@@ -198,6 +201,83 @@ arrowUI.appendChild(arrowBtn2);
 // 初期：→だけ押せる
 arrowBtn1.setEnabled(true);
 arrowBtn2.setEnabled(false);
+
+// 長押し開始/終了をまとめる関数
+function bindHoldMove(btn, onStart, onEnd) {
+  const stop = () => {
+    holdMove.x = 0;
+    holdMove.z = 0;
+    btn.releasePointerCapture?.(btn._pid);
+    btn._pid = null;
+  };
+
+  btn.addEventListener("pointerdown", (e) => {
+    if (btn.disabled) return;
+    e.preventDefault();
+
+    btn._pid = e.pointerId;
+    btn.setPointerCapture?.(e.pointerId);
+
+    onStart();
+  });
+
+  // 指を離した/外れた/キャンセルされたら止める
+  btn.addEventListener("pointerup", (e) => {
+    if (btn._pid !== e.pointerId) return;
+    stop();
+    onEnd();
+  });
+  btn.addEventListener("pointercancel", (e) => {
+    if (btn._pid !== e.pointerId) return;
+    stop();
+  });
+  btn.addEventListener("pointerleave", () => {
+    // captureしてるならleaveは無視でもOKだけど保険で止める
+    if (btn._pid != null) stop();
+  });
+}
+
+// ---- →（回転なし）：横移動（長押し）----
+bindHoldMove(
+  arrowBtn1,
+  () => {
+    // 押してる間ずっと横移動（＋x）
+    holdMove.x = +ARM_HOLD_SPEED_X;
+    holdMove.z = 0;
+  },
+  () => {
+    // 離した瞬間にフェーズ進行
+    if (phase === 0) {
+      arrowBtn1.setEnabled(false);
+      arrowBtn2.setEnabled(true);
+      phase = 1;
+    } else if (phase === 2) {
+      // 最後の→が終わったら全部無効
+      arrowBtn1.setEnabled(false);
+      arrowBtn2.setEnabled(false);
+      phase = 3;
+    }
+  }
+);
+
+// ---- ↑（回転あり）：前移動（長押し）----
+bindHoldMove(
+  arrowBtn2,
+  () => {
+    // 押してる間ずっと前移動（z方向）
+    // もし逆だったら符号を + に変えてOK
+    holdMove.x = 0;
+    holdMove.z = -ARM_HOLD_SPEED_Z;
+  },
+  () => {
+    if (phase === 1) {
+      arrowBtn2.setEnabled(false);
+      arrowBtn1.setEnabled(true);
+      phase = 2;
+    }
+  }
+);
+
 
 // クリック処理（順番制御）
 arrowBtn1.addEventListener("click", () => {
@@ -462,24 +542,12 @@ if (clawLPivot && clawRPivot) {
     clawRPivot.rotation.z = -ang;
   }
 }
-// ===== アーム移動（スムーズ）=====
-if (armGroup && moveTarget) {
-  const to = moveTarget.clone().sub(armGroup.position);
-  const dist = to.length();
-
-  if (dist < 0.001) {
-    armGroup.position.copy(moveTarget);
-    moveTarget = null;
-  } else {
-    const step = ARM_MOVE_SPEED * dt;
-    if (step >= dist) {
-      armGroup.position.copy(moveTarget);
-      moveTarget = null;
-    } else {
-      armGroup.position.add(to.multiplyScalar(step / dist));
-    }
-  }
+// ===== 長押し中のアーム移動 =====
+if (armGroup) {
+  armGroup.position.x += holdMove.x * dt;
+  armGroup.position.z += holdMove.z * dt;
 }
+
 
 
   if (boxMesh && boxBody) {

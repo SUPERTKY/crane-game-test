@@ -3,7 +3,9 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 
 const WORLD_SCALE = 0.25;
-const ARM_SCALE = 2; // ←ここを 1.2〜2.0 で調整
+const ARM_BODY_SCALE = 1.0; // 本体だけ（小さくしたいなら 0.6〜1.0）
+const CLAW_SCALE     = 1.0; // 爪だけ（必要なら調整）
+
 const ARM_ROT_SPEED = 0.8; // rad/sec（0.2〜2.0で調整）
 
 
@@ -223,10 +225,11 @@ armMesh   = armGltf.scene;
 clawLMesh = clawLGltf.scene;
 clawRMesh = clawRGltf.scene;
 
-// スケール（アームだけ上乗せ）
-armMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
-clawLMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
-clawRMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE);
+
+// スケール：本体と爪を別にする
+armMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE * ARM_BODY_SCALE);
+clawLMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE * CLAW_SCALE);
+clawRMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE * CLAW_SCALE);
 
 // グループ化
 armGroup = new THREE.Group();
@@ -388,9 +391,14 @@ function animate(t) {
 
   world.step(1 / 60, dt, 3);
 
-  // ✅ アーム回転（ここを追加）
-  if (armGroup) {
-    armGroup.rotation.y += ARM_ROT_SPEED * dt;
+  // ===== 爪だけ回転（パカパカテスト）=====
+  if (clawLPivot && clawRPivot) {
+    const open = 0.5 + 0.5 * Math.sin(t * 0.002); // 0..1
+    const ang = THREE.MathUtils.lerp(0.05, 0.9, open);
+
+    // ★回転軸はモデル次第：z がダメなら y / x に変える
+    clawLPivot.rotation.z =  ang;   // 左
+    clawRPivot.rotation.z = -ang;   // 右（逆方向）
   }
 
   if (boxMesh && boxBody) {

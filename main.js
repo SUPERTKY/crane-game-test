@@ -138,33 +138,35 @@ function makeArrowButton(rotationDeg = 0) {
   const btn = document.createElement("button");
   btn.type = "button";
 
+  // ★背景・枠・影を全部消す
   btn.style.width = "64px";
   btn.style.height = "64px";
   btn.style.border = "none";
   btn.style.padding = "0";
-  btn.style.background = "rgba(255,255,255,0.85)";
-  btn.style.borderRadius = "14px";
-  btn.style.boxShadow = "0 6px 16px rgba(0,0,0,0.18)";
+  btn.style.margin = "0";
+  btn.style.background = "transparent";
+  btn.style.boxShadow = "none";
   btn.style.cursor = "pointer";
   btn.style.display = "grid";
   btn.style.placeItems = "center";
 
   const img = document.createElement("img");
   img.src = "./assets/Arrow.png";
-  img.style.width = "70%";
-  img.style.height = "70%";
+  img.style.width = "100%";
+  img.style.height = "100%";
   img.style.transform = `rotate(${rotationDeg}deg)`;
   img.style.pointerEvents = "none";
 
   btn.appendChild(img);
 
-  // まだ処理は書かないが、ボタンとしては機能させる
+  // ボタンとしては機能（まだ何も処理しない）
   btn.addEventListener("click", () => {
-    console.log("Arrow button clicked", rotationDeg);
+    console.log("Arrow clicked", rotationDeg);
   });
 
   return btn;
 }
+
 const arrowBtn1 = makeArrowButton(0);    // →（そのまま）
 const arrowBtn2 = makeArrowButton(90);   // ↑（90度回転）
 

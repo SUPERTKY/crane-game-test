@@ -49,7 +49,7 @@ const LOOK_AT = new THREE.Vector3(0, 0.4, 0);
 const arrowUI = document.createElement("div");
 arrowUI.style.position = "fixed";
 arrowUI.style.left = "50%";
-arrowUI.style.top = "65%";
+arrowUI.style.top = "75%";
 arrowUI.style.transform = "translate(-50%, -50%)";
 arrowUI.style.display = "flex";
 arrowUI.style.gap = "18px";
@@ -139,8 +139,8 @@ function makeArrowButton(rotationDeg = 0) {
   btn.type = "button";
 
   // ★背景・枠・影を全部消す
-  btn.style.width = "64px";
-  btn.style.height = "64px";
+  btn.style.width = "100px";
+  btn.style.height = "100px";
   btn.style.border = "none";
   btn.style.padding = "0";
   btn.style.margin = "0";

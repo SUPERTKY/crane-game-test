@@ -16,12 +16,7 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
 
-let moveTarget = null; // THREE.Vector3
-let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
-function requestArmMove(dx, dz) {
-  if (!armGroup) return;
-  moveTarget = armGroup.position.clone().add(new THREE.Vector3(dx, 0, dz));
-}
+
 
 
 const scene = new THREE.Scene();

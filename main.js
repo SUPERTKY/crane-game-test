@@ -175,7 +175,7 @@ world.addBody(stick2Body);
   boxBody.addShape(new CANNON.Box(boxHalf));
 
   // テスト：絶対落ちる位置（棒の外）
-  boxBody.position.set(0, 0.5, 0.5);
+  boxBody.position.set(0, 0.5, 0.2);
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
 

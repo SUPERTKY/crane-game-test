@@ -188,7 +188,7 @@ function makeArrowButton(rotationDeg = 0) {
 
 
 const arrowBtn1 = makeArrowButton(0);    // →（回転なし）
-const arrowBtn2 = makeArrowButton(90);   // ↑（90度回転）
+const arrowBtn2 = makeArrowButton(-90);   // ↑（90度回転）
 
 arrowUI.appendChild(arrowBtn1);
 arrowUI.appendChild(arrowBtn2);

@@ -298,6 +298,57 @@ bindHoldMove(
     }
   }
 );
+let armBody, clawLBody, clawRBody;
+let hingeL, hingeR;
+
+function makeClawPhysics() {
+  // アーム本体（kinematic）
+  armBody = new CANNON.Body({ mass: 0 });
+  armBody.type = CANNON.Body.KINEMATIC;
+  armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
+  world.addBody(armBody);
+
+  // 爪（とりあえず Box 形状で代用）
+  clawLBody = new CANNON.Body({ mass: 0.2, material: matStick });
+  clawRBody = new CANNON.Body({ mass: 0.2, material: matStick });
+
+  clawLBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
+  clawRBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
+
+  // 初期位置（アーム位置＋オフセット）
+  clawLBody.position.copy(armBody.position.vadd(new CANNON.Vec3(0, -0.25, 0.12)));
+  clawRBody.position.copy(armBody.position.vadd(new CANNON.Vec3(0, -0.25, -0.12)));
+
+  world.addBody(clawLBody);
+  world.addBody(clawRBody);
+
+  // ヒンジ（回転軸はモデルに合わせて調整。例：X軸）
+  const pivotL = new CANNON.Vec3(0, -0.05, 0.12);  // armBody ローカル
+  const pivotR = new CANNON.Vec3(0, -0.05, -0.12);
+
+  hingeL = new CANNON.HingeConstraint(armBody, clawLBody, {
+    pivotA: pivotL,
+    axisA: new CANNON.Vec3(1, 0, 0),
+    pivotB: new CANNON.Vec3(0, 0.18, 0),
+    axisB: new CANNON.Vec3(1, 0, 0),
+  });
+
+  hingeR = new CANNON.HingeConstraint(armBody, clawRBody, {
+    pivotA: pivotR,
+    axisA: new CANNON.Vec3(1, 0, 0),
+    pivotB: new CANNON.Vec3(0, 0.18, 0),
+    axisB: new CANNON.Vec3(1, 0, 0),
+  });
+
+  world.addConstraint(hingeL);
+  world.addConstraint(hingeR);
+
+  // モーターON（速度はあとで切替）
+  hingeL.enableMotor();
+  hingeR.enableMotor();
+  hingeL.setMotorSpeed(0);
+  hingeR.setMotorSpeed(0);
+}
 
 
 // クリック処理（順番制御）
@@ -426,6 +477,8 @@ function placePivotAtWorld(pivot, parent, worldPoint) {
   parent.worldToLocal(p);
   pivot.position.copy(p);
 }
+function cannonVecToThree(v) { return new THREE.Vector3(v.x, v.y, v.z); }
+function cannonQuatToThree(q) { return new THREE.Quaternion(q.x, q.y, q.z, q.w); }
 
 
 // ===== アーム作成 =====
@@ -440,9 +493,7 @@ clawLMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE * CLAW_SCALE);
 clawRMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE * CLAW_SCALE);
 
 // グループ化
-armGroup = new THREE.Group();
 armGroup.name = "ArmGroup";
-armGroup.add(armMesh);
 
 // ===== 先端の大ピボット（アーム先端）=====
 clawPivot = new THREE.Object3D();
@@ -490,12 +541,14 @@ addDebugDotLocal(clawPivot, hingeR_local, 0.03);
 // ★爪の原点がヒンジに無い場合の補正（要調整）
 clawLMesh.position.set(0, -1.95, -0.2);
 clawRMesh.position.set(0, -1.85, -0.2);
-
+armGroup = new THREE.Group();
+armGroup.add(armMesh);
 // 置き場所（左上）
 armGroup.position.set(-1.2, 1.6, 0.6);
 armGroup.rotation.y = Math.PI / 2;
 scene.add(armGroup);
 
+makeClawPhysics();
   
 
   // ===== クレーン台（見た目だけ）=====
@@ -596,16 +649,28 @@ world.addBody(stick4Body);
 }
 let clawOpen01 = 0; // 0=閉じる, 1=開く
 
-function setClawOpen(v01) {
-  const t = THREE.MathUtils.clamp(v01, 0, 1);
-
-  const angL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, t);
-  const angR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, t);
-
-  // 右は回転方向が逆なら - を付ける（今のまま「逆向きに開く」ならこれでOK）
-  clawLPivot.rotation.x =  angL;
-  clawRPivot.rotation.x = -angR;
+function clawOpenMotor() {
+  if (!hingeL || !hingeR) return;
+  hingeL.enableMotor();
+  hingeR.enableMotor();
+  hingeL.setMotorSpeed(+2.0);
+  hingeR.setMotorSpeed(-2.0);
 }
+
+function clawCloseMotor() {
+  if (!hingeL || !hingeR) return;
+  hingeL.enableMotor();
+  hingeR.enableMotor();
+  hingeL.setMotorSpeed(-2.0);
+  hingeR.setMotorSpeed(+2.0);
+}
+
+function clawStopMotor() {
+  if (!hingeL || !hingeR) return;
+  hingeL.setMotorSpeed(0);
+  hingeR.setMotorSpeed(0);
+}
+
 
 loadScene().catch(console.error);
 
@@ -667,7 +732,6 @@ if (autoStarted && clawLPivot && clawRPivot && armGroup) {
     // 1) 開く
     autoT += dt;
     const t01 = Math.min(autoT / CLAW_OPEN_TIME, 1);
-    setClawOpen(t01);
 
     if (t01 >= 1) {
       autoStep = 2;
@@ -687,13 +751,55 @@ if (autoStarted && clawLPivot && clawRPivot && armGroup) {
     // 3) 閉じる
     autoT += dt;
     const t01 = Math.min(autoT / CLAW_CLOSE_TIME, 1);
-    setClawOpen(1 - t01);
 
     if (t01 >= 1) {
       autoStep = 4; // 完了
     }
   }
 }
+if (armGroup && armBody) {
+  // アームは「見た目→物理」でもいいけど、物理主導にするなら逆がおすすめ
+  armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
+  armBody.velocity.set(0,0,0);
+  armBody.angularVelocity.set(0,0,0);
+}
+
+if (clawLPivot && clawLBody) {
+  // bodyのワールド姿勢
+  const wPos = cannonVecToThree(clawLBody.position);
+  const wQuat = cannonQuatToThree(clawLBody.quaternion);
+
+  // 親（clawPivot）のワールド姿勢
+  const parentWPos = new THREE.Vector3();
+  const parentWQuat = new THREE.Quaternion();
+  clawPivot.getWorldPosition(parentWPos);
+  clawPivot.getWorldQuaternion(parentWQuat);
+
+  // 位置：world -> parent local
+  const localPos = wPos.clone();
+  clawPivot.worldToLocal(localPos);
+  clawLPivot.position.copy(localPos);
+
+  // 回転：local = inv(parentWorld) * world
+  const localQuat = parentWQuat.clone().invert().multiply(wQuat);
+  clawLPivot.quaternion.copy(localQuat);
+}
+
+if (clawRPivot && clawRBody) {
+  const wPos = cannonVecToThree(clawRBody.position);
+  const wQuat = cannonQuatToThree(clawRBody.quaternion);
+
+  const parentWQuat = new THREE.Quaternion();
+  clawPivot.getWorldQuaternion(parentWQuat);
+
+  const localPos = wPos.clone();
+  clawPivot.worldToLocal(localPos);
+  clawRPivot.position.copy(localPos);
+
+  const localQuat = parentWQuat.clone().invert().multiply(wQuat);
+  clawRPivot.quaternion.copy(localQuat);
+}
+
 
 }
 

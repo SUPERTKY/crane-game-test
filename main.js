@@ -583,8 +583,8 @@ function setClawOpen(v01) {
   const angR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, t);
 
   // 右は回転方向が逆なら - を付ける（今のまま「逆向きに開く」ならこれでOK）
-  clawLPivot.rotation.z =  angL;
-  clawRPivot.rotation.z = -angR;
+  clawLPivot.rotation.x =  angL;
+  clawRPivot.rotation.x = -angR;
 }
 
 loadScene().catch(console.error);

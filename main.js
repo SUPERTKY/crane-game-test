@@ -418,7 +418,8 @@ function makeStickHalfExtentsFromMesh(stickMesh, thicknessRatio = 0.04) {
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
 let clawPivot, clawLPivot, clawRPivot; // ★追加（setClawOpenで使うため）
-
+function cannonVecToThree(v) { return new THREE.Vector3(v.x, v.y, v.z); }
+function cannonQuatToThree(q) { return new THREE.Quaternion(q.x, q.y, q.z, q.w); }
 async function loadScene() {
   const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf] =
     await Promise.all([
@@ -477,8 +478,7 @@ function placePivotAtWorld(pivot, parent, worldPoint) {
   parent.worldToLocal(p);
   pivot.position.copy(p);
 }
-function cannonVecToThree(v) { return new THREE.Vector3(v.x, v.y, v.z); }
-function cannonQuatToThree(q) { return new THREE.Quaternion(q.x, q.y, q.z, q.w); }
+
 
 
 // ===== アーム作成 =====
@@ -725,19 +725,19 @@ if (armGroup) {
 
   renderer.render(scene, camera);
   // ===== ボタン後の自動シーケンス =====
-if (autoStarted && clawLPivot && clawRPivot && armGroup) {
+if (autoStarted && armGroup) {
   if (autoStep === 1) {
-    // 1) 開く
+    if (autoT === 0) clawOpenMotor(); // ★追加
     autoT += dt;
-    const t01 = Math.min(autoT / CLAW_OPEN_TIME, 1);
 
-    if (t01 >= 1) {
+    if (autoT >= CLAW_OPEN_TIME) {
+      clawStopMotor(); // ★追加
       autoStep = 2;
       autoT = 0;
       dropStartY = armGroup.position.y;
     }
+
   } else if (autoStep === 2) {
-    // 2) 規定距離だけ下げる
     const targetY = dropStartY - ARM_DROP_DIST;
     armGroup.position.y = Math.max(targetY, armGroup.position.y - ARM_DROP_SPEED * dt);
 
@@ -745,16 +745,18 @@ if (autoStarted && clawLPivot && clawRPivot && armGroup) {
       autoStep = 3;
       autoT = 0;
     }
-  } else if (autoStep === 3) {
-    // 3) 閉じる
-    autoT += dt;
-    const t01 = Math.min(autoT / CLAW_CLOSE_TIME, 1);
 
-    if (t01 >= 1) {
-      autoStep = 4; // 完了
+  } else if (autoStep === 3) {
+    if (autoT === 0) clawCloseMotor(); // ★追加
+    autoT += dt;
+
+    if (autoT >= CLAW_CLOSE_TIME) {
+      clawStopMotor(); // ★追加
+      autoStep = 4;
     }
   }
 }
+
 if (armGroup && armBody) {
   armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
   armBody.quaternion.set(

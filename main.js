@@ -591,22 +591,18 @@ function animate(t) {
   world.step(1 / 60, dt, 3);
 
   // ===== 爪だけ回転（テスト）=====
-if (clawLPivot && clawRPivot) {
-  const open = 0.5 + 0.5 * Math.sin(t * 0.002); // 0..1
-  const ang = THREE.MathUtils.lerp(0.05, 0.9, open) * CLAW_SIGN;
+// ===== 爪の常時回転（テスト）を消す =====
+// if (clawLPivot && clawRPivot) {
+//   const open = 0.5 + 0.5 * Math.sin(t * 0.002);
+//   const ang = THREE.MathUtils.lerp(0.05, 0.9, open) * CLAW_SIGN;
+//   ...
+// }
 
-  // 軸で切り替え
-  if (CLAW_AXIS === "x") {
-    clawLPivot.rotation.x =  ang;
-    clawRPivot.rotation.x = -ang;
-  } else if (CLAW_AXIS === "y") {
-    clawLPivot.rotation.y =  ang;
-    clawRPivot.rotation.y = -ang;
-  } else { // "z"
-    clawLPivot.rotation.z =  ang;
-    clawRPivot.rotation.z = -ang;
-  }
+// 代わりに：初期状態を固定（例：閉じる）
+if (clawLPivot && clawRPivot) {
+  setClawOpen(0); // 0=閉じる, 1=開く（好きな値に）
 }
+
 // ===== 長押し中のアーム移動 =====
 if (armGroup) {
   armGroup.position.x += holdMove.x * dt;

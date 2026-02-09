@@ -250,7 +250,14 @@ function bindHoldMove(btn, onStart, onEnd) {
     if (btn._pid != null) stop();
   });
 }
+function startAutoSequence() {
+  if (autoStarted || !armGroup) return;
+  autoStarted = true;
 
+  autoStep = 1;   // 開くから開始
+  autoT = 0;
+  dropStartY = armGroup.position.y;
+}
 // ---- →（回転なし）：横移動（長押し）----
 bindHoldMove(
   arrowBtn1,
@@ -287,6 +294,7 @@ bindHoldMove(
       arrowBtn1.setEnabled(false);
       arrowBtn2.setEnabled(false);
       phase = 3;
+      startAutoSequence();
     }
   }
 );
@@ -302,14 +310,7 @@ arrowBtn1.addEventListener("click", () => {
     phase = 1;
     return;
   }
-function startAutoSequence() {
-  if (autoStarted || !armGroup) return;
-  autoStarted = true;
 
-  autoStep = 1;   // 開くから開始
-  autoT = 0;
-  dropStartY = armGroup.position.y;
-}
 
   // phase 2: 最後の→（押したら終了で両方無効）
   if (phase === 2) {
@@ -317,7 +318,6 @@ function startAutoSequence() {
     arrowBtn1.setEnabled(false);
     arrowBtn2.setEnabled(false);
     phase = 3;
-    startAutoSequence();
     return;
   }
 });
@@ -330,6 +330,7 @@ arrowBtn2.addEventListener("click", () => {
     arrowBtn1.setEnabled(false);
     arrowBtn2.setEnabled(false);
     phase = 3;
+    startAutoSequence();
     return;
   }
 });

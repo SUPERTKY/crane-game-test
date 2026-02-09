@@ -89,6 +89,24 @@ arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
+function syncClawPivotFromBody(pivot3, parent3, body) {
+  // body world
+  const wPos = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
+  const wQuat = new THREE.Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
+
+  // parent world
+  const parentWQuat = new THREE.Quaternion();
+  parent3.getWorldQuaternion(parentWQuat);
+
+  // position: world -> parent local
+  const localPos = wPos.clone();
+  parent3.worldToLocal(localPos);
+  pivot3.position.copy(localPos);
+
+  // rotation: local = inv(parentWorld) * world
+  const localQuat = parentWQuat.clone().invert().multiply(wQuat);
+  pivot3.quaternion.copy(localQuat);
+}
 
 
 let camMode = 0;
@@ -774,27 +792,6 @@ if (armGroup && armBody) {
 
 if (clawLMesh && clawLBody) {
   // ---- 物理(ワールド) → 見た目(ピボットローカル) 変換 ----
-function syncClawPivotFromBody(pivot3, parent3, body) {
-  // body world
-  const wPos = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
-  const wQuat = new THREE.Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
-
-  // parent world
-  const parentWPos = new THREE.Vector3();
-  const parentWQuat = new THREE.Quaternion();
-  parent3.getWorldPosition(parentWPos);
-  parent3.getWorldQuaternion(parentWQuat);
-
-  // position: world -> parent local
-  const localPos = wPos.clone();
-  parent3.worldToLocal(localPos);
-  pivot3.position.copy(localPos);
-
-  // rotation: local = inv(parentWorld) * world
-  const localQuat = parentWQuat.clone().invert().multiply(wQuat);
-  pivot3.quaternion.copy(localQuat);
-}
-
 // animate内で
 if (clawLPivot && clawPivot && clawLBody) {
   syncClawPivotFromBody(clawLPivot, clawPivot, clawLBody);
@@ -807,26 +804,7 @@ if (clawRPivot && clawPivot && clawRBody) {
 
 if (clawRMesh && clawRBody) {
   // ---- 物理(ワールド) → 見た目(ピボットローカル) 変換 ----
-function syncClawPivotFromBody(pivot3, parent3, body) {
-  // body world
-  const wPos = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
-  const wQuat = new THREE.Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
 
-  // parent world
-  const parentWPos = new THREE.Vector3();
-  const parentWQuat = new THREE.Quaternion();
-  parent3.getWorldPosition(parentWPos);
-  parent3.getWorldQuaternion(parentWQuat);
-
-  // position: world -> parent local
-  const localPos = wPos.clone();
-  parent3.worldToLocal(localPos);
-  pivot3.position.copy(localPos);
-
-  // rotation: local = inv(parentWorld) * world
-  const localQuat = parentWQuat.clone().invert().multiply(wQuat);
-  pivot3.quaternion.copy(localQuat);
-}
 
 // animate内で
 if (clawLPivot && clawPivot && clawLBody) {

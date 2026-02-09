@@ -15,8 +15,13 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
-const CLAW_CLOSED = 0.20; // 閉じたときの角度（ラジアン）
-const CLAW_OPEN   = 1.05; // 開いたときの角度（ラジアン）
+// 左右それぞれ別の角度（ラジアン）
+const CLAW_L_CLOSED = 0.15;
+const CLAW_L_OPEN   = 1.00;
+
+const CLAW_R_CLOSED = 0.10;
+const CLAW_R_OPEN   = 0.95;
+
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
 
@@ -572,12 +577,14 @@ world.addBody(stick4Body);
 let clawOpen01 = 0; // 0=閉じる, 1=開く
 
 function setClawOpen(v01) {
-  clawOpen01 = THREE.MathUtils.clamp(v01, 0, 1);
-  const ang = THREE.MathUtils.lerp(CLAW_CLOSED, CLAW_OPEN, clawOpen01);
+  const t = THREE.MathUtils.clamp(v01, 0, 1);
 
-  // ここは今 z 軸回転（必要なら x/y に変更）
-  clawLPivot.rotation.z =  ang;
-  clawRPivot.rotation.z = -ang;
+  const angL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, t);
+  const angR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, t);
+
+  // 右は回転方向が逆なら - を付ける（今のまま「逆向きに開く」ならこれでOK）
+  clawLPivot.rotation.z =  angL;
+  clawRPivot.rotation.z = -angR;
 }
 
 loadScene().catch(console.error);

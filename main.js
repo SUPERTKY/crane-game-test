@@ -20,7 +20,7 @@ const CLAW_L_CLOSED = 0.4;
 const CLAW_L_OPEN   = -0.4;
 
 const CLAW_R_CLOSED = 0.6;
-const CLAW_R_OPEN   = -0.6;
+const CLAW_R_OPEN   = -0.5;
 // ===== 自動シーケンス設定 =====
 const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 0.45;  // 下げる距離（Y方向）

@@ -513,8 +513,9 @@ clawLPivot.position.set(0, -1.95, 0.3);
 clawRPivot.position.set(0, -1.95, -0.3);
 
 // ===== 爪メッシュは「ピボットの子」 =====
-clawLPivot.add(clawLMesh);
-clawRPivot.add(clawRMesh);
+scene.add(clawLMesh);
+scene.add(clawRMesh);
+
   // ===== 左右ヒンジ（ピボット）を自動配置 =====
 const boxL = getBoxWorld(clawLMesh);
 const boxR = getBoxWorld(clawRMesh);
@@ -770,40 +771,14 @@ if (armGroup && armBody) {
   armBody.angularVelocity.set(0,0,0);
 }
 
-if (clawLPivot && clawLBody) {
-  // bodyのワールド姿勢
-  const wPos = cannonVecToThree(clawLBody.position);
-  const wQuat = cannonQuatToThree(clawLBody.quaternion);
-
-  // 親（clawPivot）のワールド姿勢
-  const parentWPos = new THREE.Vector3();
-  const parentWQuat = new THREE.Quaternion();
-  clawPivot.getWorldPosition(parentWPos);
-  clawPivot.getWorldQuaternion(parentWQuat);
-
-  // 位置：world -> parent local
-  const localPos = wPos.clone();
-  clawPivot.worldToLocal(localPos);
-  clawLPivot.position.copy(localPos);
-
-  // 回転：local = inv(parentWorld) * world
-  const localQuat = parentWQuat.clone().invert().multiply(wQuat);
-  clawLPivot.quaternion.copy(localQuat);
+if (clawLMesh && clawLBody) {
+  clawLMesh.position.copy(cannonVecToThree(clawLBody.position));
+  clawLMesh.quaternion.copy(cannonQuatToThree(clawLBody.quaternion));
 }
 
-if (clawRPivot && clawRBody) {
-  const wPos = cannonVecToThree(clawRBody.position);
-  const wQuat = cannonQuatToThree(clawRBody.quaternion);
-
-  const parentWQuat = new THREE.Quaternion();
-  clawPivot.getWorldQuaternion(parentWQuat);
-
-  const localPos = wPos.clone();
-  clawPivot.worldToLocal(localPos);
-  clawRPivot.position.copy(localPos);
-
-  const localQuat = parentWQuat.clone().invert().multiply(wQuat);
-  clawRPivot.quaternion.copy(localQuat);
+if (clawRMesh && clawRBody) {
+  clawRMesh.position.copy(cannonVecToThree(clawRBody.position));
+  clawRMesh.quaternion.copy(cannonQuatToThree(clawRBody.quaternion));
 }
 
 

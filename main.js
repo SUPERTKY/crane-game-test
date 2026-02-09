@@ -259,16 +259,15 @@ bindHoldMove(
 bindHoldMove(
   arrowBtn2,
   () => {
-    // 押してる間ずっと前移動（z方向）
-    // もし逆だったら符号を + に変えてOK
     holdMove.x = 0;
     holdMove.z = -ARM_HOLD_SPEED_Z;
   },
   () => {
     if (phase === 1) {
+      // ↑が終わったら両方無効
+      arrowBtn1.setEnabled(false);
       arrowBtn2.setEnabled(false);
-      arrowBtn1.setEnabled(true);
-      phase = 2;
+      phase = 3;
     }
   }
 );
@@ -296,15 +295,17 @@ arrowBtn1.addEventListener("click", () => {
 });
 
 arrowBtn2.addEventListener("click", () => {
-  // phase 1: ↑
   if (phase === 1) {
-    requestArmMove(0, -ARM_MOVE_Z); // 前移動（※z方向の「前」は環境次第なので後述）
+    requestArmMove(0, -ARM_MOVE_Z);
+
+    // ↑を押したら両方無効
+    arrowBtn1.setEnabled(false);
     arrowBtn2.setEnabled(false);
-    arrowBtn1.setEnabled(true);
-    phase = 2;
+    phase = 3;
     return;
   }
 });
+
 
 
 

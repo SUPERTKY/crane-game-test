@@ -12,6 +12,9 @@ let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
 const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
+// 例：到達点（好きに調整）
+const ARM_MAX_X = 1.2;   // →でここまで
+const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
 
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
@@ -606,9 +609,23 @@ if (clawLPivot && clawRPivot) {
 
 // ===== 長押し中のアーム移動 =====
 if (armGroup) {
-  armGroup.position.x += holdMove.x * dt;
-  armGroup.position.z += holdMove.z * dt;
+  // まず加算
+  armGroup.position.x += holdMove.x * dt; // +x
+  armGroup.position.z += holdMove.z * dt; // -z
+
+  // →（+x）は「最大」で止める
+  if (holdMove.x > 0 && armGroup.position.x >= ARM_MAX_X) {
+    armGroup.position.x = ARM_MAX_X;
+    holdMove.x = 0; // 押しっぱでも進まない
+  }
+
+  // ↑（-z）は「最小」で止める（※zは負方向へ行くので "MIN" が到達点）
+  if (holdMove.z < 0 && armGroup.position.z <= ARM_MIN_Z) {
+    armGroup.position.z = ARM_MIN_Z;
+    holdMove.z = 0;
+  }
 }
+
 
 
 

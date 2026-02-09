@@ -15,7 +15,8 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
-
+const CLAW_CLOSED = 0.20; // 閉じたときの角度（ラジアン）
+const CLAW_OPEN   = 1.05; // 開いたときの角度（ラジアン）
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
 
@@ -572,13 +573,11 @@ let clawOpen01 = 0; // 0=閉じる, 1=開く
 
 function setClawOpen(v01) {
   clawOpen01 = THREE.MathUtils.clamp(v01, 0, 1);
+  const ang = THREE.MathUtils.lerp(CLAW_CLOSED, CLAW_OPEN, clawOpen01);
 
-  // 開き角（ラジアン）0.0〜0.9 くらいで調整
-  const ang = THREE.MathUtils.lerp(0.05, 0.9, clawOpen01);
-
-  // 回転軸はモデル次第：z / y / x どれが正しいか試してOK
-  clawLPivot.rotation.z =  ang;   // 左は＋
-  clawRPivot.rotation.z = -ang;   // 右は−
+  // ここは今 z 軸回転（必要なら x/y に変更）
+  clawLPivot.rotation.z =  ang;
+  clawRPivot.rotation.z = -ang;
 }
 
 loadScene().catch(console.error);

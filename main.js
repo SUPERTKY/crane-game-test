@@ -492,8 +492,7 @@ armMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE * ARM_BODY_SCALE);
 clawLMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE * CLAW_SCALE);
 clawRMesh.scale.setScalar(WORLD_SCALE * ARM_SCALE * CLAW_SCALE);
 
-// グループ化
-armGroup.name = "ArmGroup";
+
 
 // ===== 先端の大ピボット（アーム先端）=====
 clawPivot = new THREE.Object3D();
@@ -542,6 +541,8 @@ addDebugDotLocal(clawPivot, hingeR_local, 0.03);
 clawLMesh.position.set(0, -1.95, -0.2);
 clawRMesh.position.set(0, -1.85, -0.2);
 armGroup = new THREE.Group();
+  // グループ化
+armGroup.name = "ArmGroup";
 armGroup.add(armMesh);
 // 置き場所（左上）
 armGroup.position.set(-1.2, 1.6, 0.6);
@@ -693,10 +694,7 @@ function animate(t) {
 //   ...
 // }
 
-// 代わりに：初期状態を固定（例：閉じる）
-if (clawLPivot && clawRPivot && !autoStarted) {
-  setClawOpen(0); // 待機中だけ閉じる
-}
+
 
 // ===== 長押し中のアーム移動 =====
 if (armGroup) {

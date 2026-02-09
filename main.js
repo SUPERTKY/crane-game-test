@@ -756,8 +756,14 @@ if (autoStarted && clawLPivot && clawRPivot && armGroup) {
   }
 }
 if (armGroup && armBody) {
-  // アームは「見た目→物理」でもいいけど、物理主導にするなら逆がおすすめ
   armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
+  armBody.quaternion.set(
+    armGroup.quaternion.x,
+    armGroup.quaternion.y,
+    armGroup.quaternion.z,
+    armGroup.quaternion.w
+  );
+
   armBody.velocity.set(0,0,0);
   armBody.angularVelocity.set(0,0,0);
 }

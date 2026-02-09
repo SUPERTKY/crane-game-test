@@ -629,8 +629,8 @@ function animate(t) {
 // }
 
 // 代わりに：初期状態を固定（例：閉じる）
-if (clawLPivot && clawRPivot) {
-  setClawOpen(0); // 0=閉じる, 1=開く（好きな値に）
+if (clawLPivot && clawRPivot && !autoStarted) {
+  setClawOpen(0); // 待機中だけ閉じる
 }
 
 // ===== 長押し中のアーム移動 =====

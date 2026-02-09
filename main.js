@@ -21,6 +21,16 @@ const CLAW_L_OPEN   = 1.00;
 
 const CLAW_R_CLOSED = 0.6;
 const CLAW_R_OPEN   = 0.95;
+// ===== 自動シーケンス設定 =====
+const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
+const ARM_DROP_DIST  = 0.45;  // 下げる距離（Y方向）
+const ARM_DROP_SPEED = 0.6;   // 下げる速さ（1秒あたり）
+const CLAW_CLOSE_TIME = 0.6;  // 閉じるのにかける秒
+
+let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=完了
+let autoT = 0;
+let dropStartY = 0;
+let autoStarted = false;
 
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
@@ -292,6 +302,14 @@ arrowBtn1.addEventListener("click", () => {
     phase = 1;
     return;
   }
+function startAutoSequence() {
+  if (autoStarted || !armGroup) return;
+  autoStarted = true;
+
+  autoStep = 1;   // 開くから開始
+  autoT = 0;
+  dropStartY = armGroup.position.y;
+}
 
   // phase 2: 最後の→（押したら終了で両方無効）
   if (phase === 2) {
@@ -299,6 +317,7 @@ arrowBtn1.addEventListener("click", () => {
     arrowBtn1.setEnabled(false);
     arrowBtn2.setEnabled(false);
     phase = 3;
+    startAutoSequence();
     return;
   }
 });
@@ -641,6 +660,40 @@ if (armGroup) {
   }
 
   renderer.render(scene, camera);
+  // ===== ボタン後の自動シーケンス =====
+if (autoStarted && clawLPivot && clawRPivot && armGroup) {
+  if (autoStep === 1) {
+    // 1) 開く
+    autoT += dt;
+    const t01 = Math.min(autoT / CLAW_OPEN_TIME, 1);
+    setClawOpen(t01);
+
+    if (t01 >= 1) {
+      autoStep = 2;
+      autoT = 0;
+      dropStartY = armGroup.position.y;
+    }
+  } else if (autoStep === 2) {
+    // 2) 規定距離だけ下げる
+    const targetY = dropStartY - ARM_DROP_DIST;
+    armGroup.position.y = Math.max(targetY, armGroup.position.y - ARM_DROP_SPEED * dt);
+
+    if (armGroup.position.y <= targetY + 1e-6) {
+      autoStep = 3;
+      autoT = 0;
+    }
+  } else if (autoStep === 3) {
+    // 3) 閉じる
+    autoT += dt;
+    const t01 = Math.min(autoT / CLAW_CLOSE_TIME, 1);
+    setClawOpen(1 - t01);
+
+    if (t01 >= 1) {
+      autoStep = 4; // 完了
+    }
+  }
+}
+
 }
 
 requestAnimationFrame(animate);

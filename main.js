@@ -396,6 +396,24 @@ function makeClawPhysics() {
 
   hingeL = hingeR = null;
 }
+function updateClawHitboxVisuals() {
+  // bodyや可視化がまだ無いなら何もしない
+  if (!clawLBody || !clawRBody) return;
+  if (!clawLVis.length || !clawRVis.length) return;
+
+  for (let i = 0; i < clawHitboxes.length; i++) {
+    const hb = clawHitboxes[i];
+
+    // 左爪3つ
+    updateHitboxFromBody(clawLBody, clawLVis[i], hb.offset, hb.orient);
+    // 右爪3つ
+    updateHitboxFromBody(clawRBody, clawRVis[i], hb.offset, hb.orient);
+
+    // 1回でも更新できたら見えるように（初期(0,0,0)対策）
+    clawLVis[i].visible = true;
+    clawRVis[i].visible = true;
+  }
+}
 
 
 // クリック処理（順番制御）

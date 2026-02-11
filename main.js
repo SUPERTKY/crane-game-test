@@ -850,6 +850,7 @@ if (autoStarted) {
 
   // ===== 物理ステップ（armBody同期の後！）=====
 followClawBodies(dt);
+  updateClawHitboxVisuals();
 const FIXED = 1 / 120;     // 60→120
 const MAX_SUB = 10;        // 3→10
 

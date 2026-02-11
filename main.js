@@ -467,10 +467,11 @@ function updateClawHitboxVisuals() {
   for (let i = 0; i < clawHitboxes.length; i++) {
     const hb = clawHitboxes[i];
 
-    // 左爪3つ
-    updateHitboxFromBody(clawLBody, clawLVis[i], hb.offset, hb.orient);
-    // 右爪3つ
-    updateHitboxFromBody(clawRBody, clawRVis[i], hb.offset, hb.orient);
+const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L);
+const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R);
+
+updateHitboxFromBody(clawLBody, clawLVis[i], offL, hb.orient);
+updateHitboxFromBody(clawRBody, clawRVis[i], offR, hb.orient);
 
     // 1回でも更新できたら見えるように（初期(0,0,0)対策）
     clawLVis[i].visible = true;
@@ -809,11 +810,7 @@ let lastT;
 const clawL_local = new CANNON.Vec3(0, -0.25,  0.12);
 const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
-const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L);
-const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R);
 
-updateHitboxFromBody(clawLBody, clawLVis[i], offL, hb.orient);
-updateHitboxFromBody(clawRBody, clawRVis[i], offR, hb.orient);
 
 
 

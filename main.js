@@ -400,8 +400,9 @@ function makeStickHalfExtentsFromMesh(stickMesh, thicknessRatio = 0.04) {
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
 let clawPivot, clawLPivot, clawRPivot; // ★追加（setClawOpenで使うため）
-function cannonVecToThree(v) { return new THREE.Vector3(v.x, v.y, v.z); }
-function cannonQuatToThree(q) { return new THREE.Quaternion(q.x, q.y, q.z, q.w); }
+function threeVecToCannon(v) { return new CANNON.Vec3(v.x, v.y, v.z); }
+function threeQuatToCannon(q) { return new CANNON.Quaternion(q.x, q.y, q.z, q.w); }
+
 async function loadScene() {
   const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf] =
     await Promise.all([
@@ -671,21 +672,39 @@ const offR = new CANNON.Vec3();
 const prevClawL = new CANNON.Vec3();
 const prevClawR = new CANNON.Vec3();
 
+const tmpPos = new THREE.Vector3();
+const tmpQuat = new THREE.Quaternion();
+const prevClawL = new CANNON.Vec3();
+const prevClawR = new CANNON.Vec3();
+
 function followClawBodies(dt) {
   if (!armBody || !clawLBody || !clawRBody) return;
+  if (!armGroup || !clawLPivot || !clawRPivot) return;
 
+  // armBody は armGroup に同期（今のままでOK）
+  // --- ここはあなたの既存コード側でやってるので省略 ---
+
+  // 速度計算用
   prevClawL.copy(clawLBody.position);
   prevClawR.copy(clawRBody.position);
 
-  armBody.quaternion.vmult(clawL_local, offL);
-  armBody.quaternion.vmult(clawR_local, offR);
+  // ★ 左爪：pivotのワールド姿勢をそのまま使う
+  clawLPivot.updateWorldMatrix(true, false);
+  clawLPivot.getWorldPosition(tmpPos);
+  clawLPivot.getWorldQuaternion(tmpQuat);
 
-  clawLBody.position.copy(armBody.position.vadd(offL));
-  clawRBody.position.copy(armBody.position.vadd(offR));
+  clawLBody.position.copy(threeVecToCannon(tmpPos));
+  clawLBody.quaternion.copy(threeQuatToCannon(tmpQuat));
 
-  clawLBody.quaternion.copy(armBody.quaternion);
-  clawRBody.quaternion.copy(armBody.quaternion);
+  // ★ 右爪
+  clawRPivot.updateWorldMatrix(true, false);
+  clawRPivot.getWorldPosition(tmpPos);
+  clawRPivot.getWorldQuaternion(tmpQuat);
 
+  clawRBody.position.copy(threeVecToCannon(tmpPos));
+  clawRBody.quaternion.copy(threeQuatToCannon(tmpQuat));
+
+  // 速度（kinematic安定化）
   if (dt > 1e-6) {
     clawLBody.velocity.set(
       (clawLBody.position.x - prevClawL.x) / dt,
@@ -698,10 +717,9 @@ function followClawBodies(dt) {
       (clawRBody.position.z - prevClawR.z) / dt
     );
   }
-  clawLBody.angularVelocity.set(0,0,0);
-  clawRBody.angularVelocity.set(0,0,0);
+  clawLBody.angularVelocity.set(0, 0, 0);
+  clawRBody.angularVelocity.set(0, 0, 0);
 }
-
 
 function animate(t) {
   requestAnimationFrame(animate);

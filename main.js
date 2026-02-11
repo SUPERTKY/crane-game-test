@@ -309,28 +309,30 @@ bindHoldMove(
 let armBody, clawLBody, clawRBody;
 let hingeL, hingeR;
 function makeClawPhysics() {
-  // arm kinematic
   armBody = new CANNON.Body({ mass: 0 });
   armBody.type = CANNON.Body.KINEMATIC;
   world.addBody(armBody);
 
-  // 爪も kinematic（←ここが重要）
   clawLBody = new CANNON.Body({ mass: 0 });
   clawLBody.type = CANNON.Body.KINEMATIC;
 
   clawRBody = new CANNON.Body({ mass: 0 });
   clawRBody.type = CANNON.Body.KINEMATIC;
 
-  clawLBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
-  clawRBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
+  // 形状（少し太め推奨）
+  const half = new CANNON.Vec3(0.10, 0.20, 0.10);
+  const shape = new CANNON.Box(half);
+
+  // ★ pivot(ヒンジ)から「下に」ずらす：ここが超重要
+  // まずは half.y 分だけ下げると “ヒンジ直下に箱が来る” ので当たりやすい
+  const offset = new CANNON.Vec3(0, -half.y, 0);
+
+  clawLBody.addShape(shape, offset);
+  clawRBody.addShape(shape, offset);
 
   world.addBody(clawLBody);
   world.addBody(clawRBody);
-
-  hingeL = hingeR = null;
 }
-
-
 
 
 // クリック処理（順番制御）

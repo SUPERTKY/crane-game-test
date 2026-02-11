@@ -704,119 +704,68 @@ function animate(t) {
   const dt = Math.min((t - lastT) / 1000, 1 / 30);
   lastT = t;
 
+  // ===== 長押し中のアーム移動（Three側）=====
+  if (armGroup) {
+    armGroup.position.x += holdMove.x * dt;
+    armGroup.position.z += holdMove.z * dt;
+
+    if (holdMove.x > 0 && armGroup.position.x >= ARM_MAX_X) {
+      armGroup.position.x = ARM_MAX_X;
+      holdMove.x = 0;
+    }
+    if (holdMove.z < 0 && armGroup.position.z <= ARM_MIN_Z) {
+      armGroup.position.z = ARM_MIN_Z;
+      holdMove.z = 0;
+    }
+  }
+
+  // ===== 自動シーケンス（Three側）=====
+  if (autoStarted && armGroup) {
+    // ここはあなたの既存処理でOK（位置が変わるだけ）
+  }
+
+  // ★★★ ここがポイント：Cannon側armBodyを "step前" に同期 ★★★
+  if (armGroup && armBody) {
+    // kinematic安定化：速度も入れる（拘束が追従しやすい）
+    const prev = armBody.position.clone();
+
+    armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
+    armBody.quaternion.set(
+      armGroup.quaternion.x,
+      armGroup.quaternion.y,
+      armGroup.quaternion.z,
+      armGroup.quaternion.w
+    );
+
+    // 速度を入れる（dtが0に近いときは保険）
+    if (dt > 1e-6) {
+      armBody.velocity.set(
+        (armBody.position.x - prev.x) / dt,
+        (armBody.position.y - prev.y) / dt,
+        (armBody.position.z - prev.z) / dt
+      );
+    }
+    armBody.angularVelocity.set(0, 0, 0);
+  }
+
+  // ===== 物理ステップ（armBody同期の後！）=====
   world.step(1 / 60, dt, 3);
 
-  // ===== 爪だけ回転（テスト）=====
-// ===== 爪の常時回転（テスト）を消す =====
-// if (clawLPivot && clawRPivot) {
-//   const open = 0.5 + 0.5 * Math.sin(t * 0.002);
-//   const ang = THREE.MathUtils.lerp(0.05, 0.9, open) * CLAW_SIGN;
-//   ...
-// }
-
-
-
-// ===== 長押し中のアーム移動 =====
-if (armGroup) {
-  // まず加算
-  armGroup.position.x += holdMove.x * dt; // +x
-  armGroup.position.z += holdMove.z * dt; // -z
-
-  // →（+x）は「最大」で止める
-  if (holdMove.x > 0 && armGroup.position.x >= ARM_MAX_X) {
-    armGroup.position.x = ARM_MAX_X;
-    holdMove.x = 0; // 押しっぱでも進まない
-  }
-
-  // ↑（-z）は「最小」で止める（※zは負方向へ行くので "MIN" が到達点）
-  if (holdMove.z < 0 && armGroup.position.z <= ARM_MIN_Z) {
-    armGroup.position.z = ARM_MIN_Z;
-    holdMove.z = 0;
-  }
-}
-
-
-
-
+  // ===== 箱表示同期 =====
   if (boxMesh && boxBody) {
     boxMesh.position.copy(boxBody.position);
     boxMesh.quaternion.copy(boxBody.quaternion);
   }
 
-  renderer.render(scene, camera);
-  // ===== ボタン後の自動シーケンス =====
-if (autoStarted && armGroup) {
-  if (autoStep === 1) {
-    if (autoT === 0) clawOpenMotor(); // ★追加
-    autoT += dt;
-
-    if (autoT >= CLAW_OPEN_TIME) {
-      clawStopMotor(); // ★追加
-      autoStep = 2;
-      autoT = 0;
-      dropStartY = armGroup.position.y;
-    }
-
-  } else if (autoStep === 2) {
-    const targetY = dropStartY - ARM_DROP_DIST;
-    armGroup.position.y = Math.max(targetY, armGroup.position.y - ARM_DROP_SPEED * dt);
-
-    if (armGroup.position.y <= targetY + 1e-6) {
-      autoStep = 3;
-      autoT = 0;
-    }
-
-  } else if (autoStep === 3) {
-    if (autoT === 0) clawCloseMotor(); // ★追加
-    autoT += dt;
-
-    if (autoT >= CLAW_CLOSE_TIME) {
-      clawStopMotor(); // ★追加
-      autoStep = 4;
-    }
+  // ===== 爪表示同期（※重複してるので1回だけでOK）=====
+  if (clawLPivot && clawPivot && clawLBody) {
+    syncClawPivotFromBody(clawLPivot, clawPivot, clawLBody);
   }
-}
+  if (clawRPivot && clawPivot && clawRBody) {
+    syncClawPivotFromBody(clawRPivot, clawPivot, clawRBody);
+  }
 
-if (armGroup && armBody) {
-  armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
-  armBody.quaternion.set(
-    armGroup.quaternion.x,
-    armGroup.quaternion.y,
-    armGroup.quaternion.z,
-    armGroup.quaternion.w
-  );
-
-  armBody.velocity.set(0,0,0);
-  armBody.angularVelocity.set(0,0,0);
-}
-
-if (clawLMesh && clawLBody) {
-  // ---- 物理(ワールド) → 見た目(ピボットローカル) 変換 ----
-// animate内で
-if (clawLPivot && clawPivot && clawLBody) {
-  syncClawPivotFromBody(clawLPivot, clawPivot, clawLBody);
-}
-if (clawRPivot && clawPivot && clawRBody) {
-  syncClawPivotFromBody(clawRPivot, clawPivot, clawRBody);
-}
-
-}
-
-if (clawRMesh && clawRBody) {
-  // ---- 物理(ワールド) → 見た目(ピボットローカル) 変換 ----
-
-
-// animate内で
-if (clawLPivot && clawPivot && clawLBody) {
-  syncClawPivotFromBody(clawLPivot, clawPivot, clawLBody);
-}
-if (clawRPivot && clawPivot && clawRBody) {
-  syncClawPivotFromBody(clawRPivot, clawPivot, clawRBody);
-}
-
-}
-
-
+  renderer.render(scene, camera);
 }
 
 requestAnimationFrame(animate);

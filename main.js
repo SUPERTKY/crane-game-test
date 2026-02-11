@@ -536,7 +536,9 @@ armGroup.rotation.y = Math.PI / 2;
 scene.add(armGroup);
 
 makeClawPhysics();
-  
+// 初期は閉じ
+setClawOpen01(0);
+
 
   // ===== クレーン台（見た目だけ）=====
   craneMesh = craneGltf.scene;

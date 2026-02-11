@@ -669,8 +669,6 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 const offL = new CANNON.Vec3();
 const offR = new CANNON.Vec3();
 
-const prevClawL = new CANNON.Vec3();
-const prevClawR = new CANNON.Vec3();
 
 const tmpPos = new THREE.Vector3();
 const tmpQuat = new THREE.Quaternion();

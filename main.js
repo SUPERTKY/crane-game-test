@@ -662,6 +662,24 @@ function clawStopMotor() {
 loadScene().catch(console.error);
 
 let lastT;
+const clawL_local = new CANNON.Vec3(0, -0.25,  0.12);
+const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
+
+const offL = new CANNON.Vec3();
+const offR = new CANNON.Vec3();
+
+function followClawBodies() {
+  if (!armBody || !clawLBody || !clawRBody) return;
+
+  armBody.quaternion.vmult(clawL_local, offL);
+  armBody.quaternion.vmult(clawR_local, offR);
+
+  clawLBody.position.copy(armBody.position.vadd(offL));
+  clawRBody.position.copy(armBody.position.vadd(offR));
+
+  clawLBody.quaternion.copy(armBody.quaternion);
+  clawRBody.quaternion.copy(armBody.quaternion);
+}
 
 function animate(t) {
   requestAnimationFrame(animate);
@@ -686,9 +704,24 @@ function animate(t) {
   }
 
   // ===== 自動シーケンス（Three側）=====
-  if (autoStarted && armGroup) {
-    // ここはあなたの既存処理でOK（位置が変わるだけ）
+if (autoStarted) {
+  if (autoStep === 1) {
+    autoT += dt;
+    setClawOpen01(Math.min(autoT / CLAW_OPEN_TIME, 1));
+    if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; }
+
+  } else if (autoStep === 2) {
+    const targetY = dropStartY - ARM_DROP_DIST;
+    armGroup.position.y = Math.max(targetY, armGroup.position.y - ARM_DROP_SPEED * dt);
+    if (armGroup.position.y <= targetY + 1e-6) { autoStep = 3; autoT = 0; }
+
+  } else if (autoStep === 3) {
+    autoT += dt;
+    setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1));
+    if (autoT >= CLAW_CLOSE_TIME) { autoStep = 4; }
   }
+}
+
 
   // ★★★ ここがポイント：Cannon側armBodyを "step前" に同期 ★★★
   if (armGroup && armBody) {
@@ -715,7 +748,9 @@ function animate(t) {
   }
 
   // ===== 物理ステップ（armBody同期の後！）=====
-  world.step(1 / 60, dt, 3);
+followClawBodies();
+world.step(1 / 60, dt, 3);
+
 
   // ===== 箱表示同期 =====
   if (boxMesh && boxBody) {
@@ -723,34 +758,10 @@ function animate(t) {
     boxMesh.quaternion.copy(boxBody.quaternion);
   }
 
-  // ===== 爪表示同期（※重複してるので1回だけでOK）=====
-  if (clawLPivot && clawPivot && clawLBody) {
-    syncClawPivotFromBody(clawLPivot, clawPivot, clawLBody);
-  }
-  if (clawRPivot && clawPivot && clawRBody) {
-    syncClawPivotFromBody(clawRPivot, clawPivot, clawRBody);
-  }
+
 
   renderer.render(scene, camera);
-  const clawL_local = new CANNON.Vec3(0, -0.25,  0.12);
-const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
-
-function followClawBodies() {
-  if (!armBody || !clawLBody || !clawRBody) return;
-
-  const offL = new CANNON.Vec3();
-  const offR = new CANNON.Vec3();
-  armBody.quaternion.vmult(clawL_local, offL);
-  armBody.quaternion.vmult(clawR_local, offR);
-
-  clawLBody.position.copy(armBody.position.vadd(offL));
-  clawRBody.position.copy(armBody.position.vadd(offR));
-
-  // 当たり判定の向きもarmに合わせる（必要なら）
-  clawLBody.quaternion.copy(armBody.quaternion);
-  clawRBody.quaternion.copy(armBody.quaternion);
-}
-
+  
 }
 
 requestAnimationFrame(animate);

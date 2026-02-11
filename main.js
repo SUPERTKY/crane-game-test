@@ -89,23 +89,13 @@ arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
-function syncClawPivotFromBody(pivot3, parent3, body) {
-  // body world
-  const wPos = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
-  const wQuat = new THREE.Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
+function setClawOpen01(open01) {
+  // 0=閉, 1=開
+  const l = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, open01);
+  const r = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, open01);
 
-  // parent world
-  const parentWQuat = new THREE.Quaternion();
-  parent3.getWorldQuaternion(parentWQuat);
-
-  // position: world -> parent local
-  const localPos = wPos.clone();
-  parent3.worldToLocal(localPos);
-  pivot3.position.copy(localPos);
-
-  // rotation: local = inv(parentWorld) * world
-  const localQuat = parentWQuat.clone().invert().multiply(wQuat);
-  pivot3.quaternion.copy(localQuat);
+  clawLPivot.rotation.x = l; // ←軸は合うやつに（x/y/z）
+  clawRPivot.rotation.x = r;
 }
 
 
@@ -320,7 +310,7 @@ let armBody, clawLBody, clawRBody;
 let hingeL, hingeR;
 
 function makeClawPhysics() {
-  // アーム本体（kinematic）
+  // arm kinematic
   armBody = new CANNON.Body({ mass: 0 });
   armBody.type = CANNON.Body.KINEMATIC;
   armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
@@ -329,65 +319,20 @@ function makeClawPhysics() {
   );
   world.addBody(armBody);
 
-  // 爪
-  clawLBody = new CANNON.Body({ mass: 0.2, material: matStick });
-  clawRBody = new CANNON.Body({ mass: 0.2, material: matStick });
+  // 爪の当たり判定（固定でarmに追従させるだけ）
+  clawLBody = new CANNON.Body({ mass: 0 }); // ←固定扱いにする
+  clawRBody = new CANNON.Body({ mass: 0 });
 
   clawLBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
   clawRBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
 
-  // ✅ オフセットは「armBodyローカル」で決める
-  const localOffL = new CANNON.Vec3(0, -0.25,  0.12);
-  const localOffR = new CANNON.Vec3(0, -0.25, -0.12);
-
-  // ✅ ローカル→ワールドに回してから足す（armGroupが回転しててもOK）
-  const worldOffL = new CANNON.Vec3();
-  const worldOffR = new CANNON.Vec3();
-  armBody.quaternion.vmult(localOffL, worldOffL);
-  armBody.quaternion.vmult(localOffR, worldOffR);
-
-  clawLBody.position.copy(armBody.position.vadd(worldOffL));
-  clawRBody.position.copy(armBody.position.vadd(worldOffR));
-
-  // ✅ 初期姿勢もarmに合わせる（これが無いとヒンジがねじれた状態で開始しやすい）
-  clawLBody.quaternion.copy(armBody.quaternion);
-  clawRBody.quaternion.copy(armBody.quaternion);
-
   world.addBody(clawLBody);
   world.addBody(clawRBody);
 
-  // ヒンジ（pivotAはarmBodyローカルなのでこのままでOK）
-  const pivotL = new CANNON.Vec3(0, -0.05,  0.12);
-  const pivotR = new CANNON.Vec3(0, -0.05, -0.12);
-
-  hingeL = new CANNON.HingeConstraint(armBody, clawLBody, {
-    pivotA: pivotL,
-    axisA: new CANNON.Vec3(1, 0, 0),
-    pivotB: new CANNON.Vec3(0, 0.18, 0),
-    axisB: new CANNON.Vec3(1, 0, 0),
-    collideConnected: false,
-  });
-
-  hingeR = new CANNON.HingeConstraint(armBody, clawRBody, {
-    pivotA: pivotR,
-    axisA: new CANNON.Vec3(1, 0, 0),
-    pivotB: new CANNON.Vec3(0, 0.18, 0),
-    axisB: new CANNON.Vec3(1, 0, 0),
-    collideConnected: false,
-  });
-
-  world.addConstraint(hingeL);
-  world.addConstraint(hingeR);
-
-  hingeL.enableMotor();
-  hingeR.enableMotor();
-  hingeL.setMotorSpeed(0);
-  hingeR.setMotorSpeed(0);
-
-  // 寝ないように（置いてかれ防止）
-  clawLBody.allowSleep = false;
-  clawRBody.allowSleep = false;
+  // ヒンジは作らない
+  hingeL = hingeR = null;
 }
+
 
 
 // クリック処理（順番制御）
@@ -787,6 +732,25 @@ function animate(t) {
   }
 
   renderer.render(scene, camera);
+  const clawL_local = new CANNON.Vec3(0, -0.25,  0.12);
+const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
+
+function followClawBodies() {
+  if (!armBody || !clawLBody || !clawRBody) return;
+
+  const offL = new CANNON.Vec3();
+  const offR = new CANNON.Vec3();
+  armBody.quaternion.vmult(clawL_local, offL);
+  armBody.quaternion.vmult(clawR_local, offR);
+
+  clawLBody.position.copy(armBody.position.vadd(offL));
+  clawRBody.position.copy(armBody.position.vadd(offR));
+
+  // 当たり判定の向きもarmに合わせる（必要なら）
+  clawLBody.quaternion.copy(armBody.quaternion);
+  clawRBody.quaternion.copy(armBody.quaternion);
+}
+
 }
 
 requestAnimationFrame(animate);

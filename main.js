@@ -32,6 +32,22 @@ const HB_Z3 = 0.22;
 const HB1 = { x: 0.10, y: 0.18, z: 0.08 };
 const HB2 = { x: 0.10, y: 0.06, z: 0.14 };
 const HB3 = { x: 0.08, y: 0.06, z: 0.10 };
+// ===== Hitbox回転設定 =====
+// 角度はラジアン（Math.PI = 180°）
+
+const HB_ROT_X = 0;   // 前後に倒す
+const HB_ROT_Y = 0;   // 横向き回転
+const HB_ROT_Z = 0;   // ねじり
+
+// 個別調整したいならこっち
+const HB1_ROT = { x: 0, y: 0, z: 0 };
+const HB2_ROT = { x: 0, y: 0, z: 0 };
+const HB3_ROT = { x: 0, y: 0, z: 0 };
+function quatFromEuler(x, y, z) {
+  const q = new CANNON.Quaternion();
+  q.setFromEuler(x, y, z, "XYZ");
+  return q;
+}
 
 const CLAW_R_CLOSED = -0.6;
 const CLAW_R_OPEN   = 0.2;
@@ -367,19 +383,20 @@ const clawHitboxes = [
   {
     half: new CANNON.Vec3(HB1.x * HB_SCALE, HB1.y * HB_SCALE, HB1.z * HB_SCALE),
     offset: new CANNON.Vec3(0, HB_Y, HB_Z1),
-    orient: IDENTITY_Q,
+    orient: quatFromEuler(HB1_ROT.x, HB1_ROT.y, HB1_ROT.z),
   },
   {
     half: new CANNON.Vec3(HB2.x * HB_SCALE, HB2.y * HB_SCALE, HB2.z * HB_SCALE),
     offset: new CANNON.Vec3(0, HB_Y + HB_GAP1, HB_Z2),
-    orient: IDENTITY_Q,
+    orient: quatFromEuler(HB2_ROT.x, HB2_ROT.y, HB2_ROT.z),
   },
   {
     half: new CANNON.Vec3(HB3.x * HB_SCALE, HB3.y * HB_SCALE, HB3.z * HB_SCALE),
     offset: new CANNON.Vec3(0, HB_Y + HB_GAP1 + HB_GAP2, HB_Z3),
-    orient: IDENTITY_Q,
+    orient: quatFromEuler(HB3_ROT.x, HB3_ROT.y, HB3_ROT.z),
   },
 ];
+
 
 
 

@@ -707,7 +707,8 @@ function animate(t) {
   requestAnimationFrame(animate);
 
   if (lastT == null) lastT = t;
-  const dt = Math.min((t - lastT) / 1000, 1 / 30);
+  const dt = Math.min((t - lastT) / 1000, 1 / 120);
+
   lastT = t;
 
   // ===== 長押し中のアーム移動（Three側）=====
@@ -771,7 +772,10 @@ if (autoStarted) {
 
   // ===== 物理ステップ（armBody同期の後！）=====
 followClawBodies(dt);
-world.step(1/60, dt, 3);
+const FIXED = 1 / 120;     // 60→120
+const MAX_SUB = 10;        // 3→10
+
+world.step(FIXED, dt, MAX_SUB);
 
 
 

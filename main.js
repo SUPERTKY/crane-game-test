@@ -308,20 +308,18 @@ bindHoldMove(
 );
 let armBody, clawLBody, clawRBody;
 let hingeL, hingeR;
-
 function makeClawPhysics() {
   // arm kinematic
   armBody = new CANNON.Body({ mass: 0 });
   armBody.type = CANNON.Body.KINEMATIC;
-  armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
-  armBody.quaternion.set(
-    armGroup.quaternion.x, armGroup.quaternion.y, armGroup.quaternion.z, armGroup.quaternion.w
-  );
   world.addBody(armBody);
 
-  // 爪の当たり判定（固定でarmに追従させるだけ）
-  clawLBody = new CANNON.Body({ mass: 0 }); // ←固定扱いにする
+  // 爪も kinematic（←ここが重要）
+  clawLBody = new CANNON.Body({ mass: 0 });
+  clawLBody.type = CANNON.Body.KINEMATIC;
+
   clawRBody = new CANNON.Body({ mass: 0 });
+  clawRBody.type = CANNON.Body.KINEMATIC;
 
   clawLBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
   clawRBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
@@ -329,9 +327,9 @@ function makeClawPhysics() {
   world.addBody(clawLBody);
   world.addBody(clawRBody);
 
-  // ヒンジは作らない
   hingeL = hingeR = null;
 }
+
 
 
 
@@ -670,8 +668,14 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 const offL = new CANNON.Vec3();
 const offR = new CANNON.Vec3();
 
-function followClawBodies() {
+const prevClawL = new CANNON.Vec3();
+const prevClawR = new CANNON.Vec3();
+
+function followClawBodies(dt) {
   if (!armBody || !clawLBody || !clawRBody) return;
+
+  prevClawL.copy(clawLBody.position);
+  prevClawR.copy(clawRBody.position);
 
   armBody.quaternion.vmult(clawL_local, offL);
   armBody.quaternion.vmult(clawR_local, offR);
@@ -681,7 +685,23 @@ function followClawBodies() {
 
   clawLBody.quaternion.copy(armBody.quaternion);
   clawRBody.quaternion.copy(armBody.quaternion);
+
+  if (dt > 1e-6) {
+    clawLBody.velocity.set(
+      (clawLBody.position.x - prevClawL.x) / dt,
+      (clawLBody.position.y - prevClawL.y) / dt,
+      (clawLBody.position.z - prevClawL.z) / dt
+    );
+    clawRBody.velocity.set(
+      (clawRBody.position.x - prevClawR.x) / dt,
+      (clawRBody.position.y - prevClawR.y) / dt,
+      (clawRBody.position.z - prevClawR.z) / dt
+    );
+  }
+  clawLBody.angularVelocity.set(0,0,0);
+  clawRBody.angularVelocity.set(0,0,0);
 }
+
 
 function animate(t) {
   requestAnimationFrame(animate);
@@ -750,8 +770,9 @@ if (autoStarted) {
   }
 
   // ===== 物理ステップ（armBody同期の後！）=====
-followClawBodies();
-world.step(1 / 60, dt, 3);
+followClawBodies(dt);
+world.step(1/60, dt, 3);
+
 
 
   // ===== 箱表示同期 =====

@@ -16,8 +16,8 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
 // 左右それぞれ別の角度（ラジアン）
-const CLAW_L_CLOSED = 0.6;
-const CLAW_L_OPEN   = -0.2;
+const CLAW_L_CLOSED = -0.6;
+const CLAW_L_OPEN   = 0.2;
 
 const CLAW_R_CLOSED = 0.4;
 const CLAW_R_OPEN   = -0.3;

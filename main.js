@@ -43,6 +43,9 @@ const HB_ROT_Z = 0;   // ねじり
 const HB1_ROT = { x: 0, y: 0, z: 0 };
 const HB2_ROT = { x: 0, y: 0, z: 0 };
 const HB3_ROT = { x: 0, y: 0, z: 0 };
+const HB_Z_SIGN_L = -1;  // 左が効かないなら -1 を試す（だいたいこれ）
+const HB_Z_SIGN_R = +1;
+
 function quatFromEuler(x, y, z) {
   const q = new CANNON.Quaternion();
   q.setFromEuler(x, y, z, "XYZ");
@@ -439,6 +442,22 @@ function makeClawPhysics() {
   world.addBody(clawRBody);
 
   hingeL = hingeR = null;
+  for (let i = 0; i < clawHitboxes.length; i++) {
+  const hb = clawHitboxes[i];
+  const shape = new CANNON.Box(hb.half);
+
+  // ✅ 左右でoffsetのZだけ反転（必要ならXも）
+  const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L);
+  const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R);
+
+  clawLBody.addShape(shape, offL, hb.orient);
+  clawRBody.addShape(shape, offR, hb.orient);
+
+  // 見える箱も左右で同じ順番で作る
+  clawLVis.push(addHitboxVisualizer(scene, hb.half, { color: 0x00ff00 }));
+  clawRVis.push(addHitboxVisualizer(scene, hb.half, { color: 0xff0000 }));
+}
+
 }
 function updateClawHitboxVisuals() {
   // bodyや可視化がまだ無いなら何もしない
@@ -790,8 +809,12 @@ let lastT;
 const clawL_local = new CANNON.Vec3(0, -0.25,  0.12);
 const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
-const offL = new CANNON.Vec3();
-const offR = new CANNON.Vec3();
+const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L);
+const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R);
+
+updateHitboxFromBody(clawLBody, clawLVis[i], offL, hb.orient);
+updateHitboxFromBody(clawRBody, clawRVis[i], offR, hb.orient);
+
 
 
 const tmpPos = new THREE.Vector3();

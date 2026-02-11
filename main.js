@@ -18,6 +18,20 @@ const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
 // 左右それぞれ別の角度（ラジアン）
 const CLAW_L_CLOSED = 0.4;
 const CLAW_L_OPEN   = -0.3;
+// ===== 爪ヒットボックス設定（ここだけいじる）=====
+const HB_SCALE = 1.0;            // 全体倍率
+const HB_Y = -0.22;              // 1個目のY
+const HB_GAP1 = -0.16;           // 2個目までのY差（HB_Y + HB_GAP1）
+const HB_GAP2 = -0.07;           // 3個目までのY差（2個目Y + HB_GAP2）
+
+const HB_Z1 = 0.00;
+const HB_Z2 = 0.12;
+const HB_Z3 = 0.22;
+
+// halfExtents（半分サイズ）
+const HB1 = { x: 0.10, y: 0.18, z: 0.08 };
+const HB2 = { x: 0.10, y: 0.06, z: 0.14 };
+const HB3 = { x: 0.08, y: 0.06, z: 0.10 };
 
 const CLAW_R_CLOSED = -0.6;
 const CLAW_R_OPEN   = 0.2;
@@ -350,10 +364,23 @@ function updateHitboxFromBody(body, vis, shapeOffset, shapeOrient) {
 const IDENTITY_Q = new CANNON.Quaternion(0, 0, 0, 1);
 
 const clawHitboxes = [
-  { half: new CANNON.Vec3(0.10, 0.18, 0.08), offset: new CANNON.Vec3(0, -0.22, 0), orient: IDENTITY_Q },
-  { half: new CANNON.Vec3(0.10, 0.06, 0.14), offset: new CANNON.Vec3(0, -0.38, 0.12), orient: IDENTITY_Q },
-  { half: new CANNON.Vec3(0.08, 0.06, 0.10), offset: new CANNON.Vec3(0, -0.45, 0.22), orient: IDENTITY_Q },
+  {
+    half: new CANNON.Vec3(HB1.x * HB_SCALE, HB1.y * HB_SCALE, HB1.z * HB_SCALE),
+    offset: new CANNON.Vec3(0, HB_Y, HB_Z1),
+    orient: IDENTITY_Q,
+  },
+  {
+    half: new CANNON.Vec3(HB2.x * HB_SCALE, HB2.y * HB_SCALE, HB2.z * HB_SCALE),
+    offset: new CANNON.Vec3(0, HB_Y + HB_GAP1, HB_Z2),
+    orient: IDENTITY_Q,
+  },
+  {
+    half: new CANNON.Vec3(HB3.x * HB_SCALE, HB3.y * HB_SCALE, HB3.z * HB_SCALE),
+    offset: new CANNON.Vec3(0, HB_Y + HB_GAP1 + HB_GAP2, HB_Z3),
+    orient: IDENTITY_Q,
+  },
 ];
+
 
 
 

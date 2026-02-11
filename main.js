@@ -324,24 +324,40 @@ function makeClawPhysics() {
   armBody = new CANNON.Body({ mass: 0 });
   armBody.type = CANNON.Body.KINEMATIC;
   armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
+  armBody.quaternion.set(
+    armGroup.quaternion.x, armGroup.quaternion.y, armGroup.quaternion.z, armGroup.quaternion.w
+  );
   world.addBody(armBody);
 
-  // 爪（とりあえず Box 形状で代用）
+  // 爪
   clawLBody = new CANNON.Body({ mass: 0.2, material: matStick });
   clawRBody = new CANNON.Body({ mass: 0.2, material: matStick });
 
   clawLBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
   clawRBody.addShape(new CANNON.Box(new CANNON.Vec3(0.08, 0.18, 0.05)));
 
-  // 初期位置（アーム位置＋オフセット）
-  clawLBody.position.copy(armBody.position.vadd(new CANNON.Vec3(0, -0.25, 0.12)));
-  clawRBody.position.copy(armBody.position.vadd(new CANNON.Vec3(0, -0.25, -0.12)));
+  // ✅ オフセットは「armBodyローカル」で決める
+  const localOffL = new CANNON.Vec3(0, -0.25,  0.12);
+  const localOffR = new CANNON.Vec3(0, -0.25, -0.12);
+
+  // ✅ ローカル→ワールドに回してから足す（armGroupが回転しててもOK）
+  const worldOffL = new CANNON.Vec3();
+  const worldOffR = new CANNON.Vec3();
+  armBody.quaternion.vmult(localOffL, worldOffL);
+  armBody.quaternion.vmult(localOffR, worldOffR);
+
+  clawLBody.position.copy(armBody.position.vadd(worldOffL));
+  clawRBody.position.copy(armBody.position.vadd(worldOffR));
+
+  // ✅ 初期姿勢もarmに合わせる（これが無いとヒンジがねじれた状態で開始しやすい）
+  clawLBody.quaternion.copy(armBody.quaternion);
+  clawRBody.quaternion.copy(armBody.quaternion);
 
   world.addBody(clawLBody);
   world.addBody(clawRBody);
 
-  // ヒンジ（回転軸はモデルに合わせて調整。例：X軸）
-  const pivotL = new CANNON.Vec3(0, -0.05, 0.12);  // armBody ローカル
+  // ヒンジ（pivotAはarmBodyローカルなのでこのままでOK）
+  const pivotL = new CANNON.Vec3(0, -0.05,  0.12);
   const pivotR = new CANNON.Vec3(0, -0.05, -0.12);
 
   hingeL = new CANNON.HingeConstraint(armBody, clawLBody, {
@@ -349,6 +365,7 @@ function makeClawPhysics() {
     axisA: new CANNON.Vec3(1, 0, 0),
     pivotB: new CANNON.Vec3(0, 0.18, 0),
     axisB: new CANNON.Vec3(1, 0, 0),
+    collideConnected: false,
   });
 
   hingeR = new CANNON.HingeConstraint(armBody, clawRBody, {
@@ -356,16 +373,20 @@ function makeClawPhysics() {
     axisA: new CANNON.Vec3(1, 0, 0),
     pivotB: new CANNON.Vec3(0, 0.18, 0),
     axisB: new CANNON.Vec3(1, 0, 0),
+    collideConnected: false,
   });
 
   world.addConstraint(hingeL);
   world.addConstraint(hingeR);
 
-  // モーターON（速度はあとで切替）
   hingeL.enableMotor();
   hingeR.enableMotor();
   hingeL.setMotorSpeed(0);
   hingeR.setMotorSpeed(0);
+
+  // 寝ないように（置いてかれ防止）
+  clawLBody.allowSleep = false;
+  clawRBody.allowSleep = false;
 }
 
 

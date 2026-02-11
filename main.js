@@ -306,8 +306,63 @@ bindHoldMove(
     }
   }
 );
+// ===== Hitbox可視化ヘルパー =====
+function cannonQuatToThree(q) {
+  return new THREE.Quaternion(q.x, q.y, q.z, q.w);
+}
+function cannonVecToThree(v) {
+  return new THREE.Vector3(v.x, v.y, v.z);
+}
+
+function addHitboxVisualizer(scene, halfExtents, { color = 0x00ff00 } = {}) {
+  const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
+  const mat = new THREE.MeshBasicMaterial({ color, wireframe: true });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = 9999;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
+}
+
+/**
+ * body: CANNON.Body
+ * vis: THREE.Mesh (wireframe box)
+ * shapeOffset: CANNON.Vec3  (addShapeのoffsetと同じ)
+ * shapeOrient: CANNON.Quaternion (addShapeのorientationと同じ。使ってなければ identity)
+ */
+function updateHitboxFromBody(body, vis, shapeOffset, shapeOrient) {
+  // worldPos = body.pos + body.quat * (shapeOffset)
+  const off = new CANNON.Vec3();
+  body.quaternion.vmult(shapeOffset, off);
+
+  const worldPos = body.position.vadd(off);
+
+  // worldQuat = body.quat * shapeOrient
+  const worldQuat = body.quaternion.mult(shapeOrient);
+
+  vis.position.copy(cannonVecToThree(worldPos));
+  vis.quaternion.copy(cannonQuatToThree(worldQuat));
+}
+// ===== 3つのhitbox定義（あなたが数値を調整する場所） =====
+// halfExtents: 当たり判定の半サイズ
+// offset: ヒンジ(pivot)からのローカルオフセット（addShapeと同じ）
+// orient: shape固有回転（基本 identity でOK）
+const IDENTITY_Q = new CANNON.Quaternion(0, 0, 0, 1);
+
+const clawHitboxes = [
+  { half: new CANNON.Vec3(0.10, 0.18, 0.08), offset: new CANNON.Vec3(0, -0.22, 0), orient: IDENTITY_Q },
+  { half: new CANNON.Vec3(0.10, 0.06, 0.14), offset: new CANNON.Vec3(0, -0.38, 0.12), orient: IDENTITY_Q },
+  { half: new CANNON.Vec3(0.08, 0.06, 0.10), offset: new CANNON.Vec3(0, -0.45, 0.22), orient: IDENTITY_Q },
+];
+
+
+
+
 let armBody, clawLBody, clawRBody;
 let hingeL, hingeR;
+let clawLVis = [];
+let clawRVis = [];
+
 function makeClawPhysics() {
   armBody = new CANNON.Body({ mass: 0 });
   armBody.type = CANNON.Body.KINEMATIC;
@@ -319,19 +374,27 @@ function makeClawPhysics() {
   clawRBody = new CANNON.Body({ mass: 0 });
   clawRBody.type = CANNON.Body.KINEMATIC;
 
-  // 形状（少し太め推奨）
-  const half = new CANNON.Vec3(0.10, 0.20, 0.10);
-  const shape = new CANNON.Box(half);
+  // 既存のvisがあれば消す（リロード/作り直し対策）
+  for (const m of clawLVis) scene.remove(m);
+  for (const m of clawRVis) scene.remove(m);
+  clawLVis = [];
+  clawRVis = [];
 
-  // ★ pivot(ヒンジ)から「下に」ずらす：ここが超重要
-  // まずは half.y 分だけ下げると “ヒンジ直下に箱が来る” ので当たりやすい
-  const offset = new CANNON.Vec3(0, -half.y, 0);
+  // 3つのshapeを追加 + 可視化meshを作成
+  for (const hb of clawHitboxes) {
+    const shape = new CANNON.Box(hb.half);
 
-  clawLBody.addShape(shape, offset);
-  clawRBody.addShape(shape, offset);
+    clawLBody.addShape(shape, hb.offset, hb.orient);
+    clawRBody.addShape(shape, hb.offset, hb.orient);
+
+    clawLVis.push(addHitboxVisualizer(scene, hb.half, { color: 0x00ff00 })); // 左=緑
+    clawRVis.push(addHitboxVisualizer(scene, hb.half, { color: 0xff0000 })); // 右=赤
+  }
 
   world.addBody(clawLBody);
   world.addBody(clawRBody);
+
+  hingeL = hingeR = null;
 }
 
 
@@ -369,9 +432,6 @@ arrowBtn2.addEventListener("click", () => {
     return;
   }
 });
-
-
-
 
 /**
  * 棒の当たり判定：

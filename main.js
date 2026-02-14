@@ -18,33 +18,61 @@ const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
 // 左右それぞれ別の角度（ラジアン）
 const CLAW_L_CLOSED = 0.4;
 const CLAW_L_OPEN   = -0.3;
+
+
+
+
+
+
 // ===== 爪ヒットボックス設定（ここだけいじる）=====
 const HB_SCALE = 1.0;            // 全体倍率
+
 const HB_Y = -0.22;              // 1個目のY
+
 const HB_GAP1 = -0.16;           // 2個目までのY差（HB_Y + HB_GAP1）
+
 const HB_GAP2 = -0.07;           // 3個目までのY差（2個目Y + HB_GAP2）
 
+
 const HB_Z1 = 0.00;
+
 const HB_Z2 = 0.12;
+
 const HB_Z3 = 0.22;
+
 
 // halfExtents（半分サイズ）
 const HB1 = { x: 0.10, y: 0.18, z: 0.08 };
+
 const HB2 = { x: 0.10, y: 0.06, z: 0.14 };
+
 const HB3 = { x: 0.08, y: 0.06, z: 0.10 };
+
 // ===== Hitbox回転設定 =====
 // 角度はラジアン（Math.PI = 180°）
 
 const HB_ROT_X = 0;   // 前後に倒す
+
 const HB_ROT_Y = 0;   // 横向き回転
+
 const HB_ROT_Z = 0;   // ねじり
 
 // 個別調整したいならこっち
-const HB1_ROT = { x: 0, y: 0, z: 0 };
+const HB1_ROT = { x: 0, y: 40, z: 0 };
+
 const HB2_ROT = { x: 0, y: 0, z: 0 };
+
 const HB3_ROT = { x: 0, y: 0, z: 0 };
+
 const HB_Z_SIGN_L = -1;  // 左が効かないなら -1 を試す（だいたいこれ）
+
 const HB_Z_SIGN_R = +1;
+
+
+
+
+
+
 
 function quatFromEuler(x, y, z) {
   const q = new CANNON.Quaternion();

@@ -421,44 +421,34 @@ function makeClawPhysics() {
   clawRBody = new CANNON.Body({ mass: 0 });
   clawRBody.type = CANNON.Body.KINEMATIC;
 
-  // 既存のvisがあれば消す（リロード/作り直し対策）
+  // 既存のvisがあれば消す
   for (const m of clawLVis) scene.remove(m);
   for (const m of clawRVis) scene.remove(m);
   clawLVis = [];
   clawRVis = [];
 
-  // 3つのshapeを追加 + 可視化meshを作成
-  for (const hb of clawHitboxes) {
+  // ✅ ここだけで shape追加 + 可視化 を完結させる
+  for (let i = 0; i < clawHitboxes.length; i++) {
+    const hb = clawHitboxes[i];
     const shape = new CANNON.Box(hb.half);
 
-    clawLBody.addShape(shape, hb.offset, hb.orient);
-    clawRBody.addShape(shape, hb.offset, hb.orient);
+    // 左右でZだけ反転
+    const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L);
+    const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R);
 
-    clawLVis.push(addHitboxVisualizer(scene, hb.half, { color: 0x00ff00 })); // 左=緑
-    clawRVis.push(addHitboxVisualizer(scene, hb.half, { color: 0xff0000 })); // 右=赤
+    clawLBody.addShape(shape, offL, hb.orient);
+    clawRBody.addShape(shape, offR, hb.orient);
+
+    clawLVis.push(addHitboxVisualizer(scene, hb.half, { color: 0x00ff00 }));
+    clawRVis.push(addHitboxVisualizer(scene, hb.half, { color: 0xff0000 }));
   }
 
   world.addBody(clawLBody);
   world.addBody(clawRBody);
 
   hingeL = hingeR = null;
-  for (let i = 0; i < clawHitboxes.length; i++) {
-  const hb = clawHitboxes[i];
-  const shape = new CANNON.Box(hb.half);
-
-  // ✅ 左右でoffsetのZだけ反転（必要ならXも）
-  const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L);
-  const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R);
-
-  clawLBody.addShape(shape, offL, hb.orient);
-  clawRBody.addShape(shape, offR, hb.orient);
-
-  // 見える箱も左右で同じ順番で作る
-  clawLVis.push(addHitboxVisualizer(scene, hb.half, { color: 0x00ff00 }));
-  clawRVis.push(addHitboxVisualizer(scene, hb.half, { color: 0xff0000 }));
 }
 
-}
 function updateClawHitboxVisuals() {
   // bodyや可視化がまだ無いなら何もしない
   if (!clawLBody || !clawRBody) return;

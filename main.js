@@ -58,7 +58,7 @@ const HB_ROT_Y = 0;   // 横向き回転
 const HB_ROT_Z = 0;   // ねじり
 
 // 個別調整したいならこっち
-const HB1_ROT = { x: 0, y: 0, z: 40 };
+const HB1_ROT = { x: 40, y: 0, z: 0 };
 
 const HB2_ROT = { x: 0, y: 0, z: 0 };
 

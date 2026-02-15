@@ -29,6 +29,7 @@ const CLAW_L_OPEN   = -0.3;
 // 3分割のヒットボックスを自動生成します。
 const NUM_CLAW_SEGMENTS = 3; // 爪を何分割するか（多いほど形にフィット）
 const CLAW_HB_PADDING   = 0.02; // 少しだけ内側に縮める（すり抜け防止）
+const BOX_SCALE = 0.5; // 例：1.3倍（小さくするなら 0.8 など）
 
 /**
  * メッシュのワールド空間バウンディングボックスを
@@ -822,7 +823,8 @@ stick1Mesh.scale.setScalar(WORLD_SCALE);
 stick2Mesh.scale.setScalar(WORLD_SCALE);
 stick3Mesh.scale.setScalar(WORLD_SCALE);
 stick4Mesh.scale.setScalar(WORLD_SCALE);
-boxMesh.scale.setScalar(WORLD_SCALE);
+boxMesh.scale.setScalar(WORLD_SCALE * BOX_SCALE);
+
 
 // 宣言は1回だけ
 const yaw = Math.PI / 2;

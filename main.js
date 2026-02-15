@@ -24,13 +24,17 @@ const CLAW_L_OPEN = -0.3;
 const CLAW_R_CLOSED = -0.6;
 const CLAW_R_OPEN = 0.2;
 
-// ===== 爪ヒットボックス設定 =====
-// ★緑の線のサイズです。ここをいじると当たり判定が変わります。
+// ===== 爪ヒットボックス設定（修正版） =====
 const HB_SCALE = 1.1; 
 
-const HB_Y = -0.22;
+// ★ここが修正ポイント：見た目のモデル(-1.95)に合わせて基準を下げました
+const MESH_OFFSET_Y = -1.95; 
+
+// 基準位置からの微調整
+const HB_Y = MESH_OFFSET_Y - 0.22; 
 const HB_GAP1 = -0.16;
 const HB_GAP2 = -0.07;
+
 const HB_Z1 = 0.00;
 const HB_Z2 = 0.12;
 const HB_Z3 = 0.22;
@@ -145,7 +149,6 @@ world.addContactMaterial(
   new CANNON.ContactMaterial(matStick, matBox, { friction: 0.05, restitution: 0.0 })
 );
 
-// 爪の設定：すり抜け防止のため剛性(Stiffness)を高めに維持
 world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
     friction: 1.0,      
@@ -270,10 +273,7 @@ function addHitboxVisualizer(scene, halfExtents, { color = 0x00ff00 } = {}) {
   const mat = new THREE.MeshBasicMaterial({ color, wireframe: true });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 9999;
-  
-  // ★重要：可視化をONにします（すり抜け確認用）
-  mesh.visible = true; 
-  
+  mesh.visible = true; // 可視化ON
   scene.add(mesh);
   return mesh;
 }
@@ -306,8 +306,13 @@ function makeClawPhysics() {
   for (let i = 0; i < clawHitboxes.length; i++) {
     const hb = clawHitboxes[i];
     const shape = new CANNON.Box(hb.half);
-    const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L);
-    const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R);
+    
+    // ★Z方向のズレも考慮（モデルのZオフセット -0.2 に合わせる）
+    const zOffsetL = -0.2; 
+    const zOffsetR = -0.2;
+
+    const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L + zOffsetL);
+    const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R + zOffsetR);
     
     clawLBody.addShape(shape, offL, hb.orient);
     clawRBody.addShape(shape, offR, hb.orient);
@@ -323,8 +328,14 @@ function updateClawHitboxVisuals() {
   if (!clawLBody || !clawRBody) return;
   for (let i = 0; i < clawHitboxes.length; i++) {
     const hb = clawHitboxes[i];
-    const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L);
-    const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R);
+    
+    // ★更新時も同じZオフセットを適用
+    const zOffsetL = -0.2; 
+    const zOffsetR = -0.2;
+
+    const offL = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_L + zOffsetL);
+    const offR = new CANNON.Vec3(hb.offset.x, hb.offset.y, hb.offset.z * HB_Z_SIGN_R + zOffsetR);
+    
     updateHitboxFromBody(clawLBody, clawLVis[i], offL, hb.orient);
     updateHitboxFromBody(clawRBody, clawRVis[i], offR, hb.orient);
   }
@@ -586,8 +597,6 @@ function animate(t) {
   followClawBodies(dt);
   updateClawHitboxVisuals();
 
-  // ★重要：物理演算の精度向上（すり抜け対策）
-  // 60回/秒だったのを、120回/秒の計算頻度にして細かく衝突判定します
   const FIXED = 1/120;
   world.step(FIXED, dt, 10);
 

@@ -10,7 +10,7 @@ const ARM_SCALE = 2;
 
 // 操作時の移動速度
 const ARM_MOVE_SPEED = 1.2; 
-// ★戻るときの速度（ゆっくりにするため係数をかけます）
+// 戻るときの速度比率
 const RETURN_SPEED_RATIO = 0.4; 
 
 const ARM_HOLD_SPEED_X = 0.6;
@@ -26,8 +26,10 @@ const CLAW_L_OPEN = -0.3;
 const CLAW_R_CLOSED = -0.6;
 const CLAW_R_OPEN = 0.2;
 
-// ===== 爪ヒットボックス設定 =====
-const HB_SCALE = 1.0;
+// ===== 爪ヒットボックス設定（ここを大幅強化！） =====
+// ★見た目よりも「少し大きく」するのがコツです
+const HB_SCALE = 1.1; // 全体を1.1倍に拡大
+
 const HB_Y = -0.22;
 const HB_GAP1 = -0.16;
 const HB_GAP2 = -0.07;
@@ -35,9 +37,12 @@ const HB_Z1 = 0.00;
 const HB_Z2 = 0.12;
 const HB_Z3 = 0.22;
 
-const HB1 = { x: 0.10, y: 0.18, z: 0.08 };
-const HB2 = { x: 0.10, y: 0.06, z: 0.14 };
-const HB3 = { x: 0.08, y: 0.06, z: 0.10 };
+// halfExtents（半径）なので、実際の厚みは2倍になります
+// x: 厚み, y: 長さ, z: 横幅
+// ★Z（横幅）とX（厚み）を増やして、すり抜けを防ぎます
+const HB1 = { x: 0.15, y: 0.18, z: 0.15 }; // 根元を太く
+const HB2 = { x: 0.12, y: 0.06, z: 0.18 }; // 中間も太く
+const HB3 = { x: 0.10, y: 0.06, z: 0.20 }; // 先端を特に幅広く（キャッチしやすく）
 
 const HB1_ROT = { x: 40, y: 0, z: 0 };
 const HB2_ROT = { x: 0, y: 0, z: 0 };
@@ -147,13 +152,13 @@ const matClaw = new CANNON.Material("claw");
 world.addContactMaterial(
   new CANNON.ContactMaterial(matStick, matBox, { friction: 0.05, restitution: 0.0 })
 );
-// 爪 vs 箱 (摩擦高め=しっかり掴む)
+// 爪 vs 箱 (摩擦高め・しっかり食い込む設定)
 world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
-    friction: 0.9,
-    restitution: 0.0,
-    contactEquationStiffness: 1e7,
-    frictionEquationStiffness: 1e7
+    friction: 1.0,      // ★摩擦MAX
+    restitution: 0.0,   // 跳ね返りなし
+    contactEquationStiffness: 1e8, // ★さらに硬く
+    frictionEquationStiffness: 1e8 // ★横ずれ防止を強化
   })
 );
 
@@ -276,9 +281,15 @@ function addHitboxVisualizer(scene, halfExtents, { color = 0x00ff00 } = {}) {
   const mat = new THREE.MeshBasicMaterial({ color, wireframe: true });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 9999;
+  
+  // ★デバッグ用：判定を見たいときはここを true にする
+  // 普段は false にしておくと見た目が綺麗です
+  mesh.visible = false; 
+  
   scene.add(mesh);
   return mesh;
 }
+
 function updateHitboxFromBody(body, vis, shapeOffset, shapeOrient) {
   const off = new CANNON.Vec3();
   body.quaternion.vmult(shapeOffset, off);
@@ -527,33 +538,27 @@ function animate(t) {
   }
 
   if (autoStarted) {
-    // 1. 開く
     if (autoStep === 1) {
       autoT += dt;
       setClawOpen01(Math.min(autoT/CLAW_OPEN_TIME, 1));
       if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; }
     }
-    // 2. 下げる
     else if (autoStep === 2) {
       const targetY = dropStartY - ARM_DROP_DIST;
       armGroup.position.y = Math.max(targetY, armGroup.position.y - ARM_DROP_SPEED * dt);
       if (armGroup.position.y <= targetY + 1e-6) { autoStep = 3; autoT = 0; }
     }
-    // 3. 閉じる
     else if (autoStep === 3) {
       autoT += dt;
       setClawOpen01(1 - Math.min(autoT/CLAW_CLOSE_TIME, 1));
       if (autoT >= CLAW_CLOSE_TIME) { autoStep = 4; }
     }
-    // 4. 上昇
     else if (autoStep === 4) {
       const targetY = dropStartY;
       armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_DROP_SPEED * dt);
       if (armGroup.position.y >= targetY - 1e-6) { autoStep = 5; }
     }
-    // 5. 戻る (★速度調整)
     else if (autoStep === 5) {
-      // ★ここでゆっくりにします
       const speed = ARM_MOVE_SPEED * RETURN_SPEED_RATIO * dt;
       if (armGroup.position.x > HOME_X) armGroup.position.x = Math.max(HOME_X, armGroup.position.x - speed);
       if (armGroup.position.z < HOME_Z) armGroup.position.z = Math.min(HOME_Z, armGroup.position.z + speed);
@@ -561,26 +566,22 @@ function animate(t) {
          autoStep = 6; autoT = 0;
       }
     }
-    // 6. 開く (景品リリース)
     else if (autoStep === 6) {
       autoT += dt;
       setClawOpen01(Math.min(autoT/CLAW_OPEN_TIME, 1));
       if (autoT >= CLAW_OPEN_TIME + 0.5) { 
-        autoStep = 7; // ★リセットへ
-        autoT = 0;
+        autoStep = 7; autoT = 0;
       }
     }
-    // 7. 閉じる (★新規追加：初期状態に戻す)
     else if (autoStep === 7) {
       autoT += dt;
       setClawOpen01(1 - Math.min(autoT/CLAW_CLOSE_TIME, 1));
       if (autoT >= CLAW_CLOSE_TIME) {
-        // 全リセット
         autoStarted = false;
         autoStep = 0;
         phase = 0;
         arrowBtn1.setEnabled(true);
-        setClawOpen01(0); // 完全に閉じる
+        setClawOpen01(0); 
       }
     }
   }

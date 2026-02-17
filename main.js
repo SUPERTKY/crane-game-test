@@ -24,83 +24,78 @@ const CLAW_L_OPEN   = -0.3;
 
 
 
-// ===== 爪ヒットボックス：メッシュ形状から自動計算 =====
-// 手動の数値は不要。メッシュの実際のバウンディングボックスから
-// 3分割のヒットボックスを自動生成します。
-const NUM_CLAW_SEGMENTS = 3; // 爪を何分割するか（多いほど形にフィット）
-const CLAW_HB_PADDING   = 0.02; // 少しだけ内側に縮める（すり抜け防止）
-const BOX_SCALE = 0.6; // 例：1.3倍（小さくするなら 0.8 など）
+// ===== 爪ヒットボックス：メッシュ頂点からConvexPolyhedronを生成 =====
+const BOX_SCALE = 0.8; // 例：1.3倍（小さくするなら 0.8 など）
 
-/**
- * メッシュのワールド空間バウンディングボックスを
- * 「bodyのローカル座標系」に変換して返す。
- *
- * bodyの位置 = mesh.getWorldPosition()
- * bodyの回転 = mesh.getWorldQuaternion()
- * なので、ワールドAABBの8頂点を body逆回転 すればローカルになる。
- */
-function meshWorldBoxToBodyLocal(meshRoot) {
-  meshRoot.updateMatrixWorld(true);
+function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
+  const posAttr = mesh.geometry?.attributes?.position;
+  if (!posAttr || posAttr.count < 4) return null;
 
-  // ワールドAABB
-  const wBox = new THREE.Box3().setFromObject(meshRoot);
+  const indexAttr = mesh.geometry.index;
+  const vertices = [];
+  const faces = [];
 
-  // メッシュのワールド原点と回転
-  const wPos  = new THREE.Vector3();
-  const wQuat = new THREE.Quaternion();
-  meshRoot.getWorldPosition(wPos);
-  meshRoot.getWorldQuaternion(wQuat);
-  const invQ = wQuat.clone().invert();
+  const worldV = new THREE.Vector3();
+  const localV = new THREE.Vector3();
+  const keyToNewIndex = new Map();
+  const remap = new Array(posAttr.count);
 
-  // 8頂点をローカルに変換
-  const localBox = new THREE.Box3();
-  for (let ix = 0; ix <= 1; ix++)
-    for (let iy = 0; iy <= 1; iy++)
-      for (let iz = 0; iz <= 1; iz++) {
-        const p = new THREE.Vector3(
-          ix ? wBox.max.x : wBox.min.x,
-          iy ? wBox.max.y : wBox.min.y,
-          iz ? wBox.max.z : wBox.min.z,
-        );
-        p.sub(wPos).applyQuaternion(invQ);
-        localBox.expandByPoint(p);
-      }
+  const keyFor = (v) => `${v.x.toFixed(5)}|${v.y.toFixed(5)}|${v.z.toFixed(5)}`;
 
-  return localBox;
-}
+  for (let i = 0; i < posAttr.count; i++) {
+    worldV.fromBufferAttribute(posAttr, i).applyMatrix4(mesh.matrixWorld);
+    localV.copy(worldV).sub(bodyWorldPos).applyQuaternion(invBodyWorldQuat);
 
-/**
- * メッシュ形状から N個のヒットボックス（cannon用）を自動生成。
- * bodyローカル空間で、Y軸方向に分割し、先端ほど少し細くする。
- */
-function computeClawShapes(meshRoot, numSegs = 3, padding = 0.02) {
-  const box = meshWorldBoxToBodyLocal(meshRoot);
-  const size   = new THREE.Vector3();
-  box.getSize(size);
-  const center = new THREE.Vector3();
-  box.getCenter(center);
+    const k = keyFor(localV);
+    const existing = keyToNewIndex.get(k);
+    if (existing !== undefined) {
+      remap[i] = existing;
+      continue;
+    }
 
-  const shapes = [];
-  const segH = size.y / numSegs;
-
-  for (let i = 0; i < numSegs; i++) {
-    // 先端（下）ほど少し細くする（爪の形に合わせるテーパー）
-    const taper = 1.0 - (i / numSegs) * 0.25;
-
-    const hx = Math.max(0.01, (size.x / 2 - padding) * taper);
-    const hy = Math.max(0.01, segH / 2 - padding);
-    const hz = Math.max(0.01, (size.z / 2 - padding) * taper);
-
-    // Y位置：上から順にスライス
-    const offY = box.max.y - segH * (i + 0.5);
-
-    shapes.push({
-      half:   new CANNON.Vec3(hx, hy, hz),
-      offset: new CANNON.Vec3(center.x, offY, center.z),
-      orient: new CANNON.Quaternion(0, 0, 0, 1),
-    });
+    const newIndex = vertices.length;
+    keyToNewIndex.set(k, newIndex);
+    remap[i] = newIndex;
+    vertices.push(new CANNON.Vec3(localV.x, localV.y, localV.z));
   }
 
+  const triCount = indexAttr ? indexAttr.count / 3 : posAttr.count / 3;
+  for (let t = 0; t < triCount; t++) {
+    const ia = indexAttr ? indexAttr.getX(t * 3) : t * 3;
+    const ib = indexAttr ? indexAttr.getX(t * 3 + 1) : t * 3 + 1;
+    const ic = indexAttr ? indexAttr.getX(t * 3 + 2) : t * 3 + 2;
+
+    const a = remap[ia];
+    const b = remap[ib];
+    const c = remap[ic];
+    if (a === b || b === c || c === a) continue;
+    faces.push([a, b, c]);
+  }
+
+  if (vertices.length < 4 || faces.length < 4) return null;
+
+  return {
+    shape: new CANNON.ConvexPolyhedron({ vertices, faces }),
+    offset: new CANNON.Vec3(0, 0, 0),
+    orient: new CANNON.Quaternion(0, 0, 0, 1),
+  };
+}
+
+function computeClawShapes(meshRoot) {
+  meshRoot.updateMatrixWorld(true);
+
+  const bodyWorldPos = new THREE.Vector3();
+  const bodyWorldQuat = new THREE.Quaternion();
+  meshRoot.getWorldPosition(bodyWorldPos);
+  meshRoot.getWorldQuaternion(bodyWorldQuat);
+  const invBodyWorldQuat = bodyWorldQuat.clone().invert();
+
+  const shapes = [];
+  meshRoot.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry) return;
+    const convex = geometryToBodyLocalConvex(obj, bodyWorldPos, invBodyWorldQuat);
+    if (convex) shapes.push(convex);
+  });
   return shapes;
 }
 
@@ -442,6 +437,26 @@ function addHitboxVisualizer(scene, halfExtents, { color = 0x00ff00 } = {}) {
   return mesh;
 }
 
+function getConvexHalfExtents(shape) {
+  const min = new CANNON.Vec3(+Infinity, +Infinity, +Infinity);
+  const max = new CANNON.Vec3(-Infinity, -Infinity, -Infinity);
+
+  for (const v of shape.vertices) {
+    if (v.x < min.x) min.x = v.x;
+    if (v.y < min.y) min.y = v.y;
+    if (v.z < min.z) min.z = v.z;
+    if (v.x > max.x) max.x = v.x;
+    if (v.y > max.y) max.y = v.y;
+    if (v.z > max.z) max.z = v.z;
+  }
+
+  return new CANNON.Vec3(
+    Math.max(0.01, (max.x - min.x) * 0.5),
+    Math.max(0.01, (max.y - min.y) * 0.5),
+    Math.max(0.01, (max.z - min.z) * 0.5)
+  );
+}
+
 /**
  * body: CANNON.Body
  * vis: THREE.Mesh (wireframe box)
@@ -462,10 +477,8 @@ function updateHitboxFromBody(body, vis, shapeOffset, shapeOrient) {
   vis.quaternion.copy(cannonQuatToThree(worldQuat));
 }
 // ===== ヒットボックス配列（loadScene内で自動計算される） =====
-const IDENTITY_Q = new CANNON.Quaternion(0, 0, 0, 1);
-
-let clawLHitboxes = []; // 左爪のヒットボックス（computeClawShapesで生成）
-let clawRHitboxes = []; // 右爪のヒットボックス（同上）
+let clawLHitboxes = []; // 左爪のConvexヒットボックス（computeClawShapesで生成）
+let clawRHitboxes = []; // 右爪のConvexヒットボックス（同上）
 
 
 
@@ -495,15 +508,15 @@ function makeClawPhysics() {
   // ★ 左爪：自動計算されたヒットボックスを追加
   for (let i = 0; i < clawLHitboxes.length; i++) {
     const hb = clawLHitboxes[i];
-    clawLBody.addShape(new CANNON.Box(hb.half), hb.offset, hb.orient);
-    clawLVis.push(addHitboxVisualizer(scene, hb.half, { color: 0x00ff00 }));
+    clawLBody.addShape(hb.shape, hb.offset, hb.orient);
+    clawLVis.push(addHitboxVisualizer(scene, getConvexHalfExtents(hb.shape), { color: 0x00ff00 }));
   }
 
   // ★ 右爪：自動計算されたヒットボックスを追加
   for (let i = 0; i < clawRHitboxes.length; i++) {
     const hb = clawRHitboxes[i];
-    clawRBody.addShape(new CANNON.Box(hb.half), hb.offset, hb.orient);
-    clawRVis.push(addHitboxVisualizer(scene, hb.half, { color: 0xff0000 }));
+    clawRBody.addShape(hb.shape, hb.offset, hb.orient);
+    clawRVis.push(addHitboxVisualizer(scene, getConvexHalfExtents(hb.shape), { color: 0xff0000 }));
   }
 
   world.addBody(clawLBody);
@@ -733,8 +746,8 @@ scene.add(armGroup);
 // ★★★ メッシュ形状からヒットボックスを自動計算 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-clawLHitboxes = computeClawShapes(clawLMesh, NUM_CLAW_SEGMENTS, CLAW_HB_PADDING);
-clawRHitboxes = computeClawShapes(clawRMesh, NUM_CLAW_SEGMENTS, CLAW_HB_PADDING);
+clawLHitboxes = computeClawShapes(clawLMesh);
+clawRHitboxes = computeClawShapes(clawRMesh);
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
 

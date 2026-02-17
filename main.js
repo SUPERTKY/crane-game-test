@@ -833,16 +833,13 @@ stick4Body.quaternion.copy(stick4Mesh.quaternion);
 world.addBody(stick4Body);
 
   // ===== 物理：箱（動的）=====
-  // 見た目メッシュと物理形状のズレを避けるため、
-  // メッシュのローカルAABBから shape の halfExtents と centerOffset を作る
-  const boxLocalAabb = meshWorldBoxToBodyLocal(boxMesh);
-  const boxSize = new THREE.Vector3();
-  boxLocalAabb.getSize(boxSize);
-  const boxCenter = new THREE.Vector3();
-  boxLocalAabb.getCenter(boxCenter);
-
-  const boxHalf = new CANNON.Vec3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2);
-  const boxOffset = new CANNON.Vec3(boxCenter.x, boxCenter.y, boxCenter.z);
+  // 物理が確実に有効になるよう、メッシュ原点基準の単純なボックス形状を使う
+  const boxSize = getBoxSize(boxMesh);
+  const boxHalf = new CANNON.Vec3(
+    Math.max(boxSize.x / 2, 0.01),
+    Math.max(boxSize.y / 2, 0.01),
+    Math.max(boxSize.z / 2, 0.01)
+  );
 
   boxBody = new CANNON.Body({
     mass: 1.0,
@@ -850,14 +847,11 @@ world.addBody(stick4Body);
     linearDamping: 0.08,
     angularDamping: 0.12,
   });
-  boxBody.addShape(new CANNON.Box(boxHalf), boxOffset, IDENTITY_Q);
+  boxBody.addShape(new CANNON.Box(boxHalf));
 
-  // 見た目メッシュのワールド姿勢へ同期
-  boxMesh.updateWorldMatrix(true, false);
-  boxMesh.getWorldPosition(tmpPos);
-  boxMesh.getWorldQuaternion(tmpQuat);
-  boxBody.position.copy(threeVecToCannon(tmpPos));
-  boxBody.quaternion.copy(threeQuatToCannon(tmpQuat));
+  // 従来どおり少し上から落として衝突を発生させる
+  boxBody.position.set(0, 0.5, 0);
+  boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
 
   boxMesh.position.copy(boxBody.position);

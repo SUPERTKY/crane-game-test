@@ -125,10 +125,7 @@ let dropStartY = 0;
 let autoStarted = false;
 
 // ===== つかみ（Constraint）設定 =====
-const GRAB_THRESHOLD = 0.6;  // 爪の中心からこの距離以内なら「つかめた」と判定
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
-let grabConstraint = null;   // つかみ中のConstraint（null=つかんでいない）
-let grabbed = false;         // つかみ成功フラグ
 
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
@@ -380,81 +377,8 @@ function startAutoSequence() {
   dropStartY = armGroup.position.y;
 }
 
-// ===== つかみ判定＆Constraint作成 =====
-function tryGrab() {
-  if (!boxBody || !armBody || !clawPivot) return;
-  if (grabbed) return; // すでにつかんでいたら何もしない
+// ===== つかみConstraintは使わない（接触のみで保持） =====
 
-  // 爪の中心（clawPivot）のワールド座標を取得
-  clawPivot.updateWorldMatrix(true, false);
-  const clawWorldPos = new THREE.Vector3();
-  clawPivot.getWorldPosition(clawWorldPos);
-
-  // 箱の位置
-  const bx = boxBody.position.x;
-  const by = boxBody.position.y;
-  const bz = boxBody.position.z;
-
-  // 爪の中心と箱の距離を計算
-  const dist = Math.sqrt(
-    (clawWorldPos.x - bx) ** 2 +
-    (clawWorldPos.y - by) ** 2 +
-    (clawWorldPos.z - bz) ** 2
-  );
-
-  console.log("tryGrab: dist =", dist.toFixed(3), "threshold =", GRAB_THRESHOLD);
-
-  if (dist > GRAB_THRESHOLD) {
-    console.log("つかみ失敗（箱が遠すぎる）");
-    return; // 箱が範囲外 → つかめない
-  }
-
-  // ===== Constraintを作成 =====
-  // armBodyのローカル座標系で「箱がどこにあるか」を計算
-  // （アームが動いても、この相対位置を保つようにする）
-  const relWorld = new CANNON.Vec3(
-    bx - armBody.position.x,
-    by - armBody.position.y,
-    bz - armBody.position.z
-  );
-  const invQ = armBody.quaternion.inverse();
-  const pivotOnArm = new CANNON.Vec3();
-  invQ.vmult(relWorld, pivotOnArm);
-
-  // PointToPointConstraint:
-  //   bodyA = armBody（キネマティック＝アーム）
-  //   pivotA = アームから見た箱の位置
-  //   bodyB = boxBody（動的＝景品）
-  //   pivotB = 箱の中心(0,0,0)
-  //   maxForce = つかむ力（大きいほどしっかり持てる）
-  grabConstraint = new CANNON.PointToPointConstraint(
-    armBody, pivotOnArm,
-    boxBody, new CANNON.Vec3(0, 0, 0),
-    80 // maxForce: 大きすぎると不自然、小さすぎると落ちる
-  );
-  world.addConstraint(grabConstraint);
-
-  // 箱が暴れないようにダンピングを少し上げる
-  boxBody.linearDamping = 0.16;
-  boxBody.angularDamping = 0.24;
-
-  grabbed = true;
-  console.log("つかみ成功！");
-}
-
-// ===== つかみ解除 =====
-function releaseGrab() {
-  if (!grabConstraint) return;
-  world.removeConstraint(grabConstraint);
-  grabConstraint = null;
-  grabbed = false;
-
-  // ダンピングを元に戻す
-  boxBody.linearDamping = 0.08;
-  boxBody.angularDamping = 0.12;
-
-  console.log("つかみ解除");
-}
 // ---- →（回転なし）：横移動（長押し）----
 bindHoldMove(
   arrowBtn1,
@@ -909,8 +833,16 @@ stick4Body.quaternion.copy(stick4Mesh.quaternion);
 world.addBody(stick4Body);
 
   // ===== 物理：箱（動的）=====
-  const boxSize = getBoxSize(boxMesh);
+  // 見た目メッシュと物理形状のズレを避けるため、
+  // メッシュのローカルAABBから shape の halfExtents と centerOffset を作る
+  const boxLocalAabb = meshWorldBoxToBodyLocal(boxMesh);
+  const boxSize = new THREE.Vector3();
+  boxLocalAabb.getSize(boxSize);
+  const boxCenter = new THREE.Vector3();
+  boxLocalAabb.getCenter(boxCenter);
+
   const boxHalf = new CANNON.Vec3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2);
+  const boxOffset = new CANNON.Vec3(boxCenter.x, boxCenter.y, boxCenter.z);
 
   boxBody = new CANNON.Body({
     mass: 1.0,
@@ -918,11 +850,14 @@ world.addBody(stick4Body);
     linearDamping: 0.08,
     angularDamping: 0.12,
   });
-  boxBody.addShape(new CANNON.Box(boxHalf));
+  boxBody.addShape(new CANNON.Box(boxHalf), boxOffset, IDENTITY_Q);
 
-  // テスト：絶対落ちる位置（棒の外）
-  boxBody.position.set(0, 0.5, 0);
-  boxBody.quaternion.copy(boxMesh.quaternion);
+  // 見た目メッシュのワールド姿勢へ同期
+  boxMesh.updateWorldMatrix(true, false);
+  boxMesh.getWorldPosition(tmpPos);
+  boxMesh.getWorldQuaternion(tmpQuat);
+  boxBody.position.copy(threeVecToCannon(tmpPos));
+  boxBody.quaternion.copy(threeQuatToCannon(tmpQuat));
   world.addBody(boxBody);
 
   boxMesh.position.copy(boxBody.position);
@@ -1073,8 +1008,7 @@ if (autoStarted) {
     autoT += dt;
     setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1));
     if (autoT >= CLAW_CLOSE_TIME) {
-      // 閉じ終わったら → つかみ判定
-      tryGrab();
+      // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
     }

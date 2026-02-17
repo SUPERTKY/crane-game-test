@@ -25,7 +25,7 @@ const CLAW_L_OPEN   = -0.3;
 
 
 // ===== 爪ヒットボックス：メッシュ頂点からConvexPolyhedronを生成 =====
-const BOX_SCALE = 0.6; // 例：1.3倍（小さくするなら 0.8 など）
+const BOX_SCALE = 0.8; // 例：1.3倍（小さくするなら 0.8 など）
 
 function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
   const posAttr = mesh.geometry?.attributes?.position;

@@ -243,10 +243,21 @@ world.allowSleep = true;
 
 const matStick = new CANNON.Material("stick");
 const matBox = new CANNON.Material("box");
+const matClaw = new CANNON.Material("claw");
+
+world.solver.iterations = 20;
+world.solver.tolerance = 0.001;
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matStick, matBox, {
     friction: 0.05,
+    restitution: 0.0,
+  })
+);
+
+world.addContactMaterial(
+  new CANNON.ContactMaterial(matClaw, matBox, {
+    friction: 0.42,
     restitution: 0.0,
   })
 );
@@ -425,8 +436,8 @@ function tryGrab() {
   world.addConstraint(grabConstraint);
 
   // 箱が暴れないようにダンピングを少し上げる
-  boxBody.linearDamping = 0.6;
-  boxBody.angularDamping = 0.8;
+  boxBody.linearDamping = 0.22;
+  boxBody.angularDamping = 0.35;
 
   grabbed = true;
   console.log("つかみ成功！");
@@ -440,8 +451,8 @@ function releaseGrab() {
   grabbed = false;
 
   // ダンピングを元に戻す
-  boxBody.linearDamping = 0.01;
-  boxBody.angularDamping = 0.02;
+  boxBody.linearDamping = 0.04;
+  boxBody.angularDamping = 0.08;
 
   console.log("つかみ解除");
 }
@@ -541,10 +552,10 @@ function makeClawPhysics() {
   armBody.type = CANNON.Body.KINEMATIC;
   world.addBody(armBody);
 
-  clawLBody = new CANNON.Body({ mass: 0 });
+  clawLBody = new CANNON.Body({ mass: 0, material: matClaw });
   clawLBody.type = CANNON.Body.KINEMATIC;
 
-  clawRBody = new CANNON.Body({ mass: 0 });
+  clawRBody = new CANNON.Body({ mass: 0, material: matClaw });
   clawRBody.type = CANNON.Body.KINEMATIC;
 
   // 既存のvisがあれば消す
@@ -887,8 +898,8 @@ world.addBody(stick4Body);
   boxBody = new CANNON.Body({
     mass: 1.0,
     material: matBox,
-    linearDamping: 0.01,
-    angularDamping: 0.02,
+    linearDamping: 0.04,
+    angularDamping: 0.08,
   });
   boxBody.addShape(new CANNON.Box(boxHalf));
 
@@ -1078,8 +1089,8 @@ if (autoStarted) {
   // ===== 物理ステップ（armBody同期の後！）=====
 followClawBodies(dt);
   updateClawHitboxVisuals();
-const FIXED = 1 / 120;     // 60→120
-const MAX_SUB = 10;        // 3→10
+const FIXED = 1 / 180;
+const MAX_SUB = 12;
 
 world.step(FIXED, dt, MAX_SUB);
 

@@ -130,10 +130,7 @@ let dropStartY = 0;
 let autoStarted = false;
 
 // ===== つかみ（Constraint）設定 =====
-const GRAB_THRESHOLD = 0.6;  // 爪の中心からこの距離以内なら「つかめた」と判定
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
-let grabConstraint = null;   // つかみ中のConstraint（null=つかんでいない）
-let grabbed = false;         // つかみ成功フラグ
 
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
@@ -243,11 +240,26 @@ world.allowSleep = true;
 
 const matStick = new CANNON.Material("stick");
 const matBox = new CANNON.Material("box");
+const matClaw = new CANNON.Material("claw");
+
+world.solver.iterations = 14;
+world.solver.tolerance = 0.001;
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matStick, matBox, {
     friction: 0.05,
     restitution: 0.0,
+  })
+);
+
+world.addContactMaterial(
+  new CANNON.ContactMaterial(matClaw, matBox, {
+    friction: 0.18,
+    restitution: 0.0,
+    contactEquationStiffness: 3e6,
+    contactEquationRelaxation: 6,
+    frictionEquationStiffness: 5e5,
+    frictionEquationRelaxation: 8,
   })
 );
 
@@ -370,81 +382,8 @@ function startAutoSequence() {
   dropStartY = armGroup.position.y;
 }
 
-// ===== つかみ判定＆Constraint作成 =====
-function tryGrab() {
-  if (!boxBody || !armBody || !clawPivot) return;
-  if (grabbed) return; // すでにつかんでいたら何もしない
+// ===== つかみConstraintは使わない（接触のみで保持） =====
 
-  // 爪の中心（clawPivot）のワールド座標を取得
-  clawPivot.updateWorldMatrix(true, false);
-  const clawWorldPos = new THREE.Vector3();
-  clawPivot.getWorldPosition(clawWorldPos);
-
-  // 箱の位置
-  const bx = boxBody.position.x;
-  const by = boxBody.position.y;
-  const bz = boxBody.position.z;
-
-  // 爪の中心と箱の距離を計算
-  const dist = Math.sqrt(
-    (clawWorldPos.x - bx) ** 2 +
-    (clawWorldPos.y - by) ** 2 +
-    (clawWorldPos.z - bz) ** 2
-  );
-
-  console.log("tryGrab: dist =", dist.toFixed(3), "threshold =", GRAB_THRESHOLD);
-
-  if (dist > GRAB_THRESHOLD) {
-    console.log("つかみ失敗（箱が遠すぎる）");
-    return; // 箱が範囲外 → つかめない
-  }
-
-  // ===== Constraintを作成 =====
-  // armBodyのローカル座標系で「箱がどこにあるか」を計算
-  // （アームが動いても、この相対位置を保つようにする）
-  const relWorld = new CANNON.Vec3(
-    bx - armBody.position.x,
-    by - armBody.position.y,
-    bz - armBody.position.z
-  );
-  const invQ = armBody.quaternion.inverse();
-  const pivotOnArm = new CANNON.Vec3();
-  invQ.vmult(relWorld, pivotOnArm);
-
-  // PointToPointConstraint:
-  //   bodyA = armBody（キネマティック＝アーム）
-  //   pivotA = アームから見た箱の位置
-  //   bodyB = boxBody（動的＝景品）
-  //   pivotB = 箱の中心(0,0,0)
-  //   maxForce = つかむ力（大きいほどしっかり持てる）
-  grabConstraint = new CANNON.PointToPointConstraint(
-    armBody, pivotOnArm,
-    boxBody, new CANNON.Vec3(0, 0, 0),
-    80 // maxForce: 大きすぎると不自然、小さすぎると落ちる
-  );
-  world.addConstraint(grabConstraint);
-
-  // 箱が暴れないようにダンピングを少し上げる
-  boxBody.linearDamping = 0.6;
-  boxBody.angularDamping = 0.8;
-
-  grabbed = true;
-  console.log("つかみ成功！");
-}
-
-// ===== つかみ解除 =====
-function releaseGrab() {
-  if (!grabConstraint) return;
-  world.removeConstraint(grabConstraint);
-  grabConstraint = null;
-  grabbed = false;
-
-  // ダンピングを元に戻す
-  boxBody.linearDamping = 0.01;
-  boxBody.angularDamping = 0.02;
-
-  console.log("つかみ解除");
-}
 // ---- →（回転なし）：横移動（長押し）----
 bindHoldMove(
   arrowBtn1,
@@ -541,10 +480,10 @@ function makeClawPhysics() {
   armBody.type = CANNON.Body.KINEMATIC;
   world.addBody(armBody);
 
-  clawLBody = new CANNON.Body({ mass: 0 });
+  clawLBody = new CANNON.Body({ mass: 0, material: matClaw });
   clawLBody.type = CANNON.Body.KINEMATIC;
 
-  clawRBody = new CANNON.Body({ mass: 0 });
+  clawRBody = new CANNON.Body({ mass: 0, material: matClaw });
   clawRBody.type = CANNON.Body.KINEMATIC;
 
   // 既存のvisがあれば消す
@@ -881,20 +820,31 @@ stick4Body.quaternion.copy(stick4Mesh.quaternion);
 world.addBody(stick4Body);
 
   // ===== 物理：箱（動的）=====
-  const boxSize = getBoxSize(boxMesh);
+  // 見た目メッシュと物理形状のズレを避けるため、
+  // メッシュのローカルAABBから shape の halfExtents と centerOffset を作る
+  const boxLocalAabb = meshWorldBoxToBodyLocal(boxMesh);
+  const boxSize = new THREE.Vector3();
+  boxLocalAabb.getSize(boxSize);
+  const boxCenter = new THREE.Vector3();
+  boxLocalAabb.getCenter(boxCenter);
+
   const boxHalf = new CANNON.Vec3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2);
+  const boxOffset = new CANNON.Vec3(boxCenter.x, boxCenter.y, boxCenter.z);
 
   boxBody = new CANNON.Body({
     mass: 1.0,
     material: matBox,
-    linearDamping: 0.01,
-    angularDamping: 0.02,
+    linearDamping: 0.08,
+    angularDamping: 0.12,
   });
-  boxBody.addShape(new CANNON.Box(boxHalf));
+  boxBody.addShape(new CANNON.Box(boxHalf), boxOffset, IDENTITY_Q);
 
-  // テスト：絶対落ちる位置（棒の外）
-  boxBody.position.set(0, 0.5, 0);
-  boxBody.quaternion.copy(boxMesh.quaternion);
+  // 見た目メッシュのワールド姿勢へ同期
+  boxMesh.updateWorldMatrix(true, false);
+  boxMesh.getWorldPosition(tmpPos);
+  boxMesh.getWorldQuaternion(tmpQuat);
+  boxBody.position.copy(threeVecToCannon(tmpPos));
+  boxBody.quaternion.copy(threeQuatToCannon(tmpQuat));
   world.addBody(boxBody);
 
   boxMesh.position.copy(boxBody.position);
@@ -935,6 +885,20 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 
 
+
+const MAX_KINEMATIC_SPEED = 2.5;
+
+function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
+  const vx = body.velocity.x;
+  const vy = body.velocity.y;
+  const vz = body.velocity.z;
+  const speedSq = vx * vx + vy * vy + vz * vz;
+  const maxSq = maxSpeed * maxSpeed;
+  if (speedSq <= maxSq) return;
+
+  const scale = maxSpeed / Math.sqrt(speedSq);
+  body.velocity.set(vx * scale, vy * scale, vz * scale);
+}
 
 const tmpPos = new THREE.Vector3();
 const tmpQuat = new THREE.Quaternion();
@@ -981,6 +945,8 @@ function followClawBodies(dt) {
       (clawRBody.position.y - prevClawR.y) / dt,
       (clawRBody.position.z - prevClawR.z) / dt
     );
+    clampBodyLinearVelocity(clawLBody);
+    clampBodyLinearVelocity(clawRBody);
   }
   clawLBody.angularVelocity.set(0, 0, 0);
   clawRBody.angularVelocity.set(0, 0, 0);
@@ -1029,8 +995,7 @@ if (autoStarted) {
     autoT += dt;
     setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1));
     if (autoT >= CLAW_CLOSE_TIME) {
-      // 閉じ終わったら → つかみ判定
-      tryGrab();
+      // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
     }
@@ -1071,6 +1036,7 @@ if (autoStarted) {
         (armBody.position.y - prev.y) / dt,
         (armBody.position.z - prev.z) / dt
       );
+      clampBodyLinearVelocity(armBody);
     }
     armBody.angularVelocity.set(0, 0, 0);
   }
@@ -1078,8 +1044,8 @@ if (autoStarted) {
   // ===== 物理ステップ（armBody同期の後！）=====
 followClawBodies(dt);
   updateClawHitboxVisuals();
-const FIXED = 1 / 120;     // 60→120
-const MAX_SUB = 10;        // 3→10
+const FIXED = 1 / 120;
+const MAX_SUB = 8;
 
 world.step(FIXED, dt, MAX_SUB);
 

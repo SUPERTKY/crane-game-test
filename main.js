@@ -636,21 +636,26 @@ function makeClawPhysics() {
 }
 
 function updateClawHitboxVisuals() {
-  if (!clawLBody || !clawRBody) return;
-  if (!clawLVis.length || !clawRVis.length) return;
+  if (!SHOW_PHYSICS_DEBUG) return; // ★デバッグOFFなら何もしない
 
-  // 左爪
+  if (!clawLBody || !clawRBody) return;
+
+  // 左
   for (let i = 0; i < clawLHitboxes.length; i++) {
+    const vis = clawLVis[i];
+    if (!vis) continue; // ★nullガード
     const hb = clawLHitboxes[i];
-    updateHitboxFromBody(clawLBody, clawLVis[i], hb.offset, hb.orient);
-    clawLVis[i].visible = true;
+    updateHitboxFromBody(clawLBody, vis, hb.offset, hb.orient);
+    vis.visible = true;
   }
 
-  // 右爪
+  // 右
   for (let i = 0; i < clawRHitboxes.length; i++) {
+    const vis = clawRVis[i];
+    if (!vis) continue; // ★nullガード
     const hb = clawRHitboxes[i];
-    updateHitboxFromBody(clawRBody, clawRVis[i], hb.offset, hb.orient);
-    clawRVis[i].visible = true;
+    updateHitboxFromBody(clawRBody, vis, hb.offset, hb.orient);
+    vis.visible = true;
   }
 }
 

@@ -12,6 +12,7 @@ let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
 const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
+const SHOW_PHYSICS_DEBUG = false;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -131,6 +132,51 @@ function computeClawBoxes(meshRoot, {
   });
 
   return shapes;
+}
+
+/**
+ * 爪全体のAABBから「先端側だけ」を切り出した単純Boxを作る。
+ * 複雑な複数AABBより安定し、Cannonの接触が破綻しにくい。
+ */
+function computeClawFingerBox(meshRoot, {
+  shrinkXZ = 0.55,
+  tipHeightRatio = 0.48,
+  minHalf = 0.01,
+} = {}) {
+  meshRoot.updateWorldMatrix(true, true);
+
+  const rootWorldPos = new THREE.Vector3();
+  const rootWorldQuat = new THREE.Quaternion();
+  meshRoot.getWorldPosition(rootWorldPos);
+  meshRoot.getWorldQuaternion(rootWorldQuat);
+  const invRootWorldQuat = rootWorldQuat.clone().invert();
+
+  const worldBox = new THREE.Box3().setFromObject(meshRoot);
+  const size = new THREE.Vector3();
+  worldBox.getSize(size);
+
+  const tipCenterWorld = new THREE.Vector3(
+    (worldBox.min.x + worldBox.max.x) * 0.5,
+    worldBox.min.y + size.y * (tipHeightRatio * 0.5),
+    (worldBox.min.z + worldBox.max.z) * 0.5,
+  );
+
+  const localCenter = tipCenterWorld
+    .clone()
+    .sub(rootWorldPos)
+    .applyQuaternion(invRootWorldQuat);
+
+  const half = new CANNON.Vec3(
+    Math.max(minHalf, (size.x * shrinkXZ) * 0.5),
+    Math.max(minHalf, (size.y * tipHeightRatio) * 0.5),
+    Math.max(minHalf, (size.z * shrinkXZ) * 0.5),
+  );
+
+  return {
+    shape: new CANNON.Box(half),
+    offset: new CANNON.Vec3(localCenter.x, localCenter.y, localCenter.z),
+    orient: new CANNON.Quaternion(0, 0, 0, 1),
+  };
 }
 
 
@@ -261,12 +307,14 @@ addEventListener("resize", () => {
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.allowSleep = true;
+world.defaultContactMaterial.friction = 0.35;
+world.defaultContactMaterial.restitution = 0.0;
 
 const matStick = new CANNON.Material("stick");
 const matBox = new CANNON.Material("box");
 const matClaw = new CANNON.Material("claw");
 
-world.solver.iterations = 14;
+world.solver.iterations = 20;
 world.solver.tolerance = 0.001;
 
 world.addContactMaterial(
@@ -457,6 +505,7 @@ function cannonVecToThree(v) {
 }
 
 function addHitboxVisualizer(scene, halfExtents, { color = 0x00ff00 } = {}) {
+  if (!SHOW_PHYSICS_DEBUG) return null;
   const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
   const mat = new THREE.MeshBasicMaterial({ color, wireframe: true });
   const mesh = new THREE.Mesh(geo, mat);
@@ -522,6 +571,7 @@ function centerConvex(shape) {
  * shapeOrient: CANNON.Quaternion (addShapeのorientationと同じ。使ってなければ identity)
  */
 function updateHitboxFromBody(body, vis, shapeOffset, shapeOrient) {
+  if (!vis) return;
   // worldPos = body.pos + body.quat * (shapeOffset)
   const off = new CANNON.Vec3();
   body.quaternion.vmult(shapeOffset, off);
@@ -606,40 +656,6 @@ function updateClawHitboxVisuals() {
 
 
 // クリック処理（順番制御）
-arrowBtn1.addEventListener("click", () => {
-  // phase 0: 最初の→
-  if (phase === 0) {
-    requestArmMove(+ARM_MOVE_X, 0); // 横移動
-    arrowBtn1.setEnabled(false);
-    arrowBtn2.setEnabled(true);
-    phase = 1;
-    return;
-  }
-
-
-  // phase 2: 最後の→（押したら終了で両方無効）
-  if (phase === 2) {
-    requestArmMove(+ARM_MOVE_X, 0); // 横移動
-    arrowBtn1.setEnabled(false);
-    arrowBtn2.setEnabled(false);
-    phase = 3;
-    return;
-  }
-});
-
-arrowBtn2.addEventListener("click", () => {
-  if (phase === 1) {
-    requestArmMove(0, -ARM_MOVE_Z);
-
-    // ↑を押したら両方無効
-    arrowBtn1.setEnabled(false);
-    arrowBtn2.setEnabled(false);
-    phase = 3;
-    startAutoSequence();
-    return;
-  }
-});
-
 /**
  * 棒の当たり判定：
  * - 見た目(回転後)のAABBサイズから「一番長い軸」を長手として採用
@@ -804,11 +820,11 @@ armGroup.position.set(-1.2, 1.6, 0.6);
 armGroup.rotation.y = Math.PI / 2;
 scene.add(armGroup);
 
-// ★★★ メッシュ形状からヒットボックスを自動計算 ★★★
+// ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-clawLHitboxes = computeClawBoxes(clawLMesh);
-clawRHitboxes = computeClawBoxes(clawRMesh);
+clawLHitboxes = [computeClawFingerBox(clawLMesh)];
+clawRHitboxes = [computeClawFingerBox(clawRMesh)];
 
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
@@ -908,6 +924,9 @@ world.addBody(stick4Body);
     material: matBox,
     linearDamping: 0.08,
     angularDamping: 0.12,
+    allowSleep: true,
+    sleepSpeedLimit: 0.15,
+    sleepTimeLimit: 0.8,
   });
   boxBody.addShape(new CANNON.Box(boxHalf));
 

@@ -84,29 +84,54 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
   };
 
 }
-
-function computeClawShapes(meshRoot) {
+function computeClawBoxes(meshRoot, {
+  // 小さくして引っかかりを減らす（橋渡しなら有効）
+  shrink = 0.98,
+  // あまり小さい箱は無視（ノイズ対策）
+  minSize = 0.01,
+} = {}) {
   meshRoot.updateMatrixWorld(true);
 
-  const bodyWorldPos = new THREE.Vector3();
-  const bodyWorldQuat = new THREE.Quaternion();
-  meshRoot.getWorldPosition(bodyWorldPos);
-  meshRoot.getWorldQuaternion(bodyWorldQuat);
-  const invBodyWorldQuat = bodyWorldQuat.clone().invert();
+  const rootWorldPos = new THREE.Vector3();
+  const rootWorldQuat = new THREE.Quaternion();
+  meshRoot.getWorldPosition(rootWorldPos);
+  meshRoot.getWorldQuaternion(rootWorldQuat);
+  const invRootWorldQuat = rootWorldQuat.clone().invert();
 
   const shapes = [];
+  const box3 = new THREE.Box3();
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+
   meshRoot.traverse((obj) => {
-    if (!obj.isMesh || !obj.geometry) return;
-    const convex = geometryToBodyLocalConvex(obj, bodyWorldPos, invBodyWorldQuat);
-    if (convex) shapes.push(convex);
+    if (!obj.isMesh) return;
+
+    // メッシュのワールドAABB
+    box3.setFromObject(obj);
+    box3.getSize(size);
+
+    if (size.x < minSize && size.y < minSize && size.z < minSize) return;
+
+    box3.getCenter(center);
+
+    // root ローカルへ（Cannon bodyローカルと同じ扱い）
+    const localCenter = center.clone().sub(rootWorldPos).applyQuaternion(invRootWorldQuat);
+
+    const half = new CANNON.Vec3(
+      Math.max(minSize, (size.x * shrink) / 2),
+      Math.max(minSize, (size.y * shrink) / 2),
+      Math.max(minSize, (size.z * shrink) / 2)
+    );
+
+    shapes.push({
+      shape: new CANNON.Box(half),
+      offset: new CANNON.Vec3(localCenter.x, localCenter.y, localCenter.z),
+      orient: new CANNON.Quaternion(0, 0, 0, 1),
+    });
   });
+
   return shapes;
 }
-
-
-
-
-
 
 
 function quatFromEuler(x, y, z) {
@@ -756,8 +781,9 @@ scene.add(armGroup);
 // ★★★ メッシュ形状からヒットボックスを自動計算 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-clawLHitboxes = computeClawShapes(clawLMesh);
-clawRHitboxes = computeClawShapes(clawRMesh);
+clawLHitboxes = computeClawBoxes(clawLMesh);
+clawRHitboxes = computeClawBoxes(clawRMesh);
+
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
 

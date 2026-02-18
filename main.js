@@ -74,11 +74,15 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
 
   if (vertices.length < 4 || faces.length < 4) return null;
 
+    const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
+  const center = centerConvex(shape);
+
   return {
-    shape: new CANNON.ConvexPolyhedron({ vertices, faces }),
-    offset: new CANNON.Vec3(0, 0, 0),
+    shape,
+    offset: center, // ★ ここが重要
     orient: new CANNON.Quaternion(0, 0, 0, 1),
   };
+
 }
 
 function computeClawShapes(meshRoot) {
@@ -437,25 +441,31 @@ function addHitboxVisualizer(scene, halfExtents, { color = 0x00ff00 } = {}) {
   return mesh;
 }
 
-function getConvexHalfExtents(shape) {
+function centerConvex(shape) {
   const min = new CANNON.Vec3(+Infinity, +Infinity, +Infinity);
   const max = new CANNON.Vec3(-Infinity, -Infinity, -Infinity);
 
   for (const v of shape.vertices) {
-    if (v.x < min.x) min.x = v.x;
-    if (v.y < min.y) min.y = v.y;
-    if (v.z < min.z) min.z = v.z;
-    if (v.x > max.x) max.x = v.x;
-    if (v.y > max.y) max.y = v.y;
-    if (v.z > max.z) max.z = v.z;
+    min.x = Math.min(min.x, v.x); min.y = Math.min(min.y, v.y); min.z = Math.min(min.z, v.z);
+    max.x = Math.max(max.x, v.x); max.y = Math.max(max.y, v.y); max.z = Math.max(max.z, v.z);
   }
 
-  return new CANNON.Vec3(
-    Math.max(0.01, (max.x - min.x) * 0.5),
-    Math.max(0.01, (max.y - min.y) * 0.5),
-    Math.max(0.01, (max.z - min.z) * 0.5)
+  const center = new CANNON.Vec3(
+    (min.x + max.x) * 0.5,
+    (min.y + max.y) * 0.5,
+    (min.z + max.z) * 0.5
   );
+
+  // 頂点を中心まわりにシフト
+  for (const v of shape.vertices) {
+    v.x -= center.x;
+    v.y -= center.y;
+    v.z -= center.z;
+  }
+
+  return center; // これを addShape の offset にする
 }
+
 
 /**
  * body: CANNON.Body

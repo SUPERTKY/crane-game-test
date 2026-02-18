@@ -544,14 +544,16 @@ function makeClawPhysics() {
   for (let i = 0; i < clawLHitboxes.length; i++) {
     const hb = clawLHitboxes[i];
     clawLBody.addShape(hb.shape, hb.offset, hb.orient);
-    clawLVis.push(addHitboxVisualizer(scene, getConvexHalfExtents(hb.shape), { color: 0x00ff00 }));
+    clawLVis.push(addHitboxVisualizer(scene, getShapeHalfExtents(hb.shape), { color: 0x00ff00 }));
+
   }
 
   // ★ 右爪：自動計算されたヒットボックスを追加
   for (let i = 0; i < clawRHitboxes.length; i++) {
     const hb = clawRHitboxes[i];
     clawRBody.addShape(hb.shape, hb.offset, hb.orient);
-    clawRVis.push(addHitboxVisualizer(scene, getConvexHalfExtents(hb.shape), { color: 0xff0000 }));
+    clawRVis.push(addHitboxVisualizer(scene, getShapeHalfExtents(hb.shape), { color: 0xff0000 }));
+
   }
 
   world.addBody(clawLBody);
@@ -669,6 +671,30 @@ function addDebugDotLocal(parent, localPos, size = 0.03) {
   m.position.copy(localPos);   // ★ローカル座標
   parent.add(m);               // ★親にぶら下げる
   return m;
+}
+function getShapeHalfExtents(shape) {
+  // Boxならそのまま
+  if (shape instanceof CANNON.Box) {
+    return shape.halfExtents.clone();
+  }
+
+  // ConvexPolyhedronならAABBから推定（保険）
+  if (shape instanceof CANNON.ConvexPolyhedron) {
+    const min = new CANNON.Vec3(+Infinity, +Infinity, +Infinity);
+    const max = new CANNON.Vec3(-Infinity, -Infinity, -Infinity);
+    for (const v of shape.vertices) {
+      min.x = Math.min(min.x, v.x); min.y = Math.min(min.y, v.y); min.z = Math.min(min.z, v.z);
+      max.x = Math.max(max.x, v.x); max.y = Math.max(max.y, v.y); max.z = Math.max(max.z, v.z);
+    }
+    return new CANNON.Vec3(
+      Math.max(0.01, (max.x - min.x) * 0.5),
+      Math.max(0.01, (max.y - min.y) * 0.5),
+      Math.max(0.01, (max.z - min.z) * 0.5)
+    );
+  }
+
+  // その他はとりあえず1cm
+  return new CANNON.Vec3(0.01, 0.01, 0.01);
 }
 
 function getBoxWorld(obj) {

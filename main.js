@@ -824,7 +824,7 @@ function updateClawHitboxVisuals() {
  * - テンプレートメッシュ(回転前)から共通の円柱1本を作る
  * - 実際の向きは body.quaternion 側で反映する
  */
-function makeStickCylinderShapeFromMesh(stickMesh, radiusScale = 0.5) {
+function makeStickCylinderParamsFromMesh(stickMesh, radiusScale = 0.5) {
   stickMesh.updateWorldMatrix(true, true);
   const s = getBoxSize(stickMesh);
 
@@ -832,7 +832,6 @@ function makeStickCylinderShapeFromMesh(stickMesh, radiusScale = 0.5) {
   const height = Math.max(axes[0], 0.01);
   const radius = Math.max(Math.max(axes[1], axes[2]) * 0.5 * radiusScale, 0.01);
 
-  const shape = new CANNON.Cylinder(radius, radius, height, 24);
   let orient = new CANNON.Quaternion(0, 0, 0, 1);
 
   // Cannon.Cylinder はローカルX軸方向に長い形状。
@@ -843,7 +842,18 @@ function makeStickCylinderShapeFromMesh(stickMesh, radiusScale = 0.5) {
     orient = quatFromEuler(0, -Math.PI / 2, 0);
   }
 
-  return { shape, orient };
+  return { radius, height, orient };
+}
+
+function createStickBody(stickMesh, stickParams) {
+  const body = new CANNON.Body({ mass: 0, material: matStick });
+  const shape = new CANNON.Cylinder(stickParams.radius, stickParams.radius, stickParams.height, 24);
+  body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
+  body.position.copy(stickMesh.position);
+  body.quaternion.copy(stickMesh.quaternion);
+  world.addBody(body);
+  addBodyDebugMeshes(body, 0x00ffff);
+  return body;
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1049,36 +1059,13 @@ boxMesh.rotation.y += BOX_YAW;
 
 // ✅ 1本目をテンプレートにして、4本で同じ円柱当たり判定を使う
 //    （向きは各bodyのquaternionで決まる）
-const stickColTemplate = makeStickCylinderShapeFromMesh(stick1Mesh);
+const stickColliderParams = makeStickCylinderParamsFromMesh(stick1Mesh);
 
 // ===== 物理：棒（静的・円柱）=====
-stick1Body = new CANNON.Body({ mass: 0, material: matStick });
-stick1Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
-stick1Body.position.copy(stick1Mesh.position);
-stick1Body.quaternion.copy(stick1Mesh.quaternion);
-world.addBody(stick1Body);
-addBodyDebugMeshes(stick1Body, 0x00ffff);
-
-stick2Body = new CANNON.Body({ mass: 0, material: matStick });
-stick2Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
-stick2Body.position.copy(stick2Mesh.position);
-stick2Body.quaternion.copy(stick2Mesh.quaternion);
-world.addBody(stick2Body);
-addBodyDebugMeshes(stick2Body, 0x00ffff);
-
-stick3Body = new CANNON.Body({ mass: 0, material: matStick });
-stick3Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
-stick3Body.position.copy(stick3Mesh.position);
-stick3Body.quaternion.copy(stick3Mesh.quaternion);
-world.addBody(stick3Body);
-addBodyDebugMeshes(stick3Body, 0x00ffff);
-
-stick4Body = new CANNON.Body({ mass: 0, material: matStick });
-stick4Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
-stick4Body.position.copy(stick4Mesh.position);
-stick4Body.quaternion.copy(stick4Mesh.quaternion);
-world.addBody(stick4Body);
-addBodyDebugMeshes(stick4Body, 0x00ffff);
+stick1Body = createStickBody(stick1Mesh, stickColliderParams);
+stick2Body = createStickBody(stick2Mesh, stickColliderParams);
+stick3Body = createStickBody(stick3Mesh, stickColliderParams);
+stick4Body = createStickBody(stick4Mesh, stickColliderParams);
 
   // ===== 物理：箱（動的）=====
   // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う

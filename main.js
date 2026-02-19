@@ -135,6 +135,25 @@ function computeClawBoxes(meshRoot, {
   return shapes;
 }
 
+function computeClawConvexHitboxes(meshRoot) {
+  meshRoot.updateMatrixWorld(true);
+
+  const bodyWorldPos = new THREE.Vector3();
+  const bodyWorldQuat = new THREE.Quaternion();
+  meshRoot.getWorldPosition(bodyWorldPos);
+  meshRoot.getWorldQuaternion(bodyWorldQuat);
+  const invBodyWorldQuat = bodyWorldQuat.clone().invert();
+
+  const hitboxes = [];
+  meshRoot.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry) return;
+    const convex = geometryToBodyLocalConvex(obj, bodyWorldPos, invBodyWorldQuat);
+    if (convex) hitboxes.push(convex);
+  });
+
+  return hitboxes;
+}
+
 /**
  * 爪全体のAABBから「先端側だけ」を切り出した単純Boxを作る。
  * 複雑な複数AABBより安定し、Cannonの接触が破綻しにくい。
@@ -505,39 +524,42 @@ function cannonVecToThree(v) {
   return new THREE.Vector3(v.x, v.y, v.z);
 }
 
-function addHitboxVisualizer(scene, halfExtents, { color = 0x00ff00 } = {}) {
+function convexToBufferGeometry(shape) {
+  const positions = [];
+  for (const face of shape.faces) {
+    if (!face || face.length < 3) continue;
+    const a = shape.vertices[face[0]];
+    for (let i = 1; i < face.length - 1; i++) {
+      const b = shape.vertices[face[i]];
+      const c = shape.vertices[face[i + 1]];
+      positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function addHitboxVisualizer(scene, shape, { color = 0x00ff00 } = {}) {
   if (!SHOW_PHYSICS_DEBUG) return null;
-  const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
+
+  let geo;
+  if (shape instanceof CANNON.Box) {
+    geo = new THREE.BoxGeometry(shape.halfExtents.x * 2, shape.halfExtents.y * 2, shape.halfExtents.z * 2);
+  } else if (shape instanceof CANNON.ConvexPolyhedron) {
+    geo = convexToBufferGeometry(shape);
+  } else {
+    geo = new THREE.BoxGeometry(0.02, 0.02, 0.02);
+  }
+
   const mat = new THREE.MeshBasicMaterial({ color, wireframe: true });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 9999;
   mesh.frustumCulled = false;
   scene.add(mesh);
   return mesh;
-}
-function getShapeHalfExtents(shape) {
-  // Boxならそのまま
-  if (shape instanceof CANNON.Box) {
-    return shape.halfExtents.clone();
-  }
-
-  // ConvexPolyhedronならAABBから推定（保険）
-  if (shape instanceof CANNON.ConvexPolyhedron) {
-    const min = new CANNON.Vec3(+Infinity, +Infinity, +Infinity);
-    const max = new CANNON.Vec3(-Infinity, -Infinity, -Infinity);
-    for (const v of shape.vertices) {
-      min.x = Math.min(min.x, v.x); min.y = Math.min(min.y, v.y); min.z = Math.min(min.z, v.z);
-      max.x = Math.max(max.x, v.x); max.y = Math.max(max.y, v.y); max.z = Math.max(max.z, v.z);
-    }
-    return new CANNON.Vec3(
-      Math.max(0.01, (max.x - min.x) * 0.5),
-      Math.max(0.01, (max.y - min.y) * 0.5),
-      Math.max(0.01, (max.z - min.z) * 0.5)
-    );
-  }
-
-  // その他はとりあえず1cm
-  return new CANNON.Vec3(0.01, 0.01, 0.01);
 }
 function centerConvex(shape) {
   const min = new CANNON.Vec3(+Infinity, +Infinity, +Infinity);
@@ -696,7 +718,7 @@ function makeClawPhysics() {
   for (let i = 0; i < clawLHitboxes.length; i++) {
     const hb = clawLHitboxes[i];
     clawLBody.addShape(hb.shape, hb.offset, hb.orient);
-    clawLVis.push(addHitboxVisualizer(scene, getShapeHalfExtents(hb.shape), { color: 0x00ff00 }));
+    clawLVis.push(addHitboxVisualizer(scene, hb.shape, { color: 0x00ff00 }));
 
   }
 
@@ -704,7 +726,7 @@ function makeClawPhysics() {
   for (let i = 0; i < clawRHitboxes.length; i++) {
     const hb = clawRHitboxes[i];
     clawRBody.addShape(hb.shape, hb.offset, hb.orient);
-    clawRVis.push(addHitboxVisualizer(scene, getShapeHalfExtents(hb.shape), { color: 0xff0000 }));
+    clawRVis.push(addHitboxVisualizer(scene, hb.shape, { color: 0xff0000 }));
 
   }
 
@@ -907,8 +929,11 @@ scene.add(armGroup);
 // ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-clawLHitboxes = [computeClawFingerBox(clawLMesh)];
-clawRHitboxes = [computeClawFingerBox(clawRMesh)];
+clawLHitboxes = computeClawConvexHitboxes(clawLMesh);
+clawRHitboxes = computeClawConvexHitboxes(clawRMesh);
+
+if (!clawLHitboxes.length) clawLHitboxes = [computeClawFingerBox(clawLMesh)];
+if (!clawRHitboxes.length) clawRHitboxes = [computeClawFingerBox(clawRMesh)];
 
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");

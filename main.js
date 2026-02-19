@@ -154,6 +154,25 @@ function computeClawConvexHitboxes(meshRoot) {
   return hitboxes;
 }
 
+function computeConvexShapesFromRoot(meshRoot) {
+  meshRoot.updateMatrixWorld(true);
+
+  const bodyWorldPos = new THREE.Vector3();
+  const bodyWorldQuat = new THREE.Quaternion();
+  meshRoot.getWorldPosition(bodyWorldPos);
+  meshRoot.getWorldQuaternion(bodyWorldQuat);
+  const invBodyWorldQuat = bodyWorldQuat.clone().invert();
+
+  const shapes = [];
+  meshRoot.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry) return;
+    const convex = geometryToBodyLocalConvex(obj, bodyWorldPos, invBodyWorldQuat);
+    if (convex) shapes.push(convex);
+  });
+
+  return shapes;
+}
+
 /**
  * 爪全体のAABBから「先端側だけ」を切り出した単純Boxを作る。
  * 複雑な複数AABBより安定し、Cannonの接触が破綻しにくい。
@@ -640,9 +659,26 @@ function addBodyDebugMeshes(body, color = 0x00ffff) {
 
   for (let i = 0; i < body.shapes.length; i++) {
     const shape = body.shapes[i];
-    if (!(shape instanceof CANNON.Box)) continue;
 
-    const mesh = createWireframeBoxMesh(shape.halfExtents, color);
+    let mesh;
+    if (shape instanceof CANNON.Box) {
+      mesh = createWireframeBoxMesh(shape.halfExtents, color);
+    } else if (shape instanceof CANNON.ConvexPolyhedron) {
+      mesh = new THREE.Mesh(
+        convexToBufferGeometry(shape),
+        new THREE.MeshBasicMaterial({
+          color,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+        })
+      );
+      mesh.renderOrder = 9998;
+    } else {
+      continue;
+    }
+
     scene.add(mesh);
     physicsDebugEntries.push({
       body,
@@ -1024,14 +1060,7 @@ world.addBody(stick4Body);
 addBodyDebugMeshes(stick4Body, 0x00ffff);
 
   // ===== 物理：箱（動的）=====
-  // 物理が確実に有効になるよう、メッシュ原点基準の単純なボックス形状を使う
-  const boxSize = getBoxSize(boxMesh);
-  const boxHalf = new CANNON.Vec3(
-    Math.max(boxSize.x / 2, 0.01),
-    Math.max(boxSize.y / 2, 0.01),
-    Math.max(boxSize.z / 2, 0.01)
-  );
-
+  // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う
   boxBody = new CANNON.Body({
     mass: 1.0,
     material: matBox,
@@ -1041,10 +1070,26 @@ addBodyDebugMeshes(stick4Body, 0x00ffff);
     sleepSpeedLimit: 0.15,
     sleepTimeLimit: 0.8,
   });
-  boxBody.addShape(new CANNON.Box(boxHalf));
 
-  // 従来どおり少し上から落として衝突を発生させる
-  boxBody.position.set(0, 0.5, 0);
+  boxMesh.position.set(0, 0.5, 0);
+  boxMesh.updateMatrixWorld(true);
+
+  const boxShapes = computeConvexShapesFromRoot(boxMesh);
+  if (boxShapes.length) {
+    for (const shapeDef of boxShapes) {
+      boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
+    }
+  } else {
+    const boxSize = getBoxSize(boxMesh);
+    const boxHalf = new CANNON.Vec3(
+      Math.max(boxSize.x / 2, 0.01),
+      Math.max(boxSize.y / 2, 0.01),
+      Math.max(boxSize.z / 2, 0.01)
+    );
+    boxBody.addShape(new CANNON.Box(boxHalf));
+  }
+
+  boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
   addBodyDebugMeshes(boxBody, 0xff00ff);

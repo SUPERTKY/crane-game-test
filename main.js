@@ -833,7 +833,16 @@ function makeStickCylinderShapeFromMesh(stickMesh, radiusScale = 0.5) {
   const radius = Math.max(Math.max(axes[1], axes[2]) * 0.5 * radiusScale, 0.01);
 
   const shape = new CANNON.Cylinder(radius, radius, height, 24);
-  const orient = new CANNON.Quaternion(0, 0, 0, 1);
+  let orient = new CANNON.Quaternion(0, 0, 0, 1);
+
+  // Cannon.Cylinder はローカルX軸方向に長い形状。
+  // 見た目モデルに合わせて軸を切り替えられるようにする。
+  if (STICK_COLLIDER_AXIS === "y") {
+    orient = quatFromEuler(0, 0, Math.PI / 2);
+  } else if (STICK_COLLIDER_AXIS === "z") {
+    orient = quatFromEuler(0, -Math.PI / 2, 0);
+  }
+
   return { shape, orient };
 }
 
@@ -1016,6 +1025,7 @@ boxMesh.scale.setScalar(WORLD_SCALE * BOX_SCALE);
 // 宣言は1回だけ
 const STICK_YAW = -Math.PI / 2;
 const BOX_YAW = Math.PI / 2;
+const STICK_COLLIDER_AXIS = "z"; // "x" | "y" | "z"
 
 // まず scene 追加
 scene.add(stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh, boxMesh);

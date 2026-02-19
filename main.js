@@ -14,7 +14,6 @@ const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
-const STICK_YAW = -Math.PI / 2;
 const BOX_YAW = Math.PI / 2;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
@@ -1054,19 +1053,11 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // ✅ 見た目を回転（4本＋箱）
-// 棒は従来のY回転に加えて、X軸+90°の状態でさらにZ軸にも+90°回転を追加
-stick1Mesh.rotation.y += STICK_YAW;
-stick2Mesh.rotation.y += STICK_YAW;
-stick3Mesh.rotation.y += STICK_YAW;
-stick4Mesh.rotation.y += STICK_YAW;
+// 棒はX軸にのみ+90°回転を適用
 stick1Mesh.rotation.x += Math.PI / 2;
 stick2Mesh.rotation.x += Math.PI / 2;
 stick3Mesh.rotation.x += Math.PI / 2;
 stick4Mesh.rotation.x += Math.PI / 2;
-stick1Mesh.rotation.z += Math.PI / 2;
-stick2Mesh.rotation.z += Math.PI / 2;
-stick3Mesh.rotation.z += Math.PI / 2;
-stick4Mesh.rotation.z += Math.PI / 2;
 boxMesh.rotation.y += BOX_YAW;
 
 // ===== 物理：棒（静的・円柱）=====

@@ -858,11 +858,7 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-<<<<<<< lgvhch-codex/rotate-on-x-axis-by-90-degrees
-  // 物理はメッシュの向きに合わせる
-=======
-  // 見た目と同じ向き（物理ボディも回転させない）
->>>>>>> main
+
   body.quaternion.copy(stickMesh.quaternion);
 
   world.addBody(body);

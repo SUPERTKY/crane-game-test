@@ -1059,18 +1059,18 @@ stick4Mesh.position.set(0, highY,  highGap / 2);
 
 boxMesh.rotation.y += BOX_YAW;
 
-// ===== 物理：棒（静的・円柱）=====
-stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1Mesh));
-stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFromMesh(stick2Mesh));
-stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFromMesh(stick3Mesh));
-stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4Mesh));
-
-// 棒の見た目だけ z軸に90度回転（物理生成後に固定で適用）
+// 棒は見た目と物理を同じ向きにする
 const sticks = [stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh];
 const visualZ90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
 for (const mesh of sticks) {
   mesh.quaternion.copy(mesh.quaternion.clone().multiply(visualZ90));
 }
+
+// ===== 物理：棒（静的・円柱）=====
+stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1Mesh));
+stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFromMesh(stick2Mesh));
+stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFromMesh(stick3Mesh));
+stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4Mesh));
 
   // ===== 物理：箱（動的）=====
   // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う

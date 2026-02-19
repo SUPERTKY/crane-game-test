@@ -231,8 +231,8 @@ const CLAW_R_OPEN   = 0.2;
 // ===== 自動シーケンス設定 =====
 const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
-const ARM_DROP_SPEED = 0.6;   // 下げる速さ（1秒あたり）
-const CLAW_CLOSE_TIME = 0.6;  // 閉じるのにかける秒
+const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
+const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -368,10 +368,10 @@ world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
     friction: 0.18,
     restitution: 0.0,
-    contactEquationStiffness: 3e6,
-    contactEquationRelaxation: 6,
-    frictionEquationStiffness: 5e5,
-    frictionEquationRelaxation: 8,
+    contactEquationStiffness: 8e4,
+    contactEquationRelaxation: 12,
+    frictionEquationStiffness: 7e4,
+    frictionEquationRelaxation: 12,
   })
 );
 
@@ -1053,11 +1053,7 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // ✅ 見た目を回転（4本＋箱）
-// 棒はX軸にのみ+90°回転を適用
-stick1Mesh.rotation.x += Math.PI / 2;
-stick2Mesh.rotation.x += Math.PI / 2;
-stick3Mesh.rotation.x += Math.PI / 2;
-stick4Mesh.rotation.x += Math.PI / 2;
+// 棒は見た目回転させない（モデル原点の向きを維持）
 boxMesh.rotation.y += BOX_YAW;
 
 // ===== 物理：棒（静的・円柱）=====
@@ -1143,7 +1139,8 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 
 
-const MAX_KINEMATIC_SPEED = 2.5;
+const MAX_KINEMATIC_SPEED = 0.8;
+const CONTACT_KINEMATIC_SPEED = 0.22;
 
 function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
   const vx = body.velocity.x;
@@ -1161,6 +1158,21 @@ const tmpPos = new THREE.Vector3();
 const tmpQuat = new THREE.Quaternion();
 const prevClawL = new CANNON.Vec3();
 const prevClawR = new CANNON.Vec3();
+
+function isClawPressingSomething() {
+  if (!clawLBody || !clawRBody) return false;
+
+  for (const c of world.contacts) {
+    const bi = c.bi;
+    const bj = c.bj;
+    const clawHit = (bi === clawLBody || bi === clawRBody || bj === clawLBody || bj === clawRBody);
+    if (!clawHit) continue;
+
+    const other = bi === clawLBody || bi === clawRBody ? bj : bi;
+    if (other && other !== armBody) return true;
+  }
+  return false;
+}
 
 function followClawBodies(dt) {
   if (!armBody || !clawLBody || !clawRBody) return;
@@ -1202,8 +1214,9 @@ function followClawBodies(dt) {
       (clawRBody.position.y - prevClawR.y) / dt,
       (clawRBody.position.z - prevClawR.z) / dt
     );
-    clampBodyLinearVelocity(clawLBody);
-    clampBodyLinearVelocity(clawRBody);
+    const maxSpeed = isClawPressingSomething() ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED;
+    clampBodyLinearVelocity(clawLBody, maxSpeed);
+    clampBodyLinearVelocity(clawRBody, maxSpeed);
   }
   clawLBody.angularVelocity.set(0, 0, 0);
   clawRBody.angularVelocity.set(0, 0, 0);
@@ -1244,12 +1257,13 @@ if (autoStarted) {
   } else if (autoStep === 2) {
     // ===== ステップ2: アームを下げる =====
     const targetY = dropStartY - ARM_DROP_DIST;
-    armGroup.position.y = Math.max(targetY, armGroup.position.y - ARM_DROP_SPEED * dt);
+    const dropSpeed = isClawPressingSomething() ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
+    armGroup.position.y = Math.max(targetY, armGroup.position.y - dropSpeed * dt);
     if (armGroup.position.y <= targetY + 1e-6) { autoStep = 3; autoT = 0; }
 
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
-    autoT += dt;
+    autoT += isClawPressingSomething() ? dt * 0.3 : dt;
     setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1));
     if (autoT >= CLAW_CLOSE_TIME) {
       // 閉じ終わったらそのまま上昇（吸着はしない）

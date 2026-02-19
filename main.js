@@ -675,6 +675,27 @@ function addBodyDebugMeshes(body, color = 0x00ffff) {
         })
       );
       mesh.renderOrder = 9998;
+    } else if (shape instanceof CANNON.Cylinder) {
+      const geo = new THREE.CylinderGeometry(
+        shape.radiusTop,
+        shape.radiusBottom,
+        shape.height,
+        16,
+        1,
+        true
+      );
+      geo.rotateZ(Math.PI / 2); // ThreeのY軸CylinderをCannonのX軸向きに合わせる
+      mesh = new THREE.Mesh(
+        geo,
+        new THREE.MeshBasicMaterial({
+          color,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+        })
+      );
+      mesh.renderOrder = 9998;
     } else {
       continue;
     }
@@ -800,29 +821,20 @@ function updateClawHitboxVisuals() {
 // クリック処理（順番制御）
 /**
  * 棒の当たり判定：
- * - 見た目(回転後)のAABBサイズから「一番長い軸」を長手として採用
- * - それ以外2軸を thicknessRatio 倍に細くする
+ * - テンプレートメッシュ(回転前)から共通の円柱1本を作る
+ * - 実際の向きは body.quaternion 側で反映する
  */
-function makeStickHalfExtentsFromMesh(stickMesh, thicknessRatio = 0.04) {
-  // ★回転/スケール/移動を反映させた状態でBox3を取る
+function makeStickCylinderShapeFromMesh(stickMesh, radiusScale = 0.5) {
   stickMesh.updateWorldMatrix(true, true);
-
   const s = getBoxSize(stickMesh);
 
-  const axes = [
-    { k: "x", v: s.x },
-    { k: "y", v: s.y },
-    { k: "z", v: s.z },
-  ].sort((a, b) => b.v - a.v);
+  const axes = [s.x, s.y, s.z].sort((a, b) => b - a);
+  const height = Math.max(axes[0], 0.01);
+  const radius = Math.max(Math.max(axes[1], axes[2]) * 0.5 * radiusScale, 0.01);
 
-  const longAxis = axes[0].k;
-
-  const half = { x: s.x / 2, y: s.y / 2, z: s.z / 2 };
-  for (const k of ["x", "y", "z"]) {
-    if (k !== longAxis) half[k] *= thicknessRatio;
-  }
-
-  return new CANNON.Vec3(half.x, half.y, half.z);
+  const shape = new CANNON.Cylinder(radius, radius, height, 24);
+  const orient = new CANNON.Quaternion(0, 0, 0, 1);
+  return { shape, orient };
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1017,43 +1029,41 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// ✅ yaw する前に halfExtents を作る（4本分）
-const stickHalf1 = makeStickHalfExtentsFromMesh(stick1Mesh, 0.04);
-const stickHalf2 = makeStickHalfExtentsFromMesh(stick2Mesh, 0.04);
-const stickHalf3 = makeStickHalfExtentsFromMesh(stick3Mesh, 0.04);
-const stickHalf4 = makeStickHalfExtentsFromMesh(stick4Mesh, 0.04);
-
-// ✅ その後で見た目を yaw 回転（4本＋箱）
+// ✅ 見た目を yaw 回転（4本＋箱）
 stick1Mesh.rotation.y += yaw;
 stick2Mesh.rotation.y += yaw;
 stick3Mesh.rotation.y += yaw;
 stick4Mesh.rotation.y += yaw;
 boxMesh.rotation.y += yaw;
 
-// ===== 物理：棒（静的）=====
+// ✅ 1本目をテンプレートにして、4本で同じ円柱当たり判定を使う
+//    （向きは各bodyのquaternionで決まる）
+const stickColTemplate = makeStickCylinderShapeFromMesh(stick1Mesh);
+
+// ===== 物理：棒（静的・円柱）=====
 stick1Body = new CANNON.Body({ mass: 0, material: matStick });
-stick1Body.addShape(new CANNON.Box(stickHalf1));
+stick1Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
 stick1Body.position.copy(stick1Mesh.position);
 stick1Body.quaternion.copy(stick1Mesh.quaternion);
 world.addBody(stick1Body);
 addBodyDebugMeshes(stick1Body, 0x00ffff);
 
 stick2Body = new CANNON.Body({ mass: 0, material: matStick });
-stick2Body.addShape(new CANNON.Box(stickHalf2));
+stick2Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
 stick2Body.position.copy(stick2Mesh.position);
 stick2Body.quaternion.copy(stick2Mesh.quaternion);
 world.addBody(stick2Body);
 addBodyDebugMeshes(stick2Body, 0x00ffff);
 
 stick3Body = new CANNON.Body({ mass: 0, material: matStick });
-stick3Body.addShape(new CANNON.Box(stickHalf3));
+stick3Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
 stick3Body.position.copy(stick3Mesh.position);
 stick3Body.quaternion.copy(stick3Mesh.quaternion);
 world.addBody(stick3Body);
 addBodyDebugMeshes(stick3Body, 0x00ffff);
 
 stick4Body = new CANNON.Body({ mass: 0, material: matStick });
-stick4Body.addShape(new CANNON.Box(stickHalf4));
+stick4Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
 stick4Body.position.copy(stick4Mesh.position);
 stick4Body.quaternion.copy(stick4Mesh.quaternion);
 world.addBody(stick4Body);

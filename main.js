@@ -14,6 +14,7 @@ const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
+const BOX_YAW = Math.PI / 2;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -828,17 +829,23 @@ function makeStickCylinderParamsFromMesh(stickMesh, radiusScale = 0.5) {
   stickMesh.updateWorldMatrix(true, true);
   const s = getBoxSize(stickMesh);
 
-  const axes = [s.x, s.y, s.z].sort((a, b) => b - a);
-  const height = Math.max(axes[0], 0.01);
-  const radius = Math.max(Math.max(axes[1], axes[2]) * 0.5 * radiusScale, 0.01);
+  const dims = [
+    { axis: "x", value: s.x },
+    { axis: "y", value: s.y },
+    { axis: "z", value: s.z },
+  ].sort((a, b) => b.value - a.value);
+
+  const longAxis = dims[0].axis;
+  const height = Math.max(dims[0].value, 0.01);
+  const radius = Math.max(Math.max(dims[1].value, dims[2].value) * 0.5 * radiusScale, 0.01);
 
   let orient = new CANNON.Quaternion(0, 0, 0, 1);
 
   // Cannon.Cylinder はローカルX軸方向に長い形状。
-  // 見た目モデルに合わせて軸を切り替えられるようにする。
-  if (STICK_COLLIDER_AXIS === "y") {
+  // 棒メッシュの最長軸に合わせて向きを自動で選ぶ。
+  if (longAxis === "y") {
     orient = quatFromEuler(0, 0, Math.PI / 2);
-  } else if (STICK_COLLIDER_AXIS === "z") {
+  } else if (longAxis === "z") {
     orient = quatFromEuler(0, -Math.PI / 2, 0);
   }
 
@@ -1032,11 +1039,6 @@ stick4Mesh.scale.setScalar(WORLD_SCALE);
 boxMesh.scale.setScalar(WORLD_SCALE * BOX_SCALE);
 
 
-// 宣言は1回だけ
-const STICK_YAW = -Math.PI / 2;
-const BOX_YAW = Math.PI / 2;
-const STICK_COLLIDER_AXIS = "z"; // "x" | "y" | "z"
-
 // まず scene 追加
 scene.add(stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh, boxMesh);
 
@@ -1050,22 +1052,19 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// ✅ 見た目を yaw 回転（4本＋箱）
-stick1Mesh.rotation.y += STICK_YAW;
-stick2Mesh.rotation.y += STICK_YAW;
-stick3Mesh.rotation.y += STICK_YAW;
-stick4Mesh.rotation.y += STICK_YAW;
+// ✅ 見た目を回転（4本＋箱）
+// 棒はX軸にのみ+90°回転を適用
+stick1Mesh.rotation.x += Math.PI / 2;
+stick2Mesh.rotation.x += Math.PI / 2;
+stick3Mesh.rotation.x += Math.PI / 2;
+stick4Mesh.rotation.x += Math.PI / 2;
 boxMesh.rotation.y += BOX_YAW;
 
-// ✅ 1本目をテンプレートにして、4本で同じ円柱当たり判定を使う
-//    （向きは各bodyのquaternionで決まる）
-const stickColliderParams = makeStickCylinderParamsFromMesh(stick1Mesh);
-
 // ===== 物理：棒（静的・円柱）=====
-stick1Body = createStickBody(stick1Mesh, stickColliderParams);
-stick2Body = createStickBody(stick2Mesh, stickColliderParams);
-stick3Body = createStickBody(stick3Mesh, stickColliderParams);
-stick4Body = createStickBody(stick4Mesh, stickColliderParams);
+stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1Mesh));
+stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFromMesh(stick2Mesh));
+stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFromMesh(stick3Mesh));
+stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4Mesh));
 
   // ===== 物理：箱（動的）=====
   // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う
@@ -1079,7 +1078,11 @@ stick4Body = createStickBody(stick4Mesh, stickColliderParams);
     sleepTimeLimit: 0.8,
   });
 
-  boxMesh.position.set(0, 0.5, 0);
+  const boxSize = getBoxSize(boxMesh);
+  const boxHalfHeight = Math.max(boxSize.y * 0.5, 0.01);
+  const topStickY = highY;
+  const spawnClearance = 0.03;
+  boxMesh.position.set(0, topStickY + boxHalfHeight + spawnClearance, 0);
   boxMesh.updateMatrixWorld(true);
 
   const boxShapes = computeConvexShapesFromRoot(boxMesh);
@@ -1088,7 +1091,6 @@ stick4Body = createStickBody(stick4Mesh, stickColliderParams);
       boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
     }
   } else {
-    const boxSize = getBoxSize(boxMesh);
     const boxHalf = new CANNON.Vec3(
       Math.max(boxSize.x / 2, 0.01),
       Math.max(boxSize.y / 2, 0.01),

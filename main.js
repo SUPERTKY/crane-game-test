@@ -12,7 +12,8 @@ let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
 const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
-const SHOW_PHYSICS_DEBUG = false;
+const SHOW_PHYSICS_DEBUG = true;
+const CONTACT_DEBUG_LIMIT = 80;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -129,6 +130,44 @@ function computeClawBoxes(meshRoot, {
       offset: new CANNON.Vec3(localCenter.x, localCenter.y, localCenter.z),
       orient: new CANNON.Quaternion(0, 0, 0, 1),
     });
+  });
+
+  return shapes;
+}
+
+function computeClawConvexHitboxes(meshRoot) {
+  meshRoot.updateMatrixWorld(true);
+
+  const bodyWorldPos = new THREE.Vector3();
+  const bodyWorldQuat = new THREE.Quaternion();
+  meshRoot.getWorldPosition(bodyWorldPos);
+  meshRoot.getWorldQuaternion(bodyWorldQuat);
+  const invBodyWorldQuat = bodyWorldQuat.clone().invert();
+
+  const hitboxes = [];
+  meshRoot.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry) return;
+    const convex = geometryToBodyLocalConvex(obj, bodyWorldPos, invBodyWorldQuat);
+    if (convex) hitboxes.push(convex);
+  });
+
+  return hitboxes;
+}
+
+function computeConvexShapesFromRoot(meshRoot) {
+  meshRoot.updateMatrixWorld(true);
+
+  const bodyWorldPos = new THREE.Vector3();
+  const bodyWorldQuat = new THREE.Quaternion();
+  meshRoot.getWorldPosition(bodyWorldPos);
+  meshRoot.getWorldQuaternion(bodyWorldQuat);
+  const invBodyWorldQuat = bodyWorldQuat.clone().invert();
+
+  const shapes = [];
+  meshRoot.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry) return;
+    const convex = geometryToBodyLocalConvex(obj, bodyWorldPos, invBodyWorldQuat);
+    if (convex) shapes.push(convex);
   });
 
   return shapes;
@@ -306,7 +345,7 @@ addEventListener("resize", () => {
 // ===== 物理 =====
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
 world.broadphase = new CANNON.SAPBroadphase(world);
-world.allowSleep = true;
+world.allowSleep = false;
 world.defaultContactMaterial.friction = 0.35;
 world.defaultContactMaterial.restitution = 0.0;
 
@@ -504,39 +543,42 @@ function cannonVecToThree(v) {
   return new THREE.Vector3(v.x, v.y, v.z);
 }
 
-function addHitboxVisualizer(scene, halfExtents, { color = 0x00ff00 } = {}) {
+function convexToBufferGeometry(shape) {
+  const positions = [];
+  for (const face of shape.faces) {
+    if (!face || face.length < 3) continue;
+    const a = shape.vertices[face[0]];
+    for (let i = 1; i < face.length - 1; i++) {
+      const b = shape.vertices[face[i]];
+      const c = shape.vertices[face[i + 1]];
+      positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function addHitboxVisualizer(scene, shape, { color = 0x00ff00 } = {}) {
   if (!SHOW_PHYSICS_DEBUG) return null;
-  const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
+
+  let geo;
+  if (shape instanceof CANNON.Box) {
+    geo = new THREE.BoxGeometry(shape.halfExtents.x * 2, shape.halfExtents.y * 2, shape.halfExtents.z * 2);
+  } else if (shape instanceof CANNON.ConvexPolyhedron) {
+    geo = convexToBufferGeometry(shape);
+  } else {
+    geo = new THREE.BoxGeometry(0.02, 0.02, 0.02);
+  }
+
   const mat = new THREE.MeshBasicMaterial({ color, wireframe: true });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 9999;
   mesh.frustumCulled = false;
   scene.add(mesh);
   return mesh;
-}
-function getShapeHalfExtents(shape) {
-  // Boxならそのまま
-  if (shape instanceof CANNON.Box) {
-    return shape.halfExtents.clone();
-  }
-
-  // ConvexPolyhedronならAABBから推定（保険）
-  if (shape instanceof CANNON.ConvexPolyhedron) {
-    const min = new CANNON.Vec3(+Infinity, +Infinity, +Infinity);
-    const max = new CANNON.Vec3(-Infinity, -Infinity, -Infinity);
-    for (const v of shape.vertices) {
-      min.x = Math.min(min.x, v.x); min.y = Math.min(min.y, v.y); min.z = Math.min(min.z, v.z);
-      max.x = Math.max(max.x, v.x); max.y = Math.max(max.y, v.y); max.z = Math.max(max.z, v.z);
-    }
-    return new CANNON.Vec3(
-      Math.max(0.01, (max.x - min.x) * 0.5),
-      Math.max(0.01, (max.y - min.y) * 0.5),
-      Math.max(0.01, (max.z - min.z) * 0.5)
-    );
-  }
-
-  // その他はとりあえず1cm
-  return new CANNON.Vec3(0.01, 0.01, 0.01);
 }
 function centerConvex(shape) {
   const min = new CANNON.Vec3(+Infinity, +Infinity, +Infinity);
@@ -595,6 +637,122 @@ let armBody, clawLBody, clawRBody;
 let hingeL, hingeR;
 let clawLVis = [];
 let clawRVis = [];
+const physicsDebugEntries = [];
+const contactDebugMeshes = [];
+
+function createWireframeBoxMesh(halfExtents, color = 0x00ffff) {
+  const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.75,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = 9998;
+  return mesh;
+}
+
+function addBodyDebugMeshes(body, color = 0x00ffff) {
+  if (!SHOW_PHYSICS_DEBUG || !body) return;
+
+  for (let i = 0; i < body.shapes.length; i++) {
+    const shape = body.shapes[i];
+
+    let mesh;
+    if (shape instanceof CANNON.Box) {
+      mesh = createWireframeBoxMesh(shape.halfExtents, color);
+    } else if (shape instanceof CANNON.ConvexPolyhedron) {
+      mesh = new THREE.Mesh(
+        convexToBufferGeometry(shape),
+        new THREE.MeshBasicMaterial({
+          color,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+        })
+      );
+      mesh.renderOrder = 9998;
+    } else if (shape instanceof CANNON.Cylinder) {
+      const geo = new THREE.CylinderGeometry(
+        shape.radiusTop,
+        shape.radiusBottom,
+        shape.height,
+        16,
+        1,
+        true
+      );
+      geo.rotateZ(Math.PI / 2); // ThreeのY軸CylinderをCannonのX軸向きに合わせる
+      mesh = new THREE.Mesh(
+        geo,
+        new THREE.MeshBasicMaterial({
+          color,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+        })
+      );
+      mesh.renderOrder = 9998;
+    } else {
+      continue;
+    }
+
+    scene.add(mesh);
+    physicsDebugEntries.push({
+      body,
+      shapeOffset: body.shapeOffsets[i].clone(),
+      shapeOrient: body.shapeOrientations[i].clone(),
+      mesh,
+    });
+  }
+}
+
+function updateBodyDebugMeshes() {
+  if (!SHOW_PHYSICS_DEBUG) return;
+
+  for (const entry of physicsDebugEntries) {
+    updateHitboxFromBody(entry.body, entry.mesh, entry.shapeOffset, entry.shapeOrient);
+  }
+}
+
+function ensureContactDebugPool(count) {
+  if (!SHOW_PHYSICS_DEBUG) return;
+
+  while (contactDebugMeshes.length < count) {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.015, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.9 })
+    );
+    mesh.visible = false;
+    mesh.renderOrder = 9999;
+    scene.add(mesh);
+    contactDebugMeshes.push(mesh);
+  }
+}
+
+function updateContactDebugMarkers() {
+  if (!SHOW_PHYSICS_DEBUG) return;
+
+  const showCount = Math.min(world.contacts.length, CONTACT_DEBUG_LIMIT);
+  ensureContactDebugPool(showCount);
+
+  for (let i = 0; i < showCount; i++) {
+    const c = world.contacts[i];
+    const bi = c.bi;
+    const marker = contactDebugMeshes[i];
+    const p = bi.pointToWorldFrame(c.ri, new CANNON.Vec3());
+
+    marker.visible = true;
+    marker.position.set(p.x, p.y, p.z);
+  }
+
+  for (let i = showCount; i < contactDebugMeshes.length; i++) {
+    contactDebugMeshes[i].visible = false;
+  }
+}
 
 function makeClawPhysics() {
   armBody = new CANNON.Body({ mass: 0 });
@@ -617,7 +775,7 @@ function makeClawPhysics() {
   for (let i = 0; i < clawLHitboxes.length; i++) {
     const hb = clawLHitboxes[i];
     clawLBody.addShape(hb.shape, hb.offset, hb.orient);
-    clawLVis.push(addHitboxVisualizer(scene, getShapeHalfExtents(hb.shape), { color: 0x00ff00 }));
+    clawLVis.push(addHitboxVisualizer(scene, hb.shape, { color: 0x00ff00 }));
 
   }
 
@@ -625,7 +783,7 @@ function makeClawPhysics() {
   for (let i = 0; i < clawRHitboxes.length; i++) {
     const hb = clawRHitboxes[i];
     clawRBody.addShape(hb.shape, hb.offset, hb.orient);
-    clawRVis.push(addHitboxVisualizer(scene, getShapeHalfExtents(hb.shape), { color: 0xff0000 }));
+    clawRVis.push(addHitboxVisualizer(scene, hb.shape, { color: 0xff0000 }));
 
   }
 
@@ -663,29 +821,20 @@ function updateClawHitboxVisuals() {
 // クリック処理（順番制御）
 /**
  * 棒の当たり判定：
- * - 見た目(回転後)のAABBサイズから「一番長い軸」を長手として採用
- * - それ以外2軸を thicknessRatio 倍に細くする
+ * - テンプレートメッシュ(回転前)から共通の円柱1本を作る
+ * - 実際の向きは body.quaternion 側で反映する
  */
-function makeStickHalfExtentsFromMesh(stickMesh, thicknessRatio = 0.04) {
-  // ★回転/スケール/移動を反映させた状態でBox3を取る
+function makeStickCylinderShapeFromMesh(stickMesh, radiusScale = 0.5) {
   stickMesh.updateWorldMatrix(true, true);
-
   const s = getBoxSize(stickMesh);
 
-  const axes = [
-    { k: "x", v: s.x },
-    { k: "y", v: s.y },
-    { k: "z", v: s.z },
-  ].sort((a, b) => b.v - a.v);
+  const axes = [s.x, s.y, s.z].sort((a, b) => b - a);
+  const height = Math.max(axes[0], 0.01);
+  const radius = Math.max(Math.max(axes[1], axes[2]) * 0.5 * radiusScale, 0.01);
 
-  const longAxis = axes[0].k;
-
-  const half = { x: s.x / 2, y: s.y / 2, z: s.z / 2 };
-  for (const k of ["x", "y", "z"]) {
-    if (k !== longAxis) half[k] *= thicknessRatio;
-  }
-
-  return new CANNON.Vec3(half.x, half.y, half.z);
+  const shape = new CANNON.Cylinder(radius, radius, height, 24);
+  const orient = new CANNON.Quaternion(0, 0, 0, 1);
+  return { shape, orient };
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -828,8 +977,11 @@ scene.add(armGroup);
 // ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-clawLHitboxes = [computeClawFingerBox(clawLMesh)];
-clawRHitboxes = [computeClawFingerBox(clawRMesh)];
+clawLHitboxes = computeClawConvexHitboxes(clawLMesh);
+clawRHitboxes = computeClawConvexHitboxes(clawRMesh);
+
+if (!clawLHitboxes.length) clawLHitboxes = [computeClawFingerBox(clawLMesh)];
+if (!clawRHitboxes.length) clawRHitboxes = [computeClawFingerBox(clawRMesh)];
 
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
@@ -862,7 +1014,8 @@ boxMesh.scale.setScalar(WORLD_SCALE * BOX_SCALE);
 
 
 // 宣言は1回だけ
-const yaw = Math.PI / 2;
+const STICK_YAW = -Math.PI / 2;
+const BOX_YAW = Math.PI / 2;
 
 // まず scene 追加
 scene.add(stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh, boxMesh);
@@ -877,68 +1030,80 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// ✅ yaw する前に halfExtents を作る（4本分）
-const stickHalf1 = makeStickHalfExtentsFromMesh(stick1Mesh, 0.04);
-const stickHalf2 = makeStickHalfExtentsFromMesh(stick2Mesh, 0.04);
-const stickHalf3 = makeStickHalfExtentsFromMesh(stick3Mesh, 0.04);
-const stickHalf4 = makeStickHalfExtentsFromMesh(stick4Mesh, 0.04);
+// ✅ 見た目を yaw 回転（4本＋箱）
+stick1Mesh.rotation.y += STICK_YAW;
+stick2Mesh.rotation.y += STICK_YAW;
+stick3Mesh.rotation.y += STICK_YAW;
+stick4Mesh.rotation.y += STICK_YAW;
+boxMesh.rotation.y += BOX_YAW;
 
-// ✅ その後で見た目を yaw 回転（4本＋箱）
-stick1Mesh.rotation.y += yaw;
-stick2Mesh.rotation.y += yaw;
-stick3Mesh.rotation.y += yaw;
-stick4Mesh.rotation.y += yaw;
-boxMesh.rotation.y += yaw;
+// ✅ 1本目をテンプレートにして、4本で同じ円柱当たり判定を使う
+//    （向きは各bodyのquaternionで決まる）
+const stickColTemplate = makeStickCylinderShapeFromMesh(stick1Mesh);
 
-// ===== 物理：棒（静的）=====
+// ===== 物理：棒（静的・円柱）=====
 stick1Body = new CANNON.Body({ mass: 0, material: matStick });
-stick1Body.addShape(new CANNON.Box(stickHalf1));
+stick1Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
 stick1Body.position.copy(stick1Mesh.position);
 stick1Body.quaternion.copy(stick1Mesh.quaternion);
 world.addBody(stick1Body);
+addBodyDebugMeshes(stick1Body, 0x00ffff);
 
 stick2Body = new CANNON.Body({ mass: 0, material: matStick });
-stick2Body.addShape(new CANNON.Box(stickHalf2));
+stick2Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
 stick2Body.position.copy(stick2Mesh.position);
 stick2Body.quaternion.copy(stick2Mesh.quaternion);
 world.addBody(stick2Body);
+addBodyDebugMeshes(stick2Body, 0x00ffff);
 
 stick3Body = new CANNON.Body({ mass: 0, material: matStick });
-stick3Body.addShape(new CANNON.Box(stickHalf3));
+stick3Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
 stick3Body.position.copy(stick3Mesh.position);
 stick3Body.quaternion.copy(stick3Mesh.quaternion);
 world.addBody(stick3Body);
+addBodyDebugMeshes(stick3Body, 0x00ffff);
 
 stick4Body = new CANNON.Body({ mass: 0, material: matStick });
-stick4Body.addShape(new CANNON.Box(stickHalf4));
+stick4Body.addShape(stickColTemplate.shape, new CANNON.Vec3(0, 0, 0), stickColTemplate.orient);
 stick4Body.position.copy(stick4Mesh.position);
 stick4Body.quaternion.copy(stick4Mesh.quaternion);
 world.addBody(stick4Body);
+addBodyDebugMeshes(stick4Body, 0x00ffff);
 
   // ===== 物理：箱（動的）=====
-  // 物理が確実に有効になるよう、メッシュ原点基準の単純なボックス形状を使う
-  const boxSize = getBoxSize(boxMesh);
-  const boxHalf = new CANNON.Vec3(
-    Math.max(boxSize.x / 2, 0.01),
-    Math.max(boxSize.y / 2, 0.01),
-    Math.max(boxSize.z / 2, 0.01)
-  );
-
+  // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う
   boxBody = new CANNON.Body({
     mass: 1.0,
     material: matBox,
     linearDamping: 0.08,
     angularDamping: 0.12,
-    allowSleep: true,
+    allowSleep: false,
     sleepSpeedLimit: 0.15,
     sleepTimeLimit: 0.8,
   });
-  boxBody.addShape(new CANNON.Box(boxHalf));
 
-  // 従来どおり少し上から落として衝突を発生させる
-  boxBody.position.set(0, 0.5, 0);
+  boxMesh.position.set(0, 0.5, 0);
+  boxMesh.updateMatrixWorld(true);
+
+  const boxShapes = computeConvexShapesFromRoot(boxMesh);
+  if (boxShapes.length) {
+    for (const shapeDef of boxShapes) {
+      boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
+    }
+  } else {
+    const boxSize = getBoxSize(boxMesh);
+    const boxHalf = new CANNON.Vec3(
+      Math.max(boxSize.x / 2, 0.01),
+      Math.max(boxSize.y / 2, 0.01),
+      Math.max(boxSize.z / 2, 0.01)
+    );
+    boxBody.addShape(new CANNON.Box(boxHalf));
+  }
+
+  boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
+  addBodyDebugMeshes(boxBody, 0xff00ff);
 
   boxMesh.position.copy(boxBody.position);
 
@@ -1141,6 +1306,8 @@ const FIXED = 1 / 120;
 const MAX_SUB = 8;
 
 world.step(FIXED, dt, MAX_SUB);
+  updateBodyDebugMeshes();
+  updateContactDebugMarkers();
 
 
 

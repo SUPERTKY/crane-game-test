@@ -1014,7 +1014,8 @@ boxMesh.scale.setScalar(WORLD_SCALE * BOX_SCALE);
 
 
 // 宣言は1回だけ
-const yaw = Math.PI / 2;
+const STICK_YAW = -Math.PI / 2;
+const BOX_YAW = Math.PI / 2;
 
 // まず scene 追加
 scene.add(stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh, boxMesh);
@@ -1030,11 +1031,11 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // ✅ 見た目を yaw 回転（4本＋箱）
-stick1Mesh.rotation.y += yaw;
-stick2Mesh.rotation.y += yaw;
-stick3Mesh.rotation.y += yaw;
-stick4Mesh.rotation.y += yaw;
-boxMesh.rotation.y += yaw;
+stick1Mesh.rotation.y += STICK_YAW;
+stick2Mesh.rotation.y += STICK_YAW;
+stick3Mesh.rotation.y += STICK_YAW;
+stick4Mesh.rotation.y += STICK_YAW;
+boxMesh.rotation.y += BOX_YAW;
 
 // ✅ 1本目をテンプレートにして、4本で同じ円柱当たり判定を使う
 //    （向きは各bodyのquaternionで決まる）

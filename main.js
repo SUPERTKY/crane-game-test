@@ -857,7 +857,10 @@ function createStickBody(stickMesh, stickParams) {
   const shape = new CANNON.Cylinder(stickParams.radius, stickParams.radius, stickParams.height, 24);
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
+
+  // 見た目と同じ向き（物理ボディも回転させない）
   body.quaternion.copy(stickMesh.quaternion);
+
   world.addBody(body);
   addBodyDebugMeshes(body, 0x00ffff);
   return body;
@@ -1053,7 +1056,7 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // ✅ 見た目を回転（4本＋箱）
-// 棒は見た目回転させない（モデル原点の向きを維持）
+// 棒の見た目は回転させない（モデル原点の向きを維持）
 boxMesh.rotation.y += BOX_YAW;
 
 // ===== 物理：棒（静的・円柱）=====

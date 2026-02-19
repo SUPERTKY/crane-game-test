@@ -858,7 +858,11 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
+<<<<<<< lgvhch-codex/rotate-on-x-axis-by-90-degrees
+  // 物理はメッシュの向きに合わせる
+=======
   // 見た目と同じ向き（物理ボディも回転させない）
+>>>>>>> main
   body.quaternion.copy(stickMesh.quaternion);
 
   world.addBody(body);
@@ -1056,7 +1060,10 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // ✅ 見た目を回転（4本＋箱）
+<<<<<<< lgvhch-codex/rotate-on-x-axis-by-90-degrees
+=======
 // 棒の見た目は回転させない（モデル原点の向きを維持）
+>>>>>>> main
 boxMesh.rotation.y += BOX_YAW;
 
 // ===== 物理：棒（静的・円柱）=====
@@ -1064,6 +1071,13 @@ stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1M
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFromMesh(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFromMesh(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4Mesh));
+
+// 棒の見た目だけ z軸に90度回転（物理生成後に固定で適用）
+const sticks = [stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh];
+const visualZ90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+for (const mesh of sticks) {
+  mesh.quaternion.copy(mesh.quaternion.clone().multiply(visualZ90));
+}
 
   // ===== 物理：箱（動的）=====
   // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う

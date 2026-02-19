@@ -1059,12 +1059,7 @@ stick4Mesh.position.set(0, highY,  highGap / 2);
 
 boxMesh.rotation.y += BOX_YAW;
 
-// 棒は見た目と物理を同じ向きにする
-const sticks = [stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh];
-const visualZ90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
-for (const mesh of sticks) {
-  mesh.quaternion.copy(mesh.quaternion.clone().multiply(visualZ90));
-}
+// 棒メッシュはGLBの向きをそのまま使う（物理と一致）
 
 // ===== 物理：棒（静的・円柱）=====
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1Mesh));

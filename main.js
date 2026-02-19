@@ -1054,15 +1054,15 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // ✅ 見た目を回転（4本＋箱）
-// 棒は従来のY回転に加えて、Y軸にも+90°回転を追加
+// 棒は従来のY回転に加えて、X軸にも+90°回転を追加
 stick1Mesh.rotation.y += STICK_YAW;
 stick2Mesh.rotation.y += STICK_YAW;
 stick3Mesh.rotation.y += STICK_YAW;
 stick4Mesh.rotation.y += STICK_YAW;
-stick1Mesh.rotation.y += Math.PI / 2;
-stick2Mesh.rotation.y += Math.PI / 2;
-stick3Mesh.rotation.y += Math.PI / 2;
-stick4Mesh.rotation.y += Math.PI / 2;
+stick1Mesh.rotation.x += Math.PI / 2;
+stick2Mesh.rotation.x += Math.PI / 2;
+stick3Mesh.rotation.x += Math.PI / 2;
+stick4Mesh.rotation.x += Math.PI / 2;
 boxMesh.rotation.y += BOX_YAW;
 
 // ===== 物理：棒（静的・円柱）=====

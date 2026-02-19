@@ -16,7 +16,6 @@ const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const STICK_YAW = -Math.PI / 2;
 const BOX_YAW = Math.PI / 2;
-const STICK_COLLIDER_AXIS = "z"; // "x" | "y" | "z"
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -831,24 +830,23 @@ function makeStickCylinderParamsFromMesh(stickMesh, radiusScale = 0.5) {
   stickMesh.updateWorldMatrix(true, true);
   const s = getBoxSize(stickMesh);
 
-  let height = Math.max(s.x, 0.01);
-  let radius = Math.max(Math.max(s.y, s.z) * 0.5 * radiusScale, 0.01);
+  const dims = [
+    { axis: "x", value: s.x },
+    { axis: "y", value: s.y },
+    { axis: "z", value: s.z },
+  ].sort((a, b) => b.value - a.value);
 
-  if (STICK_COLLIDER_AXIS === "y") {
-    height = Math.max(s.y, 0.01);
-    radius = Math.max(Math.max(s.x, s.z) * 0.5 * radiusScale, 0.01);
-  } else if (STICK_COLLIDER_AXIS === "z") {
-    height = Math.max(s.z, 0.01);
-    radius = Math.max(Math.max(s.x, s.y) * 0.5 * radiusScale, 0.01);
-  }
+  const longAxis = dims[0].axis;
+  const height = Math.max(dims[0].value, 0.01);
+  const radius = Math.max(Math.max(dims[1].value, dims[2].value) * 0.5 * radiusScale, 0.01);
 
   let orient = new CANNON.Quaternion(0, 0, 0, 1);
 
   // Cannon.Cylinder はローカルX軸方向に長い形状。
-  // 見た目モデルに合わせて軸を切り替えられるようにする。
-  if (STICK_COLLIDER_AXIS === "y") {
+  // 棒メッシュの最長軸に合わせて向きを自動で選ぶ。
+  if (longAxis === "y") {
     orient = quatFromEuler(0, 0, Math.PI / 2);
-  } else if (STICK_COLLIDER_AXIS === "z") {
+  } else if (longAxis === "z") {
     orient = quatFromEuler(0, -Math.PI / 2, 0);
   }
 

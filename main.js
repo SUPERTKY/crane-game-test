@@ -858,7 +858,11 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
+<<<<<<< lgvhch-codex/rotate-on-x-axis-by-90-degrees
   // 物理はメッシュの向きに合わせる
+=======
+  // 見た目と同じ向き（物理ボディも回転させない）
+>>>>>>> main
   body.quaternion.copy(stickMesh.quaternion);
 
   world.addBody(body);
@@ -1056,6 +1060,10 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // ✅ 見た目を回転（4本＋箱）
+<<<<<<< lgvhch-codex/rotate-on-x-axis-by-90-degrees
+=======
+// 棒の見た目は回転させない（モデル原点の向きを維持）
+>>>>>>> main
 boxMesh.rotation.y += BOX_YAW;
 
 // ===== 物理：棒（静的・円柱）=====

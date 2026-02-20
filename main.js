@@ -62,7 +62,20 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     vertices.push(new CANNON.Vec3(localV.x, localV.y, localV.z));
   }
 
+  const centroid = new THREE.Vector3();
+  for (const v of vertices) centroid.add(new THREE.Vector3(v.x, v.y, v.z));
+  centroid.multiplyScalar(1 / vertices.length);
+
   const triCount = indexAttr ? indexAttr.count / 3 : posAttr.count / 3;
+  const va = new THREE.Vector3();
+  const vb = new THREE.Vector3();
+  const vc = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const faceCenter = new THREE.Vector3();
+  const toCentroid = new THREE.Vector3();
+
   for (let t = 0; t < triCount; t++) {
     const ia = indexAttr ? indexAttr.getX(t * 3) : t * 3;
     const ib = indexAttr ? indexAttr.getX(t * 3 + 1) : t * 3 + 1;
@@ -72,7 +85,26 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     const b = remap[ib];
     const c = remap[ic];
     if (a === b || b === c || c === a) continue;
-    faces.push([a, b, c]);
+
+    va.set(vertices[a].x, vertices[a].y, vertices[a].z);
+    vb.set(vertices[b].x, vertices[b].y, vertices[b].z);
+    vc.set(vertices[c].x, vertices[c].y, vertices[c].z);
+
+    ab.copy(vb).sub(va);
+    ac.copy(vc).sub(va);
+    normal.copy(ab).cross(ac);
+
+    if (normal.lengthSq() < 1e-12) continue;
+
+    faceCenter.copy(va).add(vb).add(vc).multiplyScalar(1 / 3);
+    toCentroid.copy(centroid).sub(faceCenter);
+
+    // 法線が重心方向（内向き）を向いていたらCCW順を反転する
+    if (normal.dot(toCentroid) > 0) {
+      faces.push([a, c, b]);
+    } else {
+      faces.push([a, b, c]);
+    }
   }
 
   if (vertices.length < 4 || faces.length < 4) return null;
@@ -852,14 +884,19 @@ function makeStickCylinderParamsFromMesh(stickMesh, radiusScale = 0.5) {
   return { radius, height, orient };
 }
 
+const STICK_BODY_ROT_X = Math.PI / 2;
+
 function createStickBody(stickMesh, stickParams) {
   const body = new CANNON.Body({ mass: 0, material: matStick });
   const shape = new CANNON.Cylinder(stickParams.radius, stickParams.radius, stickParams.height, 24);
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-  // 物理はメッシュの向きに合わせる
-  body.quaternion.copy(stickMesh.quaternion);
+  // 見た目はそのままに、物理だけX軸へ90度回転を加える
+  body.quaternion.set(stickMesh.quaternion.x, stickMesh.quaternion.y, stickMesh.quaternion.z, stickMesh.quaternion.w);
+  const physicsRotX90 = quatFromEuler(STICK_BODY_ROT_X, 0, 0);
+  const combinedQuat = body.quaternion.mult(physicsRotX90);
+  body.quaternion.copy(combinedQuat);
 
   world.addBody(body);
   addBodyDebugMeshes(body, 0x00ffff);
@@ -1006,11 +1043,9 @@ scene.add(armGroup);
 // ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-clawLHitboxes = computeClawConvexHitboxes(clawLMesh);
-clawRHitboxes = computeClawConvexHitboxes(clawRMesh);
-
-if (!clawLHitboxes.length) clawLHitboxes = [computeClawFingerBox(clawLMesh)];
-if (!clawRHitboxes.length) clawRHitboxes = [computeClawFingerBox(clawRMesh)];
+// Convex生成由来の法線警告を避けるため、爪は先端Boxを常用する
+clawLHitboxes = [computeClawFingerBox(clawLMesh)];
+clawRHitboxes = [computeClawFingerBox(clawRMesh)];
 
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
@@ -1055,17 +1090,27 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
+// 物理形状の寸法・軸判定は「見た目回転前」の状態で固定
+const sharedStickParams = makeStickCylinderParamsFromMesh(stick1Mesh);
+
+// 棒の見た目モデル回転（z軸90度）
+const STICK_VISUAL_ROT_Z = Math.PI / 2;
+stick1Mesh.rotation.z = STICK_VISUAL_ROT_Z;
+stick2Mesh.rotation.z = STICK_VISUAL_ROT_Z;
+stick3Mesh.rotation.z = STICK_VISUAL_ROT_Z;
+stick4Mesh.rotation.z = STICK_VISUAL_ROT_Z;
+
 // ✅ 見た目を回転（4本＋箱）
 
 boxMesh.rotation.y += BOX_YAW;
 
-// 棒メッシュはGLBの向きをそのまま使う（物理と一致）
+// 棒メッシュ見た目回転 + 物理側X90度補正を併用
 
 // ===== 物理：棒（静的・円柱）=====
-stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1Mesh));
-stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFromMesh(stick2Mesh));
-stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFromMesh(stick3Mesh));
-stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4Mesh));
+stick1Body = createStickBody(stick1Mesh, sharedStickParams);
+stick2Body = createStickBody(stick2Mesh, sharedStickParams);
+stick3Body = createStickBody(stick3Mesh, sharedStickParams);
+stick4Body = createStickBody(stick4Mesh, sharedStickParams);
 
   // ===== 物理：箱（動的）=====
   // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う
@@ -1086,19 +1131,12 @@ stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4M
   boxMesh.position.set(0, topStickY + boxHalfHeight + spawnClearance, 0);
   boxMesh.updateMatrixWorld(true);
 
-  const boxShapes = computeConvexShapesFromRoot(boxMesh);
-  if (boxShapes.length) {
-    for (const shapeDef of boxShapes) {
-      boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
-    }
-  } else {
-    const boxHalf = new CANNON.Vec3(
-      Math.max(boxSize.x / 2, 0.01),
-      Math.max(boxSize.y / 2, 0.01),
-      Math.max(boxSize.z / 2, 0.01)
-    );
-    boxBody.addShape(new CANNON.Box(boxHalf));
-  }
+  const boxHalf = new CANNON.Vec3(
+    Math.max(boxSize.x / 2, 0.01),
+    Math.max(boxSize.y / 2, 0.01),
+    Math.max(boxSize.z / 2, 0.01)
+  );
+  boxBody.addShape(new CANNON.Box(boxHalf));
 
   boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);

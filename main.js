@@ -1060,6 +1060,12 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
+<<<<<<< bzcsfv-codex/fix
+// 物理形状の寸法・軸判定は「見た目回転前」の状態で固定
+const sharedStickParams = makeStickCylinderParamsFromMesh(stick1Mesh);
+
+=======
+>>>>>>> main
 // 棒の見た目モデル回転（z軸90度）
 const STICK_VISUAL_ROT_Z = Math.PI / 2;
 stick1Mesh.rotation.z = STICK_VISUAL_ROT_Z;
@@ -1074,10 +1080,10 @@ boxMesh.rotation.y += BOX_YAW;
 // 棒メッシュ見た目回転 + 物理側X90度補正を併用
 
 // ===== 物理：棒（静的・円柱）=====
-stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1Mesh));
-stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFromMesh(stick2Mesh));
-stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFromMesh(stick3Mesh));
-stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4Mesh));
+stick1Body = createStickBody(stick1Mesh, sharedStickParams);
+stick2Body = createStickBody(stick2Mesh, sharedStickParams);
+stick3Body = createStickBody(stick3Mesh, sharedStickParams);
+stick4Body = createStickBody(stick4Mesh, sharedStickParams);
 
   // ===== 物理：箱（動的）=====
   // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う

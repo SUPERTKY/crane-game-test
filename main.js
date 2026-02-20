@@ -62,7 +62,20 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     vertices.push(new CANNON.Vec3(localV.x, localV.y, localV.z));
   }
 
+  const centroid = new THREE.Vector3();
+  for (const v of vertices) centroid.add(new THREE.Vector3(v.x, v.y, v.z));
+  centroid.multiplyScalar(1 / vertices.length);
+
   const triCount = indexAttr ? indexAttr.count / 3 : posAttr.count / 3;
+  const va = new THREE.Vector3();
+  const vb = new THREE.Vector3();
+  const vc = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const faceCenter = new THREE.Vector3();
+  const toCentroid = new THREE.Vector3();
+
   for (let t = 0; t < triCount; t++) {
     const ia = indexAttr ? indexAttr.getX(t * 3) : t * 3;
     const ib = indexAttr ? indexAttr.getX(t * 3 + 1) : t * 3 + 1;
@@ -72,7 +85,26 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     const b = remap[ib];
     const c = remap[ic];
     if (a === b || b === c || c === a) continue;
-    faces.push([a, b, c]);
+
+    va.set(vertices[a].x, vertices[a].y, vertices[a].z);
+    vb.set(vertices[b].x, vertices[b].y, vertices[b].z);
+    vc.set(vertices[c].x, vertices[c].y, vertices[c].z);
+
+    ab.copy(vb).sub(va);
+    ac.copy(vc).sub(va);
+    normal.copy(ab).cross(ac);
+
+    if (normal.lengthSq() < 1e-12) continue;
+
+    faceCenter.copy(va).add(vb).add(vc).multiplyScalar(1 / 3);
+    toCentroid.copy(centroid).sub(faceCenter);
+
+    // 法線が重心方向（内向き）を向いていたらCCW順を反転する
+    if (normal.dot(toCentroid) > 0) {
+      faces.push([a, c, b]);
+    } else {
+      faces.push([a, b, c]);
+    }
   }
 
   if (vertices.length < 4 || faces.length < 4) return null;
@@ -1060,10 +1092,8 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-
 // 物理形状の寸法・軸判定は「見た目回転前」の状態で固定
 const sharedStickParams = makeStickCylinderParamsFromMesh(stick1Mesh);
-
 
 // 棒の見た目モデル回転（z軸90度）
 const STICK_VISUAL_ROT_Z = Math.PI / 2;

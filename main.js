@@ -1074,10 +1074,12 @@ stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4M
     material: matBox,
     linearDamping: 0.08,
     angularDamping: 0.12,
+    fixedRotation: true,
     allowSleep: false,
     sleepSpeedLimit: 0.15,
     sleepTimeLimit: 0.8,
   });
+  boxBody.angularFactor.set(0, 0, 0);
 
   const boxSize = getBoxSize(boxMesh);
   const boxHalfHeight = Math.max(boxSize.y * 0.5, 0.01);

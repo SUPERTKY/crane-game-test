@@ -1055,6 +1055,18 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
+// 棒を z軸で90度回転（見た目メッシュ自体に焼き込む）
+const STICK_ROT_Z = Math.PI / 2;
+for (const stickMesh of [stick1Mesh, stick2Mesh, stick3Mesh, stick4Mesh]) {
+  stickMesh.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry) return;
+    obj.geometry = obj.geometry.clone();
+    obj.geometry.rotateZ(STICK_ROT_Z);
+    obj.geometry.computeBoundingBox();
+    obj.geometry.computeBoundingSphere();
+  });
+}
+
 // ✅ 見た目を回転（4本＋箱）
 
 boxMesh.rotation.y += BOX_YAW;
@@ -1074,10 +1086,12 @@ stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4M
     material: matBox,
     linearDamping: 0.08,
     angularDamping: 0.12,
+    fixedRotation: true,
     allowSleep: false,
     sleepSpeedLimit: 0.15,
     sleepTimeLimit: 0.8,
   });
+  boxBody.angularFactor.set(0, 0, 0);
 
   const boxSize = getBoxSize(boxMesh);
   const boxHalfHeight = Math.max(boxSize.y * 0.5, 0.01);

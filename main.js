@@ -1043,11 +1043,9 @@ scene.add(armGroup);
 // ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-clawLHitboxes = computeClawConvexHitboxes(clawLMesh);
-clawRHitboxes = computeClawConvexHitboxes(clawRMesh);
-
-if (!clawLHitboxes.length) clawLHitboxes = [computeClawFingerBox(clawLMesh)];
-if (!clawRHitboxes.length) clawRHitboxes = [computeClawFingerBox(clawRMesh)];
+// Convex生成由来の法線警告を避けるため、爪は先端Boxを常用する
+clawLHitboxes = [computeClawFingerBox(clawLMesh)];
+clawRHitboxes = [computeClawFingerBox(clawRMesh)];
 
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
@@ -1135,19 +1133,12 @@ stick4Body = createStickBody(stick4Mesh, sharedStickParams);
   boxMesh.position.set(0, topStickY + boxHalfHeight + spawnClearance, 0);
   boxMesh.updateMatrixWorld(true);
 
-  const boxShapes = computeConvexShapesFromRoot(boxMesh);
-  if (boxShapes.length) {
-    for (const shapeDef of boxShapes) {
-      boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
-    }
-  } else {
-    const boxHalf = new CANNON.Vec3(
-      Math.max(boxSize.x / 2, 0.01),
-      Math.max(boxSize.y / 2, 0.01),
-      Math.max(boxSize.z / 2, 0.01)
-    );
-    boxBody.addShape(new CANNON.Box(boxHalf));
-  }
+  const boxHalf = new CANNON.Vec3(
+    Math.max(boxSize.x / 2, 0.01),
+    Math.max(boxSize.y / 2, 0.01),
+    Math.max(boxSize.z / 2, 0.01)
+  );
+  boxBody.addShape(new CANNON.Box(boxHalf));
 
   boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);

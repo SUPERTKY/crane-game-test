@@ -852,14 +852,19 @@ function makeStickCylinderParamsFromMesh(stickMesh, radiusScale = 0.5) {
   return { radius, height, orient };
 }
 
+const STICK_BODY_ROT_X = Math.PI / 2;
+
 function createStickBody(stickMesh, stickParams) {
   const body = new CANNON.Body({ mass: 0, material: matStick });
   const shape = new CANNON.Cylinder(stickParams.radius, stickParams.radius, stickParams.height, 24);
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-  // 物理はメッシュの向きに合わせる
-  body.quaternion.copy(stickMesh.quaternion);
+  // 見た目はそのままに、物理だけX軸へ90度回転を加える
+  body.quaternion.set(stickMesh.quaternion.x, stickMesh.quaternion.y, stickMesh.quaternion.z, stickMesh.quaternion.w);
+  const physicsRotX90 = quatFromEuler(STICK_BODY_ROT_X, 0, 0);
+  const combinedQuat = body.quaternion.mult(physicsRotX90);
+  body.quaternion.copy(combinedQuat);
 
   world.addBody(body);
   addBodyDebugMeshes(body, 0x00ffff);
@@ -1055,11 +1060,18 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
+// 棒の見た目モデル回転（z軸90度）
+const STICK_VISUAL_ROT_Z = Math.PI / 2;
+stick1Mesh.rotation.z = STICK_VISUAL_ROT_Z;
+stick2Mesh.rotation.z = STICK_VISUAL_ROT_Z;
+stick3Mesh.rotation.z = STICK_VISUAL_ROT_Z;
+stick4Mesh.rotation.z = STICK_VISUAL_ROT_Z;
+
 // ✅ 見た目を回転（4本＋箱）
 
 boxMesh.rotation.y += BOX_YAW;
 
-// 棒メッシュはGLBの向きをそのまま使う（物理と一致）
+// 棒メッシュ見た目回転 + 物理側X90度補正を併用
 
 // ===== 物理：棒（静的・円柱）=====
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1Mesh));
@@ -1074,10 +1086,12 @@ stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4M
     material: matBox,
     linearDamping: 0.08,
     angularDamping: 0.12,
+    fixedRotation: true,
     allowSleep: false,
     sleepSpeedLimit: 0.15,
     sleepTimeLimit: 0.8,
   });
+  boxBody.angularFactor.set(0, 0, 0);
 
   const boxSize = getBoxSize(boxMesh);
   const boxHalfHeight = Math.max(boxSize.y * 0.5, 0.01);

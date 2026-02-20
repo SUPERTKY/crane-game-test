@@ -1060,9 +1060,12 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
+<<<<<<< bzcsfv-codex/fix
 // 物理形状の寸法・軸判定は「見た目回転前」の状態で固定
 const sharedStickParams = makeStickCylinderParamsFromMesh(stick1Mesh);
 
+=======
+>>>>>>> main
 // 棒の見た目モデル回転（z軸90度）
 const STICK_VISUAL_ROT_Z = Math.PI / 2;
 stick1Mesh.rotation.z = STICK_VISUAL_ROT_Z;

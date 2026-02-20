@@ -1055,6 +1055,13 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
+// 棒を z軸で90度回転
+const STICK_ROT_Z = Math.PI / 2;
+stick1Mesh.rotation.z = STICK_ROT_Z;
+stick2Mesh.rotation.z = STICK_ROT_Z;
+stick3Mesh.rotation.z = STICK_ROT_Z;
+stick4Mesh.rotation.z = STICK_ROT_Z;
+
 // ✅ 見た目を回転（4本＋箱）
 
 boxMesh.rotation.y += BOX_YAW;

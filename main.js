@@ -851,8 +851,8 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-  // 棒の見た目回転とは独立させ、物理ボディは回転させない
-  body.quaternion.set(0, 0, 0, 1);
+  // 棒モデルの回転に物理ボディの回転を同期させる
+  body.quaternion.set(stickMesh.quaternion.x, stickMesh.quaternion.y, stickMesh.quaternion.z, stickMesh.quaternion.w);
   body.angularVelocity.set(0, 0, 0);
   body.fixedRotation = true;
   body.updateMassProperties();
@@ -862,8 +862,8 @@ function createStickBody(stickMesh, stickParams) {
   return body;
 }
 
-function rotateStickVisualOnlyX(stickMesh, deltaRad) {
-  // 見た目だけ回転。物理ボディはcreateStickBody側で常に固定回転にしている。
+function rotateStickModelX(stickMesh, deltaRad) {
+  // 棒の3Dモデル（見た目）をX軸回転させる。
   stickMesh.rotation.x += deltaRad;
 }
 
@@ -1056,23 +1056,18 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
+// 見た目の棒モデルをX軸に90度回転（物理にも同期させる）
+rotateStickModelX(stick1Mesh, Math.PI / 2);
+rotateStickModelX(stick2Mesh, Math.PI / 2);
+rotateStickModelX(stick3Mesh, Math.PI / 2);
+rotateStickModelX(stick4Mesh, Math.PI / 2);
+
 // ===== 物理：棒（静的・円柱）=====
-// 見た目回転の前に物理形状を確定し、見た目と物理を同期させない
-const stick1Params = makeStickCylinderParamsFixedX(stick1Mesh);
-const stick2Params = makeStickCylinderParamsFixedX(stick2Mesh);
-const stick3Params = makeStickCylinderParamsFixedX(stick3Mesh);
-const stick4Params = makeStickCylinderParamsFixedX(stick4Mesh);
-
-// 見た目だけ棒モデルをX軸に90度回転
-rotateStickVisualOnlyX(stick1Mesh, Math.PI / 2);
-rotateStickVisualOnlyX(stick2Mesh, Math.PI / 2);
-rotateStickVisualOnlyX(stick3Mesh, Math.PI / 2);
-rotateStickVisualOnlyX(stick4Mesh, Math.PI / 2);
-
-stick1Body = createStickBody(stick1Mesh, stick1Params);
-stick2Body = createStickBody(stick2Mesh, stick2Params);
-stick3Body = createStickBody(stick3Mesh, stick3Params);
-stick4Body = createStickBody(stick4Mesh, stick4Params);
+// 回転後メッシュから物理形状を算出し、回転姿勢も同期させる
+stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
+stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
+stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
+stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

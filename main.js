@@ -136,7 +136,19 @@ function computeClawBoxes(meshRoot, {
 
   return shapes;
 }
+function makeStickCylinderParamsFixedX(stickMesh, radiusScale = 0.5) {
+  stickMesh.updateWorldMatrix(true, true);
+  const s = getBoxSize(stickMesh);
 
+  // 長手 = X（左右方向）
+  const height = Math.max(s.x, 0.01);
+  const radius = Math.max(Math.max(s.y, s.z) * 0.5 * radiusScale, 0.01);
+
+  // CannonのCylinderはXが長手なので回転不要
+  const orient = quatFromEuler(0, 0, 0);
+
+  return { radius, height, orient };
+}
 function computeClawConvexHitboxes(meshRoot) {
   meshRoot.updateMatrixWorld(true);
 
@@ -1059,28 +1071,14 @@ stick4Mesh.position.set(0, highY,  highGap / 2);
 // ✅ 見た目を回転（4本＋箱）
 
 boxMesh.rotation.y += BOX_YAW;
-// ===== 棒を横向きに回す（見た目）=====
-// どの軸が正解かはモデル次第だけど、まずは X を 90° 回して試す
-const STICK_ROT = new THREE.Euler(Math.PI / 2, 0, 0);
 
-stick1Mesh.rotation.copy(STICK_ROT);
-stick2Mesh.rotation.copy(STICK_ROT);
-stick3Mesh.rotation.copy(STICK_ROT);
-stick4Mesh.rotation.copy(STICK_ROT);
-
-// 回転をワールド行列に反映
-stick1Mesh.updateWorldMatrix(true, true);
-stick2Mesh.updateWorldMatrix(true, true);
-stick3Mesh.updateWorldMatrix(true, true);
-stick4Mesh.updateWorldMatrix(true, true);
 // 棒メッシュはGLBの向きをそのまま使う（物理と一致）
 
 // ===== 物理：棒（静的・円柱）=====
-stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFromMesh(stick1Mesh));
-stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFromMesh(stick2Mesh));
-stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFromMesh(stick3Mesh));
-stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFromMesh(stick4Mesh));
-
+stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedZ(stick1Mesh));
+stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedZ(stick2Mesh));
+stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedZ(stick3Mesh));
+stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedZ(stick4Mesh));
   // ===== 物理：箱（動的）=====
   // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う
   boxBody = new CANNON.Body({

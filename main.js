@@ -1056,18 +1056,23 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
+// ===== 物理：棒（静的・円柱）=====
+// 見た目回転の前に物理形状を確定し、見た目と物理を同期させない
+const stick1Params = makeStickCylinderParamsFixedX(stick1Mesh);
+const stick2Params = makeStickCylinderParamsFixedX(stick2Mesh);
+const stick3Params = makeStickCylinderParamsFixedX(stick3Mesh);
+const stick4Params = makeStickCylinderParamsFixedX(stick4Mesh);
+
 // 見た目だけ棒モデルをX軸に90度回転
 rotateStickVisualOnlyX(stick1Mesh, Math.PI / 2);
 rotateStickVisualOnlyX(stick2Mesh, Math.PI / 2);
 rotateStickVisualOnlyX(stick3Mesh, Math.PI / 2);
 rotateStickVisualOnlyX(stick4Mesh, Math.PI / 2);
 
-// ===== 物理：棒（静的・円柱）=====
-// 見た目を回した後のAABBでサイズ計算して、物理コライダーと見た目を一致させる
-stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
-stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
-stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
-stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
+stick1Body = createStickBody(stick1Mesh, stick1Params);
+stick2Body = createStickBody(stick2Mesh, stick2Params);
+stick3Body = createStickBody(stick3Mesh, stick3Params);
+stick4Body = createStickBody(stick4Mesh, stick4Params);
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

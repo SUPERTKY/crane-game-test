@@ -853,10 +853,18 @@ function createStickBody(stickMesh, stickParams) {
 
   // 棒の見た目回転とは独立させ、物理ボディは回転させない
   body.quaternion.set(0, 0, 0, 1);
+  body.angularVelocity.set(0, 0, 0);
+  body.fixedRotation = true;
+  body.updateMassProperties();
 
   world.addBody(body);
   addBodyDebugMeshes(body, 0x00ffff);
   return body;
+}
+
+function rotateStickVisualOnlyZ(stickMesh, deltaRad) {
+  // 見た目だけ回転。物理ボディはcreateStickBody側で常に固定回転にしている。
+  stickMesh.rotation.z += deltaRad;
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1049,10 +1057,10 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // 見た目だけ棒モデルをZ軸に90度回転
-stick1Mesh.rotation.z += Math.PI / 2;
-stick2Mesh.rotation.z += Math.PI / 2;
-stick3Mesh.rotation.z += Math.PI / 2;
-stick4Mesh.rotation.z += Math.PI / 2;
+rotateStickVisualOnlyZ(stick1Mesh, Math.PI / 2);
+rotateStickVisualOnlyZ(stick2Mesh, Math.PI / 2);
+rotateStickVisualOnlyZ(stick3Mesh, Math.PI / 2);
+rotateStickVisualOnlyZ(stick4Mesh, Math.PI / 2);
 
 // ===== 物理：棒（静的・円柱）=====
 // 見た目を回した後のAABBでサイズ計算して、物理コライダーと見た目を一致させる

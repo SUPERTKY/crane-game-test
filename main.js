@@ -862,6 +862,17 @@ function createStickBody(stickMesh, stickParams) {
   return body;
 }
 
+function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
+  // 読み込み直後の姿勢を基準に、見た目回転を毎回明示的に適用する。
+  if (!stickMesh.userData._baseQuat) {
+    stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
+  }
+  const baseQuat = stickMesh.userData._baseQuat;
+  const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(xRad, 0, zRad, "XYZ"));
+  stickMesh.quaternion.copy(baseQuat).multiply(delta);
+  stickMesh.updateMatrixWorld(true);
+}
+
 let armMesh, clawLMesh, clawRMesh, armGroup;
 let clawPivot, clawLPivot, clawRPivot; // ★追加（setClawOpenで使うため）
 function threeVecToCannon(v) { return new CANNON.Vec3(v.x, v.y, v.z); }
@@ -1058,6 +1069,12 @@ stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mes
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
+
+// 3Dモデルだけ追加でZ軸に90度回転（物理は生成済みのため追従しない）
+setStickModelVisualRotation(stick1Mesh, Math.PI / 2, Math.PI / 2);
+setStickModelVisualRotation(stick2Mesh, Math.PI / 2, Math.PI / 2);
+setStickModelVisualRotation(stick3Mesh, Math.PI / 2, Math.PI / 2);
+setStickModelVisualRotation(stick4Mesh, Math.PI / 2, Math.PI / 2);
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

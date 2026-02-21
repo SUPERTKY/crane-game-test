@@ -1062,12 +1062,7 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// 見た目の棒モデルをX軸に90度回転（この姿勢を物理へ同期）
-setStickModelVisualRotation(stick1Mesh, Math.PI / 2, 0);
-setStickModelVisualRotation(stick2Mesh, Math.PI / 2, 0);
-setStickModelVisualRotation(stick3Mesh, Math.PI / 2, 0);
-setStickModelVisualRotation(stick4Mesh, Math.PI / 2, 0);
-
+// 棒の3Dモデル回転は一旦適用しない
 // ===== 物理：棒（静的・円柱）=====
 // 回転後メッシュから物理形状を算出し、回転姿勢も同期させる
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));

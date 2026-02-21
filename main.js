@@ -144,7 +144,7 @@ function makeStickCylinderParamsFixedX(stickMesh, radiusScale = 0.5) {
   const height = Math.max(s.x, 0.01);
   const radius = Math.max(Math.max(s.y, s.z) * 0.5 * radiusScale, 0.01);
 
-  // CannonのCylinderはXが長手なので回転不要
+  // CannonのCylinderはX軸が長手なので回転不要
   const orient = quatFromEuler(0, 0, 0);
 
   return { radius, height, orient };
@@ -1036,19 +1036,18 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// ===== 物理：棒（静的・円柱）=====
-// 物理は回さず、従来向き（X軸）で固定して扱う
-// ※サイズ計算が見た目回転の影響を受けないよう、回転前に作成する
-stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
-stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
-stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
-stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
-
 // 見た目だけ棒モデルをZ軸に90度回転
 stick1Mesh.rotation.z += Math.PI / 2;
 stick2Mesh.rotation.z += Math.PI / 2;
 stick3Mesh.rotation.z += Math.PI / 2;
 stick4Mesh.rotation.z += Math.PI / 2;
+
+// ===== 物理：棒（静的・円柱）=====
+// 見た目を回した後のAABBでサイズ計算して、物理コライダーと見た目を一致させる
+stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
+stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
+stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
+stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

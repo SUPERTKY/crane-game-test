@@ -851,12 +851,21 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-  // 棒の見た目回転とは独立させ、物理ボディは回転させない
-  body.quaternion.set(0, 0, 0, 1);
+  // 棒モデルの回転に物理ボディの回転を同期させる
+  body.quaternion.set(stickMesh.quaternion.x, stickMesh.quaternion.y, stickMesh.quaternion.z, stickMesh.quaternion.w);
+  body.angularVelocity.set(0, 0, 0);
+  body.fixedRotation = true;
+  body.updateMassProperties();
 
   world.addBody(body);
   addBodyDebugMeshes(body, 0x00ffff);
   return body;
+}
+
+function setStickModelRotationX(stickMesh, angleRad) {
+  // 棒の3Dモデル（見た目）をX軸で明示的に回転させる。
+  stickMesh.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), angleRad);
+  stickMesh.updateMatrixWorld(true);
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1048,14 +1057,14 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// 見た目だけ棒モデルをZ軸に90度回転
-stick1Mesh.rotation.z += Math.PI / 2;
-stick2Mesh.rotation.z += Math.PI / 2;
-stick3Mesh.rotation.z += Math.PI / 2;
-stick4Mesh.rotation.z += Math.PI / 2;
+// 見た目の棒モデルをX軸に90度回転（物理にも同期させる）
+setStickModelRotationX(stick1Mesh, Math.PI / 2);
+setStickModelRotationX(stick2Mesh, Math.PI / 2);
+setStickModelRotationX(stick3Mesh, Math.PI / 2);
+setStickModelRotationX(stick4Mesh, Math.PI / 2);
 
 // ===== 物理：棒（静的・円柱）=====
-// 見た目を回した後のAABBでサイズ計算して、物理コライダーと見た目を一致させる
+// 回転後メッシュから物理形状を算出し、回転姿勢も同期させる
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));

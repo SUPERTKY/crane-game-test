@@ -140,12 +140,24 @@ function makeStickCylinderParamsFixedX(stickMesh, radiusScale = 0.5) {
   stickMesh.updateWorldMatrix(true, true);
   const s = getBoxSize(stickMesh);
 
-  // 長手 = X（左右方向）
-  const height = Math.max(s.x, 0.01);
-  const radius = Math.max(Math.max(s.y, s.z) * 0.5 * radiusScale, 0.01);
+  const dims = [s.x, s.y, s.z];
+  const longestAxis = dims.indexOf(Math.max(...dims)); // 0=x, 1=y, 2=z
 
-  // CannonのCylinderはX軸が長手なので回転不要
-  const orient = quatFromEuler(0, 0, 0);
+  // 最長軸をCylinderのheight(長手)にする
+  const height = Math.max(dims[longestAxis], 0.01);
+
+  // 残り2軸から半径を算出（平べったくならないよう大きい方を採用）
+  const radialAxes = [0, 1, 2].filter((axis) => axis !== longestAxis);
+  const radius = Math.max(
+    Math.max(dims[radialAxes[0]], dims[radialAxes[1]]) * 0.5 * radiusScale,
+    0.01,
+  );
+
+  // CannonのCylinderはローカルX軸が長手。
+  // 棒の最長軸に合わせてshapeローカル回転を与える。
+  let orient = quatFromEuler(0, 0, 0);      // X軸
+  if (longestAxis === 1) orient = quatFromEuler(0, 0, Math.PI / 2);   // Y軸
+  if (longestAxis === 2) orient = quatFromEuler(0, -Math.PI / 2, 0);  // Z軸
 
   return { radius, height, orient };
 }

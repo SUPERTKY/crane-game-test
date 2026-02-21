@@ -862,9 +862,10 @@ function createStickBody(stickMesh, stickParams) {
   return body;
 }
 
-function rotateStickModelX(stickMesh, deltaRad) {
-  // 棒の3Dモデル（見た目）をX軸回転させる。
-  stickMesh.rotation.x += deltaRad;
+function setStickModelRotationX(stickMesh, angleRad) {
+  // 棒の3Dモデル（見た目）をX軸で明示的に回転させる。
+  stickMesh.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), angleRad);
+  stickMesh.updateMatrixWorld(true);
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1057,10 +1058,10 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // 見た目の棒モデルをX軸に90度回転（物理にも同期させる）
-rotateStickModelX(stick1Mesh, Math.PI / 2);
-rotateStickModelX(stick2Mesh, Math.PI / 2);
-rotateStickModelX(stick3Mesh, Math.PI / 2);
-rotateStickModelX(stick4Mesh, Math.PI / 2);
+setStickModelRotationX(stick1Mesh, Math.PI / 2);
+setStickModelRotationX(stick2Mesh, Math.PI / 2);
+setStickModelRotationX(stick3Mesh, Math.PI / 2);
+setStickModelRotationX(stick4Mesh, Math.PI / 2);
 
 // ===== 物理：棒（静的・円柱）=====
 // 回転後メッシュから物理形状を算出し、回転姿勢も同期させる

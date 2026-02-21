@@ -862,17 +862,14 @@ function createStickBody(stickMesh, stickParams) {
   return body;
 }
 
-function rotateStickModelX(stickMesh, angleRad) {
-  // 既存姿勢に対してX軸回転を加算し、見た目回転を確実に反映する。
-  const delta = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), angleRad);
-  stickMesh.quaternion.multiply(delta);
-  stickMesh.updateMatrixWorld(true);
-}
-
-function rotateStickModelZ(stickMesh, angleRad) {
-  // 棒の3Dモデル（見た目）だけをZ軸回転させる。
-  const delta = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), angleRad);
-  stickMesh.quaternion.multiply(delta);
+function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
+  // 読み込み直後の姿勢を基準に、見た目回転を毎回明示的に適用する。
+  if (!stickMesh.userData._baseQuat) {
+    stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
+  }
+  const baseQuat = stickMesh.userData._baseQuat;
+  const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(xRad, 0, zRad, "XYZ"));
+  stickMesh.quaternion.copy(baseQuat).multiply(delta);
   stickMesh.updateMatrixWorld(true);
 }
 
@@ -1065,11 +1062,11 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// 見た目の棒モデルをX軸に90度回転（物理にも同期させる）
-rotateStickModelX(stick1Mesh, Math.PI / 2);
-rotateStickModelX(stick2Mesh, Math.PI / 2);
-rotateStickModelX(stick3Mesh, Math.PI / 2);
-rotateStickModelX(stick4Mesh, Math.PI / 2);
+// 見た目の棒モデルをX軸に90度回転（この姿勢を物理へ同期）
+setStickModelVisualRotation(stick1Mesh, Math.PI / 2, 0);
+setStickModelVisualRotation(stick2Mesh, Math.PI / 2, 0);
+setStickModelVisualRotation(stick3Mesh, Math.PI / 2, 0);
+setStickModelVisualRotation(stick4Mesh, Math.PI / 2, 0);
 
 // ===== 物理：棒（静的・円柱）=====
 // 回転後メッシュから物理形状を算出し、回転姿勢も同期させる
@@ -1079,10 +1076,10 @@ stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mes
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
 
 // 3Dモデルだけ追加でZ軸に90度回転（物理は生成済みのため追従しない）
-rotateStickModelZ(stick1Mesh, Math.PI / 2);
-rotateStickModelZ(stick2Mesh, Math.PI / 2);
-rotateStickModelZ(stick3Mesh, Math.PI / 2);
-rotateStickModelZ(stick4Mesh, Math.PI / 2);
+setStickModelVisualRotation(stick1Mesh, Math.PI / 2, Math.PI / 2);
+setStickModelVisualRotation(stick2Mesh, Math.PI / 2, Math.PI / 2);
+setStickModelVisualRotation(stick3Mesh, Math.PI / 2, Math.PI / 2);
+setStickModelVisualRotation(stick4Mesh, Math.PI / 2, Math.PI / 2);
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

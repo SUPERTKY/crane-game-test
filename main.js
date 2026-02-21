@@ -869,6 +869,13 @@ function rotateStickModelX(stickMesh, angleRad) {
   stickMesh.updateMatrixWorld(true);
 }
 
+function rotateStickModelZ(stickMesh, angleRad) {
+  // 棒の3Dモデル（見た目）だけをZ軸回転させる。
+  const delta = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), angleRad);
+  stickMesh.quaternion.multiply(delta);
+  stickMesh.updateMatrixWorld(true);
+}
+
 let armMesh, clawLMesh, clawRMesh, armGroup;
 let clawPivot, clawLPivot, clawRPivot; // ★追加（setClawOpenで使うため）
 function threeVecToCannon(v) { return new CANNON.Vec3(v.x, v.y, v.z); }
@@ -1070,6 +1077,12 @@ stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mes
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
+
+// 3Dモデルだけ追加でZ軸に90度回転（物理は生成済みのため追従しない）
+rotateStickModelZ(stick1Mesh, Math.PI / 2);
+rotateStickModelZ(stick2Mesh, Math.PI / 2);
+rotateStickModelZ(stick3Mesh, Math.PI / 2);
+rotateStickModelZ(stick4Mesh, Math.PI / 2);
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

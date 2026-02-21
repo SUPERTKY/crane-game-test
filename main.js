@@ -144,8 +144,8 @@ function makeStickCylinderParamsFixedX(stickMesh, radiusScale = 0.5) {
   const height = Math.max(s.x, 0.01);
   const radius = Math.max(Math.max(s.y, s.z) * 0.5 * radiusScale, 0.01);
 
-  // CannonのCylinderはXが長手なので回転不要
-  const orient = quatFromEuler(0, 0, 0);
+  // CannonのCylinderはY軸が長手なので、Z回転でX軸方向へ寝かせる
+  const orient = quatFromEuler(0, 0, Math.PI / 2);
 
   return { radius, height, orient };
 }

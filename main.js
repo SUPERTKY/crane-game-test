@@ -1059,7 +1059,20 @@ stick4Mesh.position.set(0, highY,  highGap / 2);
 // ✅ 見た目を回転（4本＋箱）
 
 boxMesh.rotation.y += BOX_YAW;
+// ===== 棒を横向きに回す（見た目）=====
+// どの軸が正解かはモデル次第だけど、まずは X を 90° 回して試す
+const STICK_ROT = new THREE.Euler(Math.PI / 2, 0, 0);
 
+stick1Mesh.rotation.copy(STICK_ROT);
+stick2Mesh.rotation.copy(STICK_ROT);
+stick3Mesh.rotation.copy(STICK_ROT);
+stick4Mesh.rotation.copy(STICK_ROT);
+
+// 回転をワールド行列に反映
+stick1Mesh.updateWorldMatrix(true, true);
+stick2Mesh.updateWorldMatrix(true, true);
+stick3Mesh.updateWorldMatrix(true, true);
+stick4Mesh.updateWorldMatrix(true, true);
 // 棒メッシュはGLBの向きをそのまま使う（物理と一致）
 
 // ===== 物理：棒（静的・円柱）=====

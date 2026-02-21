@@ -1075,10 +1075,10 @@ boxMesh.rotation.y += BOX_YAW;
 // 棒メッシュはGLBの向きをそのまま使う（物理と一致）
 
 // ===== 物理：棒（静的・円柱）=====
-stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedZ(stick1Mesh));
-stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedZ(stick2Mesh));
-stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedZ(stick3Mesh));
-stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedZ(stick4Mesh));
+stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
+stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
+stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
+stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
   // ===== 物理：箱（動的）=====
   // 見た目と一致するよう、モデルメッシュ由来のConvex形状を優先して使う
   boxBody = new CANNON.Body({

@@ -278,6 +278,8 @@ let clawLoosenPulseDone = false;
 let clawLoosenPulseStartT = 0;
 let clawLoosenPulseBaseOpen01 = 0;
 let clawDropPenetrationT = 0;
+let clawCloseBlockedByPressure = false;
+let clawLiftKeepOpenUntilRelease = false;
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -395,6 +397,10 @@ function setClawOpen01(open01) {
     const dampR = levelR === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
     nextR = currentR + softenClosingDelta(targetR - currentR, false, dampR);
   }
+
+  const blockedL = isClosing && levelL === 2 && Math.abs(nextL - currentL) <= 1e-6;
+  const blockedR = isClosing && levelR === 2 && Math.abs(nextR - currentR) <= 1e-6;
+  clawCloseBlockedByPressure = blockedL || blockedR;
 
   if (clawLPivot) clawLPivot.rotation.x = nextL; // ←軸は合うやつに（x/y/z）
   if (clawRPivot) clawRPivot.rotation.x = nextR;
@@ -601,6 +607,8 @@ function startAutoSequence() {
   clawLoosenPulseStartT = 0;
   clawLoosenPulseBaseOpen01 = clawOpen01;
   clawDropPenetrationT = 0;
+  clawCloseBlockedByPressure = false;
+  clawLiftKeepOpenUntilRelease = false;
 }
 
 // ===== つかみConstraintは使わない（接触のみで保持） =====
@@ -1419,6 +1427,7 @@ if (autoStarted) {
       clawLoosenPulseDone = false;
       clawLoosenPulseStartT = 0;
       clawLoosenPulseBaseOpen01 = clawOpen01;
+      clawLiftKeepOpenUntilRelease = clawCloseBlockedByPressure;
     }
 
   } else if (autoStep === 4) {
@@ -1449,11 +1458,20 @@ if (autoStarted) {
         clawLoosenPulseDone = true;
       }
 
-      const targetOpen01 = THREE.MathUtils.clamp(
+      const boxPressingNow = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
+      if (clawLiftKeepOpenUntilRelease && !boxPressingNow) clawLiftKeepOpenUntilRelease = false;
+
+      let targetOpen01 = THREE.MathUtils.clamp(
         clawLoosenPulseBaseOpen01 + CLAW_LOOSEN_PULSE_OPEN_ADD * pulse01,
         0,
         1
       );
+
+      // 圧迫で閉じ停止していた場合、圧迫が消えるまでは持ち上げ中に閉じ方向を禁止
+      if (clawLiftKeepOpenUntilRelease && boxPressingNow) {
+        targetOpen01 = Math.max(targetOpen01, clawOpen01);
+      }
+
       setClawOpen01(targetOpen01);
     }
 

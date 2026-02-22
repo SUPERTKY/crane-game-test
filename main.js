@@ -380,6 +380,7 @@ world.defaultContactMaterial.restitution = 0.0;
 const matStick = new CANNON.Material("stick");
 const matBox = new CANNON.Material("box");
 const matClaw = new CANNON.Material("claw");
+const matCrane = new CANNON.Material("crane");
 
 world.solver.iterations = 20;
 world.solver.tolerance = 0.001;
@@ -402,12 +403,21 @@ world.addContactMaterial(
   })
 );
 
+world.addContactMaterial(
+  new CANNON.ContactMaterial(matCrane, matBox, {
+    friction: 0.28,
+    restitution: 0.0,
+  })
+);
+
+
 const loader = new GLTFLoader();
 
 let boxMesh, stick1Mesh, stick2Mesh, craneMesh;
 let boxBody, stick1Body, stick2Body;
 let stick3Mesh, stick4Mesh;
 let stick3Body, stick4Body;
+let craneBody;
 
 function getBox3(obj3d) {
   return new THREE.Box3().setFromObject(obj3d);
@@ -1042,6 +1052,29 @@ setClawOpen01(0);
   centerToOriginAndGround(craneMesh);
   craneMesh.position.y -= 2;
   scene.add(craneMesh);
+
+  // ===== 物理：クレーン本体（静的・形状自動）=====
+  craneMesh.updateMatrixWorld(true);
+  craneBody = new CANNON.Body({ mass: 0, material: matCrane });
+  const craneShapes = computeConvexShapesFromRoot(craneMesh);
+
+  if (craneShapes.length) {
+    for (const shapeDef of craneShapes) {
+      craneBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
+    }
+  } else {
+    const craneSize = getBoxSize(craneMesh);
+    craneBody.addShape(new CANNON.Box(new CANNON.Vec3(
+      Math.max(craneSize.x / 2, 0.01),
+      Math.max(craneSize.y / 2, 0.01),
+      Math.max(craneSize.z / 2, 0.01)
+    )));
+  }
+
+  craneBody.position.copy(craneMesh.position);
+  craneBody.quaternion.copy(craneMesh.quaternion);
+  world.addBody(craneBody);
+  addBodyDebugMeshes(craneBody, 0x00ff66);
 
   // ===== 棒＆箱（見た目）=====
   // ===== 棒＆箱（見た目）=====

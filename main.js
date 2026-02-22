@@ -16,6 +16,7 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
+const STICK_ROT_X = Math.PI / 2;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -869,8 +870,17 @@ function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
   }
   const baseQuat = stickMesh.userData._baseQuat;
   const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(xRad, 0, zRad, "XYZ"));
-  stickMesh.quaternion.copy(baseQuat).multiply(delta);
+
+  // GLBの初期姿勢に対して「ワールド軸基準」で回転を前置合成する。
+  // これにより、モデル由来のローカル軸向きに依存せず X軸90°回転を確実に反映できる。
+  stickMesh.quaternion.copy(baseQuat);
+  stickMesh.quaternion.premultiply(delta);
   stickMesh.updateMatrixWorld(true);
+}
+
+function cacheStickBaseQuaternion(stickMesh) {
+  // 回転適用前の姿勢を先に固定しておく（後段処理で姿勢が変わっても基準がぶれない）
+  stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1063,10 +1073,14 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // 棒の3DモデルをX軸に90度回転（この姿勢を物理にも同期させる）
-setStickModelVisualRotation(stick1Mesh, Math.PI / 2, 0);
-setStickModelVisualRotation(stick2Mesh, Math.PI / 2, 0);
-setStickModelVisualRotation(stick3Mesh, Math.PI / 2, 0);
-setStickModelVisualRotation(stick4Mesh, Math.PI / 2, 0);
+cacheStickBaseQuaternion(stick1Mesh);
+cacheStickBaseQuaternion(stick2Mesh);
+cacheStickBaseQuaternion(stick3Mesh);
+cacheStickBaseQuaternion(stick4Mesh);
+setStickModelVisualRotation(stick1Mesh, STICK_ROT_X, 0);
+setStickModelVisualRotation(stick2Mesh, STICK_ROT_X, 0);
+setStickModelVisualRotation(stick3Mesh, STICK_ROT_X, 0);
+setStickModelVisualRotation(stick4Mesh, STICK_ROT_X, 0);
 
 // ===== 物理：棒（静的・円柱）=====
 // 回転後メッシュから物理形状を算出し、回転姿勢も同期させる

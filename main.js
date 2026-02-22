@@ -878,6 +878,14 @@ function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
   stickMesh.updateMatrixWorld(true);
 }
 
+function enableStickTransformUpdates(stickMesh) {
+  // glTFノードがmatrix指定で読み込まれた場合、matrixAutoUpdate=false だと
+  // quaternion/rotation を変更しても見た目に反映されないことがある。
+  stickMesh.traverse((obj) => {
+    obj.matrixAutoUpdate = true;
+  });
+}
+
 function cacheStickBaseQuaternion(stickMesh) {
   // 回転適用前の姿勢を先に固定しておく（後段処理で姿勢が変わっても基準がぶれない）
   stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
@@ -1073,6 +1081,10 @@ stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
 // 棒の3DモデルをX軸に90度回転（この姿勢を物理にも同期させる）
+enableStickTransformUpdates(stick1Mesh);
+enableStickTransformUpdates(stick2Mesh);
+enableStickTransformUpdates(stick3Mesh);
+enableStickTransformUpdates(stick4Mesh);
 cacheStickBaseQuaternion(stick1Mesh);
 cacheStickBaseQuaternion(stick2Mesh);
 cacheStickBaseQuaternion(stick3Mesh);

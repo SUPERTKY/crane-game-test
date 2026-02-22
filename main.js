@@ -16,6 +16,8 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
+const STICK_VISUAL_POST_ROT = { x: Math.PI / 2, y: 0, z: 0 };
+const STICK_BODY_POST_ROT = { x: 0, y: 0, z: 0 };
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -851,7 +853,7 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-  // 棒モデルの回転に物理ボディの回転を同期させる
+  // 生成時のみ：棒モデルの姿勢を物理ボディへ同期させる
   body.quaternion.set(stickMesh.quaternion.x, stickMesh.quaternion.y, stickMesh.quaternion.z, stickMesh.quaternion.w);
   body.angularVelocity.set(0, 0, 0);
   body.fixedRotation = true;
@@ -862,15 +864,22 @@ function createStickBody(stickMesh, stickParams) {
   return body;
 }
 
-function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
-  // 読み込み直後の姿勢を基準に、見た目回転を毎回明示的に適用する。
-  if (!stickMesh.userData._baseQuat) {
-    stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
+function applyStickPostSyncRotation(stickMesh, stickBody, visualEuler, bodyEuler) {
+  // 同期後は見た目と物理を独立して回せるようにする
+  if (stickMesh && visualEuler) {
+    const visualDelta = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(visualEuler.x, visualEuler.y, visualEuler.z, "XYZ")
+    );
+    stickMesh.quaternion.multiply(visualDelta);
+    stickMesh.updateMatrixWorld(true);
   }
-  const baseQuat = stickMesh.userData._baseQuat;
-  const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(xRad, 0, zRad, "XYZ"));
-  stickMesh.quaternion.copy(baseQuat).multiply(delta);
-  stickMesh.updateMatrixWorld(true);
+
+  if (stickBody && bodyEuler) {
+    const bodyDelta = quatFromEuler(bodyEuler.x, bodyEuler.y, bodyEuler.z);
+    const nextQuat = stickBody.quaternion.mult(bodyDelta);
+    stickBody.quaternion.copy(nextQuat);
+    stickBody.aabbNeedsUpdate = true;
+  }
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1062,19 +1071,20 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// 棒の3Dモデル回転は一旦適用しない
+// 棒の3Dモデル回転は一旦適用しない（見た目だけの回転処理を無効化）
+
 // ===== 物理：棒（静的・円柱）=====
-// 回転後メッシュから物理形状を算出し、回転姿勢も同期させる
+// まず生成時に1回だけメッシュ姿勢を物理へ同期する
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
 
-// 3Dモデルだけ追加でZ軸に90度回転（物理は生成済みのため追従しない）
-setStickModelVisualRotation(stick1Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick2Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick3Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick4Mesh, Math.PI / 2, Math.PI / 2);
+// 同期後は、見た目と物理を別々の回転で制御する
+applyStickPostSyncRotation(stick1Mesh, stick1Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick2Mesh, stick2Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick3Mesh, stick3Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick4Mesh, stick4Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

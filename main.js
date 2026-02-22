@@ -16,7 +16,7 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
-const STICK_VISUAL_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
+const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
@@ -1080,7 +1080,7 @@ stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mes
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
 
-// 見た目と物理の両方にZ軸90°+X軸90°回転を別々に適用する（同期なし）
+// 見た目はY軸90°、物理は既存設定のまま別々に適用する（同期なし）
 applyStickPostSyncRotation(stick1Mesh, stick1Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
 applyStickPostSyncRotation(stick2Mesh, stick2Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
 applyStickPostSyncRotation(stick3Mesh, stick3Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);

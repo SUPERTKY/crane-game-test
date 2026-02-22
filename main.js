@@ -263,13 +263,19 @@ const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押�
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.0;    // 箱接触中は閉じ方向を停止
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
-const CLAW_LOOSEN_LIFT_START = 0.4;  // 持ち上げ進捗40%を超えたら掴みを緩め始める
-const CLAW_LOOSEN_MAX_OPEN = 0.98;   // 上昇完了時に近づける開き量（1.0で全開）
+const CLAW_LOOSEN_TRIGGER_SEC = 0.2;      // 上昇開始からこの秒数で「ゆるめ」を入れる
+const CLAW_LOOSEN_PULSE_OPEN_ADD = 0.07;  // ほとんど開かない程度の微小な開き量
+const CLAW_LOOSEN_PULSE_OPEN_TIME = 0.08; // 少しだけ開く時間
+const CLAW_LOOSEN_PULSE_CLOSE_TIME = 0.18;// すぐ閉じる時間
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
 let dropStartY = 0;
 let autoStarted = false;
+let clawLoosenPulseActive = false;
+let clawLoosenPulseDone = false;
+let clawLoosenPulseStartT = 0;
+let clawLoosenPulseBaseOpen01 = 0;
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -588,6 +594,10 @@ function startAutoSequence() {
   autoStep = 1;   // 開くから開始
   autoT = 0;
   dropStartY = armGroup.position.y;
+  clawLoosenPulseActive = false;
+  clawLoosenPulseDone = false;
+  clawLoosenPulseStartT = 0;
+  clawLoosenPulseBaseOpen01 = clawOpen01;
 }
 
 // ===== つかみConstraintは使わない（接触のみで保持） =====
@@ -1387,20 +1397,46 @@ if (autoStarted) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
+      clawLoosenPulseActive = false;
+      clawLoosenPulseDone = false;
+      clawLoosenPulseStartT = 0;
+      clawLoosenPulseBaseOpen01 = clawOpen01;
     }
 
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
+    autoT += dt;
     const targetY = dropStartY;
     armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
 
-    // ある程度持ち上げたら、上昇に応じて掴みを徐々に緩める
-    const liftStartY = dropStartY - ARM_DROP_DIST;
-    const liftProgress = THREE.MathUtils.clamp((armGroup.position.y - liftStartY) / Math.max(ARM_DROP_DIST, 1e-6), 0, 1);
-    if (liftProgress > CLAW_LOOSEN_LIFT_START) {
-      const t = (liftProgress - CLAW_LOOSEN_LIFT_START) / (1 - CLAW_LOOSEN_LIFT_START);
-      const loosenOpen01 = THREE.MathUtils.lerp(clawOpen01, CLAW_LOOSEN_MAX_OPEN, t * t);
-      setClawOpen01(Math.max(clawOpen01, loosenOpen01));
+    // 持ち上げて約0.2秒後に、ほんの少し開いてすぐ閉じるパルスを1回だけ入れる
+    if (!clawLoosenPulseDone && !clawLoosenPulseActive && autoT >= CLAW_LOOSEN_TRIGGER_SEC) {
+      clawLoosenPulseActive = true;
+      clawLoosenPulseStartT = autoT;
+      clawLoosenPulseBaseOpen01 = clawOpen01;
+    }
+
+    if (clawLoosenPulseActive) {
+      const elapsed = autoT - clawLoosenPulseStartT;
+      const total = CLAW_LOOSEN_PULSE_OPEN_TIME + CLAW_LOOSEN_PULSE_CLOSE_TIME;
+      let pulse01 = 0;
+
+      if (elapsed <= CLAW_LOOSEN_PULSE_OPEN_TIME) {
+        pulse01 = elapsed / Math.max(CLAW_LOOSEN_PULSE_OPEN_TIME, 1e-6);
+      } else if (elapsed <= total) {
+        const back = (elapsed - CLAW_LOOSEN_PULSE_OPEN_TIME) / Math.max(CLAW_LOOSEN_PULSE_CLOSE_TIME, 1e-6);
+        pulse01 = 1 - back;
+      } else {
+        clawLoosenPulseActive = false;
+        clawLoosenPulseDone = true;
+      }
+
+      const targetOpen01 = THREE.MathUtils.clamp(
+        clawLoosenPulseBaseOpen01 + CLAW_LOOSEN_PULSE_OPEN_ADD * pulse01,
+        0,
+        1
+      );
+      setClawOpen01(targetOpen01);
     }
 
     if (armGroup.position.y >= targetY - 1e-6) {

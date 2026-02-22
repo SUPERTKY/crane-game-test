@@ -863,34 +863,6 @@ function createStickBody(stickMesh, stickParams) {
   return body;
 }
 
-function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
-  // 読み込み直後の姿勢を基準に、見た目回転を毎回明示的に適用する。
-  if (!stickMesh.userData._baseQuat) {
-    stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
-  }
-  const baseQuat = stickMesh.userData._baseQuat;
-  const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(xRad, 0, zRad, "XYZ"));
-
-  // GLBの初期姿勢に対して「ワールド軸基準」で回転を前置合成する。
-  // これにより、モデル由来のローカル軸向きに依存せず X軸90°回転を確実に反映できる。
-  stickMesh.quaternion.copy(baseQuat);
-  stickMesh.quaternion.premultiply(delta);
-  stickMesh.updateMatrixWorld(true);
-}
-
-function enableStickTransformUpdates(stickMesh) {
-  // glTFノードがmatrix指定で読み込まれた場合、matrixAutoUpdate=false だと
-  // quaternion/rotation を変更しても見た目に反映されないことがある。
-  stickMesh.traverse((obj) => {
-    obj.matrixAutoUpdate = true;
-  });
-}
-
-function cacheStickBaseQuaternion(stickMesh) {
-  // 回転適用前の姿勢を先に固定しておく（後段処理で姿勢が変わっても基準がぶれない）
-  stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
-}
-
 let armMesh, clawLMesh, clawRMesh, armGroup;
 let clawPivot, clawLPivot, clawRPivot; // ★追加（setClawOpenで使うため）
 function threeVecToCannon(v) { return new CANNON.Vec3(v.x, v.y, v.z); }
@@ -1080,19 +1052,7 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// 棒の3DモデルをX軸に90度回転（この姿勢を物理にも同期させる）
-enableStickTransformUpdates(stick1Mesh);
-enableStickTransformUpdates(stick2Mesh);
-enableStickTransformUpdates(stick3Mesh);
-enableStickTransformUpdates(stick4Mesh);
-cacheStickBaseQuaternion(stick1Mesh);
-cacheStickBaseQuaternion(stick2Mesh);
-cacheStickBaseQuaternion(stick3Mesh);
-cacheStickBaseQuaternion(stick4Mesh);
-setStickModelVisualRotation(stick1Mesh, STICK_ROT_X, 0);
-setStickModelVisualRotation(stick2Mesh, STICK_ROT_X, 0);
-setStickModelVisualRotation(stick3Mesh, STICK_ROT_X, 0);
-setStickModelVisualRotation(stick4Mesh, STICK_ROT_X, 0);
+// 棒の3Dモデル回転は一旦適用しない（見た目だけの回転処理を無効化）
 
 // ===== 物理：棒（静的・円柱）=====
 // 回転後メッシュから物理形状を算出し、回転姿勢も同期させる

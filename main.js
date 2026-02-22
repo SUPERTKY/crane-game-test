@@ -260,6 +260,11 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
+const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
+const CLAW_CLOSE_DAMP_BOX = 0.0;    // 箱接触中は閉じ方向を停止
+const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
+const CLAW_LOOSEN_LIFT_START = 0.4;  // 持ち上げ進捗40%を超えたら掴みを緩め始める
+const CLAW_LOOSEN_MAX_OPEN = 0.98;   // 上昇完了時に近づける開き量（1.0で全開）
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -326,17 +331,32 @@ arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
-function isClawBodyPressing(body) {
-  if (!body) return false;
+function getClawContactLevel(body) {
+  // 0: 接触なし / 1: 箱以外に接触 / 2: 箱に接触
+  if (!body) return 0;
 
+  let level = 0;
   for (const c of world.contacts) {
     if (c.bi !== body && c.bj !== body) continue;
 
     const other = c.bi === body ? c.bj : c.bi;
-    if (other && other !== armBody) return true;
+    if (!other || other === armBody) continue;
+    if (other === boxBody) return 2;
+    level = Math.max(level, 1);
   }
-  return false;
+
+  return level;
 }
+
+function softenClosingDelta(delta, isClosingPositive, damp) {
+  // 閉じ方向の成分だけを減衰し、開き方向はそのまま通す
+  const closingPart = isClosingPositive ? Math.max(delta, 0) : Math.min(delta, 0);
+  const openingPart = delta - closingPart;
+  return openingPart + closingPart * damp;
+}
+
+let clawContactHoldL = 0;
+let clawContactHoldR = 0;
 
 function setClawOpen01(open01) {
   // 0=閉, 1=開
@@ -347,16 +367,29 @@ function setClawOpen01(open01) {
   const targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
   const targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
 
-  // 閉じる方向でめり込みそうなら、その側だけ回転停止
-  const stopL = isClosing && isClawBodyPressing(clawLBody);
-  const stopR = isClosing && isClawBodyPressing(clawRBody);
+  const currentL = clawLPivot ? clawLPivot.rotation.x : targetL;
+  const currentR = clawRPivot ? clawRPivot.rotation.x : targetR;
 
-  if (clawLPivot) {
-    clawLPivot.rotation.x = stopL ? clawLPivot.rotation.x : targetL; // ←軸は合うやつに（x/y/z）
+  const levelL = getClawContactLevel(clawLBody);
+  const levelR = getClawContactLevel(clawRBody);
+
+  clawContactHoldL = levelL > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
+  clawContactHoldR = levelR > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
+
+  let nextL = targetL;
+  let nextR = targetR;
+
+  if (isClosing && clawContactHoldL > 0) {
+    const dampL = levelL === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
+    nextL = currentL + softenClosingDelta(targetL - currentL, true, dampL);
   }
-  if (clawRPivot) {
-    clawRPivot.rotation.x = stopR ? clawRPivot.rotation.x : targetR;
+  if (isClosing && clawContactHoldR > 0) {
+    const dampR = levelR === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
+    nextR = currentR + softenClosingDelta(targetR - currentR, false, dampR);
   }
+
+  if (clawLPivot) clawLPivot.rotation.x = nextL; // ←軸は合うやつに（x/y/z）
+  if (clawRPivot) clawRPivot.rotation.x = nextR;
 
   clawOpen01 = nextOpen01;
 }
@@ -1360,6 +1393,16 @@ if (autoStarted) {
     // ===== ステップ4: アームを元の高さまで上げる =====
     const targetY = dropStartY;
     armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
+
+    // ある程度持ち上げたら、上昇に応じて掴みを徐々に緩める
+    const liftStartY = dropStartY - ARM_DROP_DIST;
+    const liftProgress = THREE.MathUtils.clamp((armGroup.position.y - liftStartY) / Math.max(ARM_DROP_DIST, 1e-6), 0, 1);
+    if (liftProgress > CLAW_LOOSEN_LIFT_START) {
+      const t = (liftProgress - CLAW_LOOSEN_LIFT_START) / (1 - CLAW_LOOSEN_LIFT_START);
+      const loosenOpen01 = THREE.MathUtils.lerp(clawOpen01, CLAW_LOOSEN_MAX_OPEN, t * t);
+      setClawOpen01(Math.max(clawOpen01, loosenOpen01));
+    }
+
     if (armGroup.position.y >= targetY - 1e-6) {
       armGroup.position.y = targetY;
       autoStep = 5;

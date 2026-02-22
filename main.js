@@ -17,7 +17,7 @@ const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
 const STICK_VISUAL_POST_ROT = { x: Math.PI / 2, y: 0, z: 0 };
-const STICK_BODY_POST_ROT = { x: 0, y: 0, z: 0 };
+const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: 0 };
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -853,8 +853,8 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-  // 生成時のみ：棒モデルの姿勢を物理ボディへ同期させる
-  body.quaternion.set(stickMesh.quaternion.x, stickMesh.quaternion.y, stickMesh.quaternion.z, stickMesh.quaternion.w);
+  // 棒の姿勢は同期しない（見た目と物理を独立管理）
+  body.quaternion.set(0, 0, 0, 1);
   body.angularVelocity.set(0, 0, 0);
   body.fixedRotation = true;
   body.updateMassProperties();
@@ -1074,13 +1074,13 @@ stick4Mesh.position.set(0, highY,  highGap / 2);
 // 棒の3Dモデル回転は一旦適用しない（見た目だけの回転処理を無効化）
 
 // ===== 物理：棒（静的・円柱）=====
-// まず生成時に1回だけメッシュ姿勢を物理へ同期する
+// 先に棒の物理ボディを生成（見た目姿勢とは同期しない）
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
 
-// 同期後は、見た目と物理を別々の回転で制御する
+// 見た目と物理の両方に同じX軸90°回転を別々に適用する（同期なし）
 applyStickPostSyncRotation(stick1Mesh, stick1Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
 applyStickPostSyncRotation(stick2Mesh, stick2Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
 applyStickPostSyncRotation(stick3Mesh, stick3Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);

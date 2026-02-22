@@ -326,13 +326,39 @@ arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
+function isClawBodyPressing(body) {
+  if (!body) return false;
+
+  for (const c of world.contacts) {
+    if (c.bi !== body && c.bj !== body) continue;
+
+    const other = c.bi === body ? c.bj : c.bi;
+    if (other && other !== armBody) return true;
+  }
+  return false;
+}
+
 function setClawOpen01(open01) {
   // 0=閉, 1=開
-  const l = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, open01);
-  const r = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, open01);
+  const nextOpen01 = THREE.MathUtils.clamp(open01, 0, 1);
+  const prevOpen01 = clawOpen01;
+  const isClosing = nextOpen01 < prevOpen01;
 
-  clawLPivot.rotation.x = l; // ←軸は合うやつに（x/y/z）
-  clawRPivot.rotation.x = r;
+  const targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
+  const targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
+
+  // 閉じる方向でめり込みそうなら、その側だけ回転停止
+  const stopL = isClosing && isClawBodyPressing(clawLBody);
+  const stopR = isClosing && isClawBodyPressing(clawRBody);
+
+  if (clawLPivot) {
+    clawLPivot.rotation.x = stopL ? clawLPivot.rotation.x : targetL; // ←軸は合うやつに（x/y/z）
+  }
+  if (clawRPivot) {
+    clawRPivot.rotation.x = stopR ? clawRPivot.rotation.x : targetR;
+  }
+
+  clawOpen01 = nextOpen01;
 }
 
 

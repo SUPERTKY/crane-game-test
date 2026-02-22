@@ -869,7 +869,11 @@ function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
   }
   const baseQuat = stickMesh.userData._baseQuat;
   const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(xRad, 0, zRad, "XYZ"));
-  stickMesh.quaternion.copy(baseQuat).multiply(delta);
+
+  // GLBの初期姿勢に対して「ワールド軸基準」で回転を前置合成する。
+  // これにより、モデル由来のローカル軸向きに依存せず X軸90°回転を確実に反映できる。
+  stickMesh.quaternion.copy(baseQuat);
+  stickMesh.quaternion.premultiply(delta);
   stickMesh.updateMatrixWorld(true);
 }
 
@@ -1062,19 +1066,18 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// 棒の3Dモデル回転は一旦適用しない
+// 棒の3DモデルをX軸に90度回転（この姿勢を物理にも同期させる）
+setStickModelVisualRotation(stick1Mesh, Math.PI / 2, 0);
+setStickModelVisualRotation(stick2Mesh, Math.PI / 2, 0);
+setStickModelVisualRotation(stick3Mesh, Math.PI / 2, 0);
+setStickModelVisualRotation(stick4Mesh, Math.PI / 2, 0);
+
 // ===== 物理：棒（静的・円柱）=====
 // 回転後メッシュから物理形状を算出し、回転姿勢も同期させる
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
-
-// 3Dモデルだけ追加でZ軸に90度回転（物理は生成済みのため追従しない）
-setStickModelVisualRotation(stick1Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick2Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick3Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick4Mesh, Math.PI / 2, Math.PI / 2);
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

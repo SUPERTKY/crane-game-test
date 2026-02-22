@@ -268,6 +268,7 @@ const CLAW_LOOSEN_PULSE_OPEN_ADD = 0.07;  // ほとんど開かない程度の�
 const CLAW_LOOSEN_PULSE_OPEN_TIME = 0.08; // 少しだけ開く時間
 const CLAW_LOOSEN_PULSE_CLOSE_TIME = 0.18;// すぐ閉じる時間
 const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
+const CLAW_LIFT_PRESSURE_RELIEF_OPEN_SPEED = 0.12; // 持ち上げ圧迫中は毎秒この量だけ追加で少し開く
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -1467,9 +1468,14 @@ if (autoStarted) {
         1
       );
 
-      // 圧迫で閉じ停止していた場合、圧迫が消えるまでは持ち上げ中に閉じ方向を禁止
+      // 圧迫で閉じ停止していた場合、圧迫が消えるまでは持ち上げ中に閉じず、少しだけ追加で開く
       if (clawLiftKeepOpenUntilRelease && boxPressingNow) {
-        targetOpen01 = Math.max(targetOpen01, clawOpen01);
+        const reliefOpen01 = THREE.MathUtils.clamp(
+          clawOpen01 + CLAW_LIFT_PRESSURE_RELIEF_OPEN_SPEED * dt,
+          0,
+          1
+        );
+        targetOpen01 = Math.max(targetOpen01, reliefOpen01);
       }
 
       setClawOpen01(targetOpen01);

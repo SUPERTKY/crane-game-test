@@ -16,6 +16,8 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
+const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
+const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -258,11 +260,24 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
+const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
+const CLAW_CLOSE_DAMP_BOX = 0.0;    // 箱接触中は閉じ方向を停止
+const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
+const CLAW_LOOSEN_TRIGGER_SEC = 0.2;      // 上昇開始からこの秒数で「ゆるめ」を入れる
+const CLAW_LOOSEN_PULSE_OPEN_ADD = 0.07;  // ほとんど開かない程度の微小な開き量
+const CLAW_LOOSEN_PULSE_OPEN_TIME = 0.08; // 少しだけ開く時間
+const CLAW_LOOSEN_PULSE_CLOSE_TIME = 0.18;// すぐ閉じる時間
+const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
 let dropStartY = 0;
 let autoStarted = false;
+let clawLoosenPulseActive = false;
+let clawLoosenPulseDone = false;
+let clawLoosenPulseStartT = 0;
+let clawLoosenPulseBaseOpen01 = 0;
+let clawDropPenetrationT = 0;
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -324,13 +339,67 @@ arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
+function getClawContactLevel(body) {
+  // 0: 接触なし / 1: 箱以外に接触 / 2: 箱に接触
+  if (!body) return 0;
+
+  let level = 0;
+  for (const c of world.contacts) {
+    if (c.bi !== body && c.bj !== body) continue;
+
+    const other = c.bi === body ? c.bj : c.bi;
+    if (!other || other === armBody) continue;
+    if (other === boxBody) return 2;
+    level = Math.max(level, 1);
+  }
+
+  return level;
+}
+
+function softenClosingDelta(delta, isClosingPositive, damp) {
+  // 閉じ方向の成分だけを減衰し、開き方向はそのまま通す
+  const closingPart = isClosingPositive ? Math.max(delta, 0) : Math.min(delta, 0);
+  const openingPart = delta - closingPart;
+  return openingPart + closingPart * damp;
+}
+
+let clawContactHoldL = 0;
+let clawContactHoldR = 0;
+
 function setClawOpen01(open01) {
   // 0=閉, 1=開
-  const l = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, open01);
-  const r = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, open01);
+  const nextOpen01 = THREE.MathUtils.clamp(open01, 0, 1);
+  const prevOpen01 = clawOpen01;
+  const isClosing = nextOpen01 < prevOpen01;
 
-  clawLPivot.rotation.x = l; // ←軸は合うやつに（x/y/z）
-  clawRPivot.rotation.x = r;
+  const targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
+  const targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
+
+  const currentL = clawLPivot ? clawLPivot.rotation.x : targetL;
+  const currentR = clawRPivot ? clawRPivot.rotation.x : targetR;
+
+  const levelL = getClawContactLevel(clawLBody);
+  const levelR = getClawContactLevel(clawRBody);
+
+  clawContactHoldL = levelL > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
+  clawContactHoldR = levelR > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
+
+  let nextL = targetL;
+  let nextR = targetR;
+
+  if (isClosing && clawContactHoldL > 0) {
+    const dampL = levelL === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
+    nextL = currentL + softenClosingDelta(targetL - currentL, true, dampL);
+  }
+  if (isClosing && clawContactHoldR > 0) {
+    const dampR = levelR === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
+    nextR = currentR + softenClosingDelta(targetR - currentR, false, dampR);
+  }
+
+  if (clawLPivot) clawLPivot.rotation.x = nextL; // ←軸は合うやつに（x/y/z）
+  if (clawRPivot) clawRPivot.rotation.x = nextR;
+
+  clawOpen01 = nextOpen01;
 }
 
 
@@ -378,6 +447,7 @@ world.defaultContactMaterial.restitution = 0.0;
 const matStick = new CANNON.Material("stick");
 const matBox = new CANNON.Material("box");
 const matClaw = new CANNON.Material("claw");
+const matCrane = new CANNON.Material("crane");
 
 world.solver.iterations = 20;
 world.solver.tolerance = 0.001;
@@ -400,12 +470,21 @@ world.addContactMaterial(
   })
 );
 
+world.addContactMaterial(
+  new CANNON.ContactMaterial(matCrane, matBox, {
+    friction: 0.28,
+    restitution: 0.0,
+  })
+);
+
+
 const loader = new GLTFLoader();
 
 let boxMesh, stick1Mesh, stick2Mesh, craneMesh;
 let boxBody, stick1Body, stick2Body;
 let stick3Mesh, stick4Mesh;
 let stick3Body, stick4Body;
+let craneBody;
 
 function getBox3(obj3d) {
   return new THREE.Box3().setFromObject(obj3d);
@@ -517,6 +596,11 @@ function startAutoSequence() {
   autoStep = 1;   // 開くから開始
   autoT = 0;
   dropStartY = armGroup.position.y;
+  clawLoosenPulseActive = false;
+  clawLoosenPulseDone = false;
+  clawLoosenPulseStartT = 0;
+  clawLoosenPulseBaseOpen01 = clawOpen01;
+  clawDropPenetrationT = 0;
 }
 
 // ===== つかみConstraintは使わない（接触のみで保持） =====
@@ -851,8 +935,8 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-  // 棒モデルの回転に物理ボディの回転を同期させる
-  body.quaternion.set(stickMesh.quaternion.x, stickMesh.quaternion.y, stickMesh.quaternion.z, stickMesh.quaternion.w);
+  // 棒の姿勢は同期しない（見た目と物理を独立管理）
+  body.quaternion.set(0, 0, 0, 1);
   body.angularVelocity.set(0, 0, 0);
   body.fixedRotation = true;
   body.updateMassProperties();
@@ -862,15 +946,22 @@ function createStickBody(stickMesh, stickParams) {
   return body;
 }
 
-function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
-  // 読み込み直後の姿勢を基準に、見た目回転を毎回明示的に適用する。
-  if (!stickMesh.userData._baseQuat) {
-    stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
+function applyStickPostSyncRotation(stickMesh, stickBody, visualEuler, bodyEuler) {
+  // 同期後は見た目と物理を独立して回せるようにする
+  if (stickMesh && visualEuler) {
+    const visualDelta = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(visualEuler.x, visualEuler.y, visualEuler.z, "XYZ")
+    );
+    stickMesh.quaternion.multiply(visualDelta);
+    stickMesh.updateMatrixWorld(true);
   }
-  const baseQuat = stickMesh.userData._baseQuat;
-  const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(xRad, 0, zRad, "XYZ"));
-  stickMesh.quaternion.copy(baseQuat).multiply(delta);
-  stickMesh.updateMatrixWorld(true);
+
+  if (stickBody && bodyEuler) {
+    const bodyDelta = quatFromEuler(bodyEuler.x, bodyEuler.y, bodyEuler.z);
+    const nextQuat = stickBody.quaternion.mult(bodyDelta);
+    stickBody.quaternion.copy(nextQuat);
+    stickBody.aabbNeedsUpdate = true;
+  }
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1034,6 +1125,29 @@ setClawOpen01(0);
   craneMesh.position.y -= 2;
   scene.add(craneMesh);
 
+  // ===== 物理：クレーン本体（静的・形状自動）=====
+  craneMesh.updateMatrixWorld(true);
+  craneBody = new CANNON.Body({ mass: 0, material: matCrane });
+  const craneShapes = computeConvexShapesFromRoot(craneMesh);
+
+  if (craneShapes.length) {
+    for (const shapeDef of craneShapes) {
+      craneBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
+    }
+  } else {
+    const craneSize = getBoxSize(craneMesh);
+    craneBody.addShape(new CANNON.Box(new CANNON.Vec3(
+      Math.max(craneSize.x / 2, 0.01),
+      Math.max(craneSize.y / 2, 0.01),
+      Math.max(craneSize.z / 2, 0.01)
+    )));
+  }
+
+  craneBody.position.copy(craneMesh.position);
+  craneBody.quaternion.copy(craneMesh.quaternion);
+  world.addBody(craneBody);
+  addBodyDebugMeshes(craneBody, 0x00ff66);
+
   // ===== 棒＆箱（見た目）=====
   // ===== 棒＆箱（見た目）=====
 stick1Mesh = stickGltf.scene.clone(true);
@@ -1062,19 +1176,20 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// 棒の3Dモデル回転は一旦適用しない
+// 棒の3Dモデル回転は一旦適用しない（見た目だけの回転処理を無効化）
+
 // ===== 物理：棒（静的・円柱）=====
-// 回転後メッシュから物理形状を算出し、回転姿勢も同期させる
+// 先に棒の物理ボディを生成（見た目姿勢とは同期しない）
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
 
-// 3Dモデルだけ追加でZ軸に90度回転（物理は生成済みのため追従しない）
-setStickModelVisualRotation(stick1Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick2Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick3Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick4Mesh, Math.PI / 2, Math.PI / 2);
+// 見た目はY軸90°、物理は既存設定のまま別々に適用する（同期なし）
+applyStickPostSyncRotation(stick1Mesh, stick1Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick2Mesh, stick2Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick3Mesh, stick3Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick4Mesh, stick4Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;
@@ -1268,14 +1383,29 @@ if (autoStarted) {
     // ===== ステップ1: 爪を開く =====
     autoT += dt;
     setClawOpen01(Math.min(autoT / CLAW_OPEN_TIME, 1));
-    if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; }
+    if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; clawDropPenetrationT = 0; }
 
   } else if (autoStep === 2) {
     // ===== ステップ2: アームを下げる =====
     const targetY = dropStartY - ARM_DROP_DIST;
-    const dropSpeed = isClawPressingSomething() ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
+    const pressing = isClawPressingSomething();
+    const boxPressing = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
+    const dropSpeed = pressing ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
     armGroup.position.y = Math.max(targetY, armGroup.position.y - dropSpeed * dt);
-    if (armGroup.position.y <= targetY + 1e-6) { autoStep = 3; autoT = 0; }
+
+    // 降下中に「刺さり状態」が0.2秒以上続いたら、これ以上押し込まず掴み工程へ移行
+    if (boxPressing && pressing) clawDropPenetrationT += dt;
+    else clawDropPenetrationT = 0;
+
+    if (clawDropPenetrationT >= CLAW_DROP_PENETRATION_ABORT_SEC) {
+      autoStep = 3;
+      autoT = 0;
+      clawDropPenetrationT = 0;
+    } else if (armGroup.position.y <= targetY + 1e-6) {
+      autoStep = 3;
+      autoT = 0;
+      clawDropPenetrationT = 0;
+    }
 
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
@@ -1285,12 +1415,48 @@ if (autoStarted) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
+      clawLoosenPulseActive = false;
+      clawLoosenPulseDone = false;
+      clawLoosenPulseStartT = 0;
+      clawLoosenPulseBaseOpen01 = clawOpen01;
     }
 
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
+    autoT += dt;
     const targetY = dropStartY;
     armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
+
+    // 持ち上げて約0.2秒後に、ほんの少し開いてすぐ閉じるパルスを1回だけ入れる
+    if (!clawLoosenPulseDone && !clawLoosenPulseActive && autoT >= CLAW_LOOSEN_TRIGGER_SEC) {
+      clawLoosenPulseActive = true;
+      clawLoosenPulseStartT = autoT;
+      clawLoosenPulseBaseOpen01 = clawOpen01;
+    }
+
+    if (clawLoosenPulseActive) {
+      const elapsed = autoT - clawLoosenPulseStartT;
+      const total = CLAW_LOOSEN_PULSE_OPEN_TIME + CLAW_LOOSEN_PULSE_CLOSE_TIME;
+      let pulse01 = 0;
+
+      if (elapsed <= CLAW_LOOSEN_PULSE_OPEN_TIME) {
+        pulse01 = elapsed / Math.max(CLAW_LOOSEN_PULSE_OPEN_TIME, 1e-6);
+      } else if (elapsed <= total) {
+        const back = (elapsed - CLAW_LOOSEN_PULSE_OPEN_TIME) / Math.max(CLAW_LOOSEN_PULSE_CLOSE_TIME, 1e-6);
+        pulse01 = 1 - back;
+      } else {
+        clawLoosenPulseActive = false;
+        clawLoosenPulseDone = true;
+      }
+
+      const targetOpen01 = THREE.MathUtils.clamp(
+        clawLoosenPulseBaseOpen01 + CLAW_LOOSEN_PULSE_OPEN_ADD * pulse01,
+        0,
+        1
+      );
+      setClawOpen01(targetOpen01);
+    }
+
     if (armGroup.position.y >= targetY - 1e-6) {
       armGroup.position.y = targetY;
       autoStep = 5;

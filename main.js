@@ -267,6 +267,7 @@ const CLAW_LOOSEN_TRIGGER_SEC = 0.2;      // 上昇開始からこの秒数で�
 const CLAW_LOOSEN_PULSE_OPEN_ADD = 0.07;  // ほとんど開かない程度の微小な開き量
 const CLAW_LOOSEN_PULSE_OPEN_TIME = 0.08; // 少しだけ開く時間
 const CLAW_LOOSEN_PULSE_CLOSE_TIME = 0.18;// すぐ閉じる時間
+const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -276,6 +277,9 @@ let clawLoosenPulseActive = false;
 let clawLoosenPulseDone = false;
 let clawLoosenPulseStartT = 0;
 let clawLoosenPulseBaseOpen01 = 0;
+let clawDropPenetrationT = 0;
+let clawCloseBlockedByPressure = false;
+let clawLiftKeepOpenUntilRelease = false;
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -393,6 +397,10 @@ function setClawOpen01(open01) {
     const dampR = levelR === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
     nextR = currentR + softenClosingDelta(targetR - currentR, false, dampR);
   }
+
+  const blockedL = isClosing && levelL === 2 && Math.abs(nextL - currentL) <= 1e-6;
+  const blockedR = isClosing && levelR === 2 && Math.abs(nextR - currentR) <= 1e-6;
+  clawCloseBlockedByPressure = blockedL || blockedR;
 
   if (clawLPivot) clawLPivot.rotation.x = nextL; // ←軸は合うやつに（x/y/z）
   if (clawRPivot) clawRPivot.rotation.x = nextR;
@@ -598,6 +606,9 @@ function startAutoSequence() {
   clawLoosenPulseDone = false;
   clawLoosenPulseStartT = 0;
   clawLoosenPulseBaseOpen01 = clawOpen01;
+  clawDropPenetrationT = 0;
+  clawCloseBlockedByPressure = false;
+  clawLiftKeepOpenUntilRelease = false;
 }
 
 // ===== つかみConstraintは使わない（接触のみで保持） =====
@@ -1380,14 +1391,29 @@ if (autoStarted) {
     // ===== ステップ1: 爪を開く =====
     autoT += dt;
     setClawOpen01(Math.min(autoT / CLAW_OPEN_TIME, 1));
-    if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; }
+    if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; clawDropPenetrationT = 0; }
 
   } else if (autoStep === 2) {
     // ===== ステップ2: アームを下げる =====
     const targetY = dropStartY - ARM_DROP_DIST;
-    const dropSpeed = isClawPressingSomething() ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
+    const pressing = isClawPressingSomething();
+    const boxPressing = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
+    const dropSpeed = pressing ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
     armGroup.position.y = Math.max(targetY, armGroup.position.y - dropSpeed * dt);
-    if (armGroup.position.y <= targetY + 1e-6) { autoStep = 3; autoT = 0; }
+
+    // 降下中に「刺さり状態」が0.2秒以上続いたら、これ以上押し込まず掴み工程へ移行
+    if (boxPressing && pressing) clawDropPenetrationT += dt;
+    else clawDropPenetrationT = 0;
+
+    if (clawDropPenetrationT >= CLAW_DROP_PENETRATION_ABORT_SEC) {
+      autoStep = 3;
+      autoT = 0;
+      clawDropPenetrationT = 0;
+    } else if (armGroup.position.y <= targetY + 1e-6) {
+      autoStep = 3;
+      autoT = 0;
+      clawDropPenetrationT = 0;
+    }
 
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
@@ -1401,6 +1427,7 @@ if (autoStarted) {
       clawLoosenPulseDone = false;
       clawLoosenPulseStartT = 0;
       clawLoosenPulseBaseOpen01 = clawOpen01;
+      clawLiftKeepOpenUntilRelease = clawCloseBlockedByPressure;
     }
 
   } else if (autoStep === 4) {
@@ -1431,11 +1458,20 @@ if (autoStarted) {
         clawLoosenPulseDone = true;
       }
 
-      const targetOpen01 = THREE.MathUtils.clamp(
+      const boxPressingNow = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
+      if (clawLiftKeepOpenUntilRelease && !boxPressingNow) clawLiftKeepOpenUntilRelease = false;
+
+      let targetOpen01 = THREE.MathUtils.clamp(
         clawLoosenPulseBaseOpen01 + CLAW_LOOSEN_PULSE_OPEN_ADD * pulse01,
         0,
         1
       );
+
+      // 圧迫で閉じ停止していた場合、圧迫が消えるまでは持ち上げ中に閉じ方向を禁止
+      if (clawLiftKeepOpenUntilRelease && boxPressingNow) {
+        targetOpen01 = Math.max(targetOpen01, clawOpen01);
+      }
+
       setClawOpen01(targetOpen01);
     }
 

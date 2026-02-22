@@ -16,6 +16,8 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
+const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
+const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -324,13 +326,39 @@ arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
+function isClawBodyPressing(body) {
+  if (!body) return false;
+
+  for (const c of world.contacts) {
+    if (c.bi !== body && c.bj !== body) continue;
+
+    const other = c.bi === body ? c.bj : c.bi;
+    if (other && other !== armBody) return true;
+  }
+  return false;
+}
+
 function setClawOpen01(open01) {
   // 0=閉, 1=開
-  const l = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, open01);
-  const r = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, open01);
+  const nextOpen01 = THREE.MathUtils.clamp(open01, 0, 1);
+  const prevOpen01 = clawOpen01;
+  const isClosing = nextOpen01 < prevOpen01;
 
-  clawLPivot.rotation.x = l; // ←軸は合うやつに（x/y/z）
-  clawRPivot.rotation.x = r;
+  const targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
+  const targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
+
+  // 閉じる方向でめり込みそうなら、その側だけ回転停止
+  const stopL = isClosing && isClawBodyPressing(clawLBody);
+  const stopR = isClosing && isClawBodyPressing(clawRBody);
+
+  if (clawLPivot) {
+    clawLPivot.rotation.x = stopL ? clawLPivot.rotation.x : targetL; // ←軸は合うやつに（x/y/z）
+  }
+  if (clawRPivot) {
+    clawRPivot.rotation.x = stopR ? clawRPivot.rotation.x : targetR;
+  }
+
+  clawOpen01 = nextOpen01;
 }
 
 
@@ -378,6 +406,7 @@ world.defaultContactMaterial.restitution = 0.0;
 const matStick = new CANNON.Material("stick");
 const matBox = new CANNON.Material("box");
 const matClaw = new CANNON.Material("claw");
+const matCrane = new CANNON.Material("crane");
 
 world.solver.iterations = 20;
 world.solver.tolerance = 0.001;
@@ -400,12 +429,21 @@ world.addContactMaterial(
   })
 );
 
+world.addContactMaterial(
+  new CANNON.ContactMaterial(matCrane, matBox, {
+    friction: 0.28,
+    restitution: 0.0,
+  })
+);
+
+
 const loader = new GLTFLoader();
 
 let boxMesh, stick1Mesh, stick2Mesh, craneMesh;
 let boxBody, stick1Body, stick2Body;
 let stick3Mesh, stick4Mesh;
 let stick3Body, stick4Body;
+let craneBody;
 
 function getBox3(obj3d) {
   return new THREE.Box3().setFromObject(obj3d);
@@ -851,8 +889,8 @@ function createStickBody(stickMesh, stickParams) {
   body.addShape(shape, new CANNON.Vec3(0, 0, 0), stickParams.orient);
   body.position.copy(stickMesh.position);
 
-  // 棒モデルの回転に物理ボディの回転を同期させる
-  body.quaternion.set(stickMesh.quaternion.x, stickMesh.quaternion.y, stickMesh.quaternion.z, stickMesh.quaternion.w);
+  // 棒の姿勢は同期しない（見た目と物理を独立管理）
+  body.quaternion.set(0, 0, 0, 1);
   body.angularVelocity.set(0, 0, 0);
   body.fixedRotation = true;
   body.updateMassProperties();
@@ -862,15 +900,22 @@ function createStickBody(stickMesh, stickParams) {
   return body;
 }
 
-function setStickModelVisualRotation(stickMesh, xRad = 0, zRad = 0) {
-  // 読み込み直後の姿勢を基準に、見た目回転を毎回明示的に適用する。
-  if (!stickMesh.userData._baseQuat) {
-    stickMesh.userData._baseQuat = stickMesh.quaternion.clone();
+function applyStickPostSyncRotation(stickMesh, stickBody, visualEuler, bodyEuler) {
+  // 同期後は見た目と物理を独立して回せるようにする
+  if (stickMesh && visualEuler) {
+    const visualDelta = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(visualEuler.x, visualEuler.y, visualEuler.z, "XYZ")
+    );
+    stickMesh.quaternion.multiply(visualDelta);
+    stickMesh.updateMatrixWorld(true);
   }
-  const baseQuat = stickMesh.userData._baseQuat;
-  const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(xRad, 0, zRad, "XYZ"));
-  stickMesh.quaternion.copy(baseQuat).multiply(delta);
-  stickMesh.updateMatrixWorld(true);
+
+  if (stickBody && bodyEuler) {
+    const bodyDelta = quatFromEuler(bodyEuler.x, bodyEuler.y, bodyEuler.z);
+    const nextQuat = stickBody.quaternion.mult(bodyDelta);
+    stickBody.quaternion.copy(nextQuat);
+    stickBody.aabbNeedsUpdate = true;
+  }
 }
 
 let armMesh, clawLMesh, clawRMesh, armGroup;
@@ -1034,6 +1079,29 @@ setClawOpen01(0);
   craneMesh.position.y -= 2;
   scene.add(craneMesh);
 
+  // ===== 物理：クレーン本体（静的・形状自動）=====
+  craneMesh.updateMatrixWorld(true);
+  craneBody = new CANNON.Body({ mass: 0, material: matCrane });
+  const craneShapes = computeConvexShapesFromRoot(craneMesh);
+
+  if (craneShapes.length) {
+    for (const shapeDef of craneShapes) {
+      craneBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
+    }
+  } else {
+    const craneSize = getBoxSize(craneMesh);
+    craneBody.addShape(new CANNON.Box(new CANNON.Vec3(
+      Math.max(craneSize.x / 2, 0.01),
+      Math.max(craneSize.y / 2, 0.01),
+      Math.max(craneSize.z / 2, 0.01)
+    )));
+  }
+
+  craneBody.position.copy(craneMesh.position);
+  craneBody.quaternion.copy(craneMesh.quaternion);
+  world.addBody(craneBody);
+  addBodyDebugMeshes(craneBody, 0x00ff66);
+
   // ===== 棒＆箱（見た目）=====
   // ===== 棒＆箱（見た目）=====
 stick1Mesh = stickGltf.scene.clone(true);
@@ -1062,19 +1130,20 @@ const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 
-// 棒の3Dモデル回転は一旦適用しない
+// 棒の3Dモデル回転は一旦適用しない（見た目だけの回転処理を無効化）
+
 // ===== 物理：棒（静的・円柱）=====
-// 回転後メッシュから物理形状を算出し、回転姿勢も同期させる
+// 先に棒の物理ボディを生成（見た目姿勢とは同期しない）
 stick1Body = createStickBody(stick1Mesh, makeStickCylinderParamsFixedX(stick1Mesh));
 stick2Body = createStickBody(stick2Mesh, makeStickCylinderParamsFixedX(stick2Mesh));
 stick3Body = createStickBody(stick3Mesh, makeStickCylinderParamsFixedX(stick3Mesh));
 stick4Body = createStickBody(stick4Mesh, makeStickCylinderParamsFixedX(stick4Mesh));
 
-// 3Dモデルだけ追加でZ軸に90度回転（物理は生成済みのため追従しない）
-setStickModelVisualRotation(stick1Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick2Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick3Mesh, Math.PI / 2, Math.PI / 2);
-setStickModelVisualRotation(stick4Mesh, Math.PI / 2, Math.PI / 2);
+// 見た目はY軸90°、物理は既存設定のまま別々に適用する（同期なし）
+applyStickPostSyncRotation(stick1Mesh, stick1Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick2Mesh, stick2Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick3Mesh, stick3Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
+applyStickPostSyncRotation(stick4Mesh, stick4Body, STICK_VISUAL_POST_ROT, STICK_BODY_POST_ROT);
 
 // 箱の見た目回転
 boxMesh.rotation.y += BOX_YAW;

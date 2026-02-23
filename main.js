@@ -15,6 +15,12 @@ const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
+// 「持ち上げ成功率」より「ずらし成功率」を優先して調整
+const CLAW_BOX_FRICTION = 0.13;
+const CLAW_BOX_CONTACT_EQUATION_STIFFNESS = 4.5e4;
+const CLAW_BOX_CONTACT_EQUATION_RELAXATION = 14;
+const CLAW_BOX_FRICTION_EQUATION_STIFFNESS = 3.2e4;
+const CLAW_BOX_FRICTION_EQUATION_RELAXATION = 14;
 const BOX_YAW = Math.PI / 2;
 const BOX_COM_FRONT_BALLAST_X = 0.0;
 const BOX_COM_FRONT_BALLAST_Z = -0.06;
@@ -268,6 +274,8 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
+const CLAW_CLOSE_MAX_WAIT_SEC = 3.2; // 閉じフェーズが進まない時の最大待機
+const CLAW_CLOSE_DONE_OPEN01 = 0.22; // これ以下まで閉じたら掴みフェーズ完了
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
@@ -280,6 +288,12 @@ const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
+// 箱接触時のみ、重量由来の押し戻しで爪が開き方向に回る（自動開きはしない）
+const CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT = true;
+const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.2;
+const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
+const CLAW_PASSIVE_OPEN_RESISTANCE = 1.45;
+const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
@@ -315,11 +329,14 @@ let step4LiftAssistNoContactT = 0;
 let step4LiftLatched = false;
 let step4GripLostT = 0;
 let step4ReleasePulseUsed = false;
+let step3ElapsedT = 0;
 
 let clawBoxPressFramesL = 0;
 let clawBoxPressFramesR = 0;
 let clawReleasePulseCooldownL = 0;
 let clawReleasePulseCooldownR = 0;
+let clawPassiveOpenVelL = 0;
+let clawPassiveOpenVelR = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
 let step2LockY = 0;
@@ -499,7 +516,27 @@ function setClawPivotAngle(pivot, logicalAngle) {
 let clawContactHoldL = 0;
 let clawContactHoldR = 0;
 
-function setClawOpen01(open01) {
+function applyPassiveOpenByBoxWeight(currentAngle, level, closedAngle, openAngle, currentVel, dt) {
+  if (!CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT || !boxBody || level !== 2) {
+    const dampedVel = currentVel * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
+    return {
+      nextAngle: currentAngle,
+      nextVel: Math.abs(dampedVel) < 1e-4 ? 0 : dampedVel,
+    };
+  }
+
+  const openDir = Math.sign(openAngle - closedAngle) || 1;
+  const accel = (boxBody.mass * CLAW_PASSIVE_OPEN_ACCEL_PER_KG / CLAW_PASSIVE_OPEN_RESISTANCE) * openDir;
+  let nextVel = (currentVel + accel * dt) * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
+  nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_PASSIVE_OPEN_MAX_SPEED, CLAW_PASSIVE_OPEN_MAX_SPEED);
+
+  return {
+    nextAngle: currentAngle + nextVel * dt,
+    nextVel,
+  };
+}
+
+function setClawOpen01(open01, dt = 1 / 60) {
   // 0=閉, 1=開
   const nextOpen01 = THREE.MathUtils.clamp(open01, 0, 1);
   const prevOpen01 = clawOpen01;
@@ -563,6 +600,19 @@ function setClawOpen01(open01) {
         clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
       }
     }
+  }
+
+  if (isClosing) {
+    const passiveL = applyPassiveOpenByBoxWeight(nextL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt);
+    nextL = passiveL.nextAngle;
+    clawPassiveOpenVelL = passiveL.nextVel;
+
+    const passiveR = applyPassiveOpenByBoxWeight(nextR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt);
+    nextR = passiveR.nextAngle;
+    clawPassiveOpenVelR = passiveR.nextVel;
+  } else {
+    clawPassiveOpenVelL *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
+    clawPassiveOpenVelR *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
   }
 
   const minL = Math.min(CLAW_L_CLOSED, CLAW_L_OPEN);
@@ -641,12 +691,12 @@ world.addContactMaterial(
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
-    friction: 0.34,
+    friction: CLAW_BOX_FRICTION,
     restitution: 0.0,
-    contactEquationStiffness: 8e4,
-    contactEquationRelaxation: 12,
-    frictionEquationStiffness: 7e4,
-    frictionEquationRelaxation: 12,
+    contactEquationStiffness: CLAW_BOX_CONTACT_EQUATION_STIFFNESS,
+    contactEquationRelaxation: CLAW_BOX_CONTACT_EQUATION_RELAXATION,
+    frictionEquationStiffness: CLAW_BOX_FRICTION_EQUATION_STIFFNESS,
+    frictionEquationRelaxation: CLAW_BOX_FRICTION_EQUATION_RELAXATION,
   })
 );
 
@@ -784,6 +834,7 @@ function startAutoSequence() {
 
   step2BoxPressFrames = 0;
   step2LockYActive = false;
+  step3ElapsedT = 0;
 
 }
 
@@ -1805,7 +1856,7 @@ if (autoStarted) {
   if (autoStep === 1) {
     // ===== ステップ1: 爪を開く =====
     autoT += dt;
-    setClawOpen01(Math.min(autoT / CLAW_OPEN_TIME, 1));
+    setClawOpen01(Math.min(autoT / CLAW_OPEN_TIME, 1), dt);
     if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; clawDropPenetrationT = 0; }
 
   } else if (autoStep === 2) {
@@ -1854,12 +1905,20 @@ if (autoStarted) {
     // ===== ステップ3: 爪を閉じる =====
     // 下から押し上げる接触(上向き法線が強い)時は閉じを抑えてジャッキアップを防ぐ
     const closeScale = gripStatus.avgNormalY >= GRIP_MAX_UPWARD_NORMAL_Y ? 0.1 : 1.0;
-    autoT += (isClawPressingSomething() ? dt * 0.3 : dt) * closeScale;
-    setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1));
-    if (autoT >= CLAW_CLOSE_TIME) {
+    const closeDt = (isClawPressingSomething() ? dt * 0.3 : dt) * closeScale;
+    autoT += closeDt;
+    step3ElapsedT += dt;
+
+    // 目標を0(完全クローズ)へ寄せ続ける。接触で押し戻されても再度閉じを試みる。
+    setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1), dt);
+
+    const closeReached = clawOpen01 <= CLAW_CLOSE_DONE_OPEN01;
+    const closeTimedOut = step3ElapsedT >= CLAW_CLOSE_MAX_WAIT_SEC;
+    if ((autoT >= CLAW_CLOSE_TIME && closeReached) || closeTimedOut) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
+      step3ElapsedT = 0;
       step4LiftAssistNoContactT = 0;
       step4LiftLatched = false;
       step4GripLostT = 0;
@@ -1885,7 +1944,7 @@ if (autoStarted) {
     // 完了時は爪を閉じ方向へ戻す（接触状態に依存せず確実に閉める）
     if (clawOpen01 > 0) {
       const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
-      setClawOpen01(nextOpen01);
+      setClawOpen01(nextOpen01, dt);
     }
   }
 }
@@ -1907,7 +1966,7 @@ if (autoStarted) {
     clawOpen01 > 0
   ) {
     const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
-    setClawOpen01(nextOpen01);
+    setClawOpen01(nextOpen01, dt);
   }
 
 

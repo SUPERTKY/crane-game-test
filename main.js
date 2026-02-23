@@ -16,6 +16,8 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
+const BOX_COM_FRONT_BALLAST_Z = -0.06;
+const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 // 例：到達点（好きに調整）
@@ -453,7 +455,7 @@ world.addContactMaterial(
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
-    friction: 0.18,
+    friction: 0.03,
     restitution: 0.0,
     contactEquationStiffness: 8e4,
     contactEquationRelaxation: 12,
@@ -737,6 +739,7 @@ let clawLVis = [];
 let clawRVis = [];
 const physicsDebugEntries = [];
 const contactDebugMeshes = [];
+let boxComDebugMesh = null;
 
 function createWireframeBoxMesh(halfExtents, color = 0x00ffff) {
   const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
@@ -785,6 +788,18 @@ function addBodyDebugMeshes(body, color = 0x00ffff) {
       geo.rotateZ(Math.PI / 2); // ThreeのY軸CylinderをCannonのX軸向きに合わせる
       mesh = new THREE.Mesh(
         geo,
+        new THREE.MeshBasicMaterial({
+          color,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+        })
+      );
+      mesh.renderOrder = 9998;
+    } else if (shape instanceof CANNON.Sphere) {
+      mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(shape.radius, 12, 12),
         new THREE.MeshBasicMaterial({
           color,
           wireframe: true,
@@ -850,6 +865,69 @@ function updateContactDebugMarkers() {
   for (let i = showCount; i < contactDebugMeshes.length; i++) {
     contactDebugMeshes[i].visible = false;
   }
+}
+
+function getShapeMassWeight(shape) {
+  if (shape instanceof CANNON.Box) {
+    const h = shape.halfExtents;
+    return Math.max(8 * h.x * h.y * h.z, 1e-6);
+  }
+  if (shape instanceof CANNON.Sphere) {
+    return Math.max((4 / 3) * Math.PI * shape.radius * shape.radius * shape.radius, 1e-6);
+  }
+  if (shape instanceof CANNON.Cylinder) {
+    return Math.max(Math.PI * shape.radiusTop * shape.radiusBottom * shape.height, 1e-6);
+  }
+  if (shape instanceof CANNON.ConvexPolyhedron) {
+    const r = Math.max(shape.boundingSphereRadius || 0.01, 0.01);
+    return (4 / 3) * Math.PI * r * r * r;
+  }
+  return 1;
+}
+
+function computeBodyLocalCenterOfMassApprox(body) {
+  const com = new CANNON.Vec3(0, 0, 0);
+  if (!body || !body.shapes.length) return com;
+
+  let totalWeight = 0;
+  for (let i = 0; i < body.shapes.length; i++) {
+    const w = getShapeMassWeight(body.shapes[i]);
+    const off = body.shapeOffsets[i];
+    com.x += off.x * w;
+    com.y += off.y * w;
+    com.z += off.z * w;
+    totalWeight += w;
+  }
+
+  if (totalWeight <= 1e-6) return com;
+  com.scale(1 / totalWeight, com);
+  return com;
+}
+
+function ensureBoxComDebugMesh() {
+  if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh) return;
+
+  boxComDebugMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 16, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.98,
+      depthTest: false,
+      depthWrite: false,
+    })
+  );
+  // 箱の向こう側にあっても必ず見えるように最前面描画
+  boxComDebugMesh.renderOrder = 20000;
+  scene.add(boxComDebugMesh);
+}
+
+function updateBoxCenterOfMassDebug() {
+  if (!SHOW_PHYSICS_DEBUG || !boxComDebugMesh || !boxBody) return;
+
+  const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
+  const worldCom = boxBody.pointToWorldFrame(localCom, new CANNON.Vec3());
+  boxComDebugMesh.position.set(worldCom.x, worldCom.y, worldCom.z);
 }
 
 function makeClawPhysics() {
@@ -970,7 +1048,7 @@ async function loadScene() {
 function addDebugDotLocal(parent, localPos, size = 0.03) {
   const geo = new THREE.SphereGeometry(size, 12, 12);
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xff00ff,
+    color: 0x00ffff,
     depthTest: false,
     depthWrite: false,
   });
@@ -1203,6 +1281,7 @@ boxMesh.rotation.y += BOX_YAW;
   const boxShapes = computeConvexShapesFromRoot(boxMesh);
   if (boxShapes.length) {
     for (const shapeDef of boxShapes) {
+      // 箱の外形コリジョンは見た目と一致させる（offsetは変更しない）
       boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
     }
   } else {
@@ -1214,10 +1293,18 @@ boxMesh.rotation.y += BOX_YAW;
     boxBody.addShape(new CANNON.Box(boxHalf));
   }
 
+  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
+  // （箱の内側に置くため外形コリジョンには実質影響しない）
+  boxBody.addShape(
+    new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
+    new CANNON.Vec3(0, 0, BOX_COM_FRONT_BALLAST_Z)
+  );
+
   boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
-  addBodyDebugMeshes(boxBody, 0xff00ff);
+  addBodyDebugMeshes(boxBody, 0x00ffff);
+  ensureBoxComDebugMesh();
 
   boxMesh.position.copy(boxBody.position);
 
@@ -1260,6 +1347,8 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 const MAX_KINEMATIC_SPEED = 0.8;
 const CONTACT_KINEMATIC_SPEED = 0.22;
+const MAX_BOX_LINEAR_SPEED = 1.8;
+const MAX_BOX_ANGULAR_SPEED = 8.0;
 
 function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
   const vx = body.velocity.x;
@@ -1271,6 +1360,24 @@ function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
 
   const scale = maxSpeed / Math.sqrt(speedSq);
   body.velocity.set(vx * scale, vy * scale, vz * scale);
+}
+
+function clampBodyAngularVelocity(body, maxSpeed) {
+  const wx = body.angularVelocity.x;
+  const wy = body.angularVelocity.y;
+  const wz = body.angularVelocity.z;
+  const speedSq = wx * wx + wy * wy + wz * wz;
+  const maxSq = maxSpeed * maxSpeed;
+  if (speedSq <= maxSq) return;
+
+  const scale = maxSpeed / Math.sqrt(speedSq);
+  body.angularVelocity.set(wx * scale, wy * scale, wz * scale);
+}
+
+function stabilizePrizeBody(body) {
+  if (!body) return;
+  clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);
+  clampBodyAngularVelocity(body, MAX_BOX_ANGULAR_SPEED);
 }
 
 const tmpPos = new THREE.Vector3();
@@ -1460,8 +1567,10 @@ const FIXED = 1 / 120;
 const MAX_SUB = 8;
 
 world.step(FIXED, dt, MAX_SUB);
+  stabilizePrizeBody(boxBody);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();
+  updateBoxCenterOfMassDebug();
 
 
 

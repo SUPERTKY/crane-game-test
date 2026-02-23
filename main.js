@@ -908,10 +908,17 @@ function ensureBoxComDebugMesh() {
   if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh) return;
 
   boxComDebugMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.02, 14, 14),
-    new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.95 })
+    new THREE.SphereGeometry(0.035, 16, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.98,
+      depthTest: false,
+      depthWrite: false,
+    })
   );
-  boxComDebugMesh.renderOrder = 10000;
+  // 箱の向こう側にあっても必ず見えるように最前面描画
+  boxComDebugMesh.renderOrder = 20000;
   scene.add(boxComDebugMesh);
 }
 

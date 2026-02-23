@@ -16,6 +16,14 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
+const BOX_COM_FRONT_BALLAST_X = 0.0;
+const BOX_COM_FRONT_BALLAST_Z = -0.06;
+const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
+const BOX_COM_FRONT_BALLAST_MULTIPLIER = 8;
+const ENABLE_BOX_ANGULAR_CLAMP = true;
+const MAX_BOX_ANGULAR_SPEED_CONTACT = 18.0;
+const MAX_BOX_ANGULAR_SPEED_FREE = 30.0;
+const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 // 例：到達点（好きに調整）
@@ -264,12 +272,17 @@ const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかな�
 const CLAW_CLOSE_DAMP_BOX = 0.0;    // 箱接触中は閉じ方向を停止
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
 const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
+const CLAW_AUTORETURN_TO_CLOSED = true;
+const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
+const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
+let boxContactFrames = 0;
+let boxReleaseFrames = 9999;
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -446,14 +459,14 @@ world.solver.tolerance = 0.001;
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matStick, matBox, {
-    friction: 0.05,
+    friction: 0.12,
     restitution: 0.0,
   })
 );
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
-    friction: 0.18,
+    friction: 0.34,
     restitution: 0.0,
     contactEquationStiffness: 8e4,
     contactEquationRelaxation: 12,
@@ -737,6 +750,7 @@ let clawLVis = [];
 let clawRVis = [];
 const physicsDebugEntries = [];
 const contactDebugMeshes = [];
+let boxComDebugMesh = null;
 
 function createWireframeBoxMesh(halfExtents, color = 0x00ffff) {
   const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
@@ -757,6 +771,11 @@ function addBodyDebugMeshes(body, color = 0x00ffff) {
 
   for (let i = 0; i < body.shapes.length; i++) {
     const shape = body.shapes[i];
+
+    // 箱の内部バラスト球は重心調整用で、見た目上は重心マーカーと紛らわしいため通常は非表示
+    if (!SHOW_BOX_INTERNAL_BALLAST_DEBUG && body === boxBody && shape instanceof CANNON.Sphere) {
+      continue;
+    }
 
     let mesh;
     if (shape instanceof CANNON.Box) {
@@ -785,6 +804,18 @@ function addBodyDebugMeshes(body, color = 0x00ffff) {
       geo.rotateZ(Math.PI / 2); // ThreeのY軸CylinderをCannonのX軸向きに合わせる
       mesh = new THREE.Mesh(
         geo,
+        new THREE.MeshBasicMaterial({
+          color,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+        })
+      );
+      mesh.renderOrder = 9998;
+    } else if (shape instanceof CANNON.Sphere) {
+      mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(shape.radius, 12, 12),
         new THREE.MeshBasicMaterial({
           color,
           wireframe: true,
@@ -850,6 +881,100 @@ function updateContactDebugMarkers() {
   for (let i = showCount; i < contactDebugMeshes.length; i++) {
     contactDebugMeshes[i].visible = false;
   }
+}
+
+function getConvexVolume(shape) {
+  if (!(shape instanceof CANNON.ConvexPolyhedron)) return 0;
+
+  let vol6 = 0;
+  for (const face of shape.faces) {
+    if (!face || face.length < 3) continue;
+    const i0 = face[0];
+    for (let i = 1; i < face.length - 1; i++) {
+      const ia = face[i];
+      const ib = face[i + 1];
+      const a = shape.vertices[i0];
+      const b = shape.vertices[ia];
+      const c = shape.vertices[ib];
+      // det(a,b,c) = a・(b×c)
+      vol6 += a.x * (b.y * c.z - b.z * c.y)
+            - a.y * (b.x * c.z - b.z * c.x)
+            + a.z * (b.x * c.y - b.y * c.x);
+    }
+  }
+
+  return Math.abs(vol6) / 6;
+}
+
+function getShapeMassWeight(shape) {
+  if (shape instanceof CANNON.Box) {
+    const h = shape.halfExtents;
+    return Math.max(8 * h.x * h.y * h.z, 1e-6);
+  }
+  if (shape instanceof CANNON.Sphere) {
+    return Math.max((4 / 3) * Math.PI * shape.radius * shape.radius * shape.radius, 1e-6);
+  }
+  if (shape instanceof CANNON.Cylinder) {
+    return Math.max(Math.PI * shape.radiusTop * shape.radiusBottom * shape.height, 1e-6);
+  }
+  if (shape instanceof CANNON.ConvexPolyhedron) {
+    // boundingSphere近似だと重心シフトが効きにくいので、面から体積を近似算出
+    return Math.max(getConvexVolume(shape), 1e-6);
+  }
+  return 1;
+}
+
+function computeBodyLocalCenterOfMassApprox(body) {
+  const com = new CANNON.Vec3(0, 0, 0);
+  if (!body || !body.shapes.length) return com;
+
+  let totalWeight = 0;
+  for (let i = 0; i < body.shapes.length; i++) {
+    const w = getShapeMassWeight(body.shapes[i]);
+    const off = body.shapeOffsets[i];
+    com.x += off.x * w;
+    com.y += off.y * w;
+    com.z += off.z * w;
+    totalWeight += w;
+  }
+
+  if (totalWeight <= 1e-6) return com;
+  com.scale(1 / totalWeight, com);
+  return com;
+}
+
+function ensureBoxComDebugMesh() {
+  if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh) return;
+
+  boxComDebugMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.022, 16, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.98,
+      depthTest: false,
+      depthWrite: false,
+    })
+  );
+  // 箱の向こう側にあっても必ず見えるように最前面描画
+  boxComDebugMesh.renderOrder = 20000;
+  scene.add(boxComDebugMesh);
+}
+
+function updateBoxCenterOfMassDebug() {
+  if (!SHOW_PHYSICS_DEBUG || !boxComDebugMesh || !boxBody) return;
+
+  const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
+  const worldCom = new CANNON.Vec3();
+
+  // pointToWorldFrame 依存を避け、位置+姿勢から明示的に重心座標を算出
+  boxBody.quaternion.vmult(localCom, worldCom);
+  worldCom.vadd(boxBody.position, worldCom);
+
+  boxComDebugMesh.position.set(worldCom.x, worldCom.y, worldCom.z);
+
+  // サイズは固定（見た目の違和感を減らす）
+  boxComDebugMesh.scale.setScalar(1);
 }
 
 function makeClawPhysics() {
@@ -968,9 +1093,10 @@ async function loadScene() {
       loader.loadAsync("./models/ClawR.glb"),
     ]);
 function addDebugDotLocal(parent, localPos, size = 0.03) {
-  const geo = new THREE.SphereGeometry(size, 12, 12);
+  // 重心マーカー（球）と見分けやすいよう、ヒンジ位置は立方体マーカーで表示
+  const geo = new THREE.BoxGeometry(size * 1.4, size * 1.4, size * 1.4);
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xff00ff,
+    color: 0x00ffff,
     depthTest: false,
     depthWrite: false,
   });
@@ -1203,6 +1329,7 @@ boxMesh.rotation.y += BOX_YAW;
   const boxShapes = computeConvexShapesFromRoot(boxMesh);
   if (boxShapes.length) {
     for (const shapeDef of boxShapes) {
+      // 箱の外形コリジョンは見た目と一致させる（offsetは変更しない）
       boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
     }
   } else {
@@ -1214,10 +1341,20 @@ boxMesh.rotation.y += BOX_YAW;
     boxBody.addShape(new CANNON.Box(boxHalf));
   }
 
+  // 見た目とのズレを出さず、重心だけ前寄りへ寄せる内部バラスト
+  // ※重複追加バグを防ぐため、この関数呼び出し1箇所に集約する
+  addFrontBallastShapes(boxBody);
+
+  // shape追加後に質量・慣性を必ず再計算（重心反映を確実化）
+  boxBody.updateMassProperties();
+  boxBody.updateBoundingRadius();
+  boxBody.aabbNeedsUpdate = true;
+
   boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
-  addBodyDebugMeshes(boxBody, 0xff00ff);
+  addBodyDebugMeshes(boxBody, 0x00ffff);
+  ensureBoxComDebugMesh();
 
   boxMesh.position.copy(boxBody.position);
 
@@ -1248,6 +1385,17 @@ function clawStopMotor() {
 }
 
 
+function addFrontBallastShapes(body) {
+  if (!body) return;
+
+  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
+    body.addShape(
+      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
+      new CANNON.Vec3(BOX_COM_FRONT_BALLAST_X, 0, BOX_COM_FRONT_BALLAST_Z)
+    );
+  }
+}
+
 loadScene().catch(console.error);
 
 let lastT;
@@ -1259,7 +1407,8 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 
 const MAX_KINEMATIC_SPEED = 0.8;
-const CONTACT_KINEMATIC_SPEED = 0.22;
+const CONTACT_KINEMATIC_SPEED = 0.30;
+const MAX_BOX_LINEAR_SPEED = 1.8;
 
 function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
   const vx = body.velocity.x;
@@ -1271,6 +1420,29 @@ function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
 
   const scale = maxSpeed / Math.sqrt(speedSq);
   body.velocity.set(vx * scale, vy * scale, vz * scale);
+}
+
+function clampBodyAngularVelocity(body, maxSpeed) {
+  const wx = body.angularVelocity.x;
+  const wy = body.angularVelocity.y;
+  const wz = body.angularVelocity.z;
+  const speedSq = wx * wx + wy * wy + wz * wz;
+  const maxSq = maxSpeed * maxSpeed;
+  if (speedSq <= maxSq) return;
+
+  const scale = maxSpeed / Math.sqrt(speedSq);
+  body.angularVelocity.set(wx * scale, wy * scale, wz * scale);
+}
+
+function stabilizePrizeBody(body) {
+  if (!body) return;
+  clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);
+
+  // 常時ガチガチに角速度を止めるとピッチが出にくいので、接触時のみやや緩く制限
+  if (ENABLE_BOX_ANGULAR_CLAMP) {
+    const maxAngular = isClawPressingSomething() ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
+    clampBodyAngularVelocity(body, maxAngular);
+  }
 }
 
 const tmpPos = new THREE.Vector3();
@@ -1427,6 +1599,26 @@ if (autoStarted) {
   }
 }
 
+  // 箱接触が切れたあと、一定フレームで爪を完全クローズへ戻す（瞬断対策つき）
+  const boxTouchingNow = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
+  if (boxTouchingNow) {
+    boxContactFrames += 1;
+    boxReleaseFrames = 0;
+  } else {
+    boxReleaseFrames += 1;
+  }
+
+  const autoSequenceBusy = autoStarted && autoStep > 0 && autoStep < 5;
+  if (
+    CLAW_AUTORETURN_TO_CLOSED &&
+    !autoSequenceBusy &&
+    boxReleaseFrames >= CLAW_RELEASE_DEBOUNCE_FRAMES &&
+    clawOpen01 > 0
+  ) {
+    const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
+    setClawOpen01(nextOpen01);
+  }
+
 
   // ★★★ ここがポイント：Cannon側armBodyを "step前" に同期 ★★★
   if (armGroup && armBody) {
@@ -1460,8 +1652,10 @@ const FIXED = 1 / 120;
 const MAX_SUB = 8;
 
 world.step(FIXED, dt, MAX_SUB);
+  stabilizePrizeBody(boxBody);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();
+  updateBoxCenterOfMassDebug();
 
 
 

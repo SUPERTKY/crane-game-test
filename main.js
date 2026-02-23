@@ -294,6 +294,7 @@ const GRIP_FAIL_TIMEOUT_SEC = 0.8;
 const GRIP_RELEASE_PULSE_OPEN01 = 0.14;
 const GRIP_RELEASE_PULSE_SEC = 0.14;
 const GRIP_DEBUG_LOG_INTERVAL_FRAMES = 20;
+const STEP4_LIFT_ASSIST_SEC = 0.6;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -307,6 +308,7 @@ let gripRightFrames = 0;
 let gripInvalidHoldT = 0;
 let gripReleasePulseT = 0;
 let gripDebugFrameCounter = 0;
+let step4LiftAssistNoContactT = 0;
 
 let clawBoxPressFramesL = 0;
 let clawBoxPressFramesR = 0;
@@ -1359,6 +1361,7 @@ console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
 makeClawPhysics();
 // 初期は閉じ
 setClawOpen01(0);
+syncKinematicBodiesToVisualNow();
 
 
   // ===== クレーン台（見た目だけ）=====
@@ -1675,6 +1678,43 @@ function followClawBodies(dt) {
   clawRBody.angularVelocity.set(0, 0, 0);
 }
 
+function syncKinematicBodiesToVisualNow() {
+  if (!armGroup || !armBody) return;
+
+  armGroup.updateWorldMatrix(true, true);
+  armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
+  armBody.quaternion.set(
+    armGroup.quaternion.x,
+    armGroup.quaternion.y,
+    armGroup.quaternion.z,
+    armGroup.quaternion.w
+  );
+  armBody.velocity.set(0, 0, 0);
+  armBody.angularVelocity.set(0, 0, 0);
+
+  if (clawLBody && clawLMesh) {
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    clawLMesh.getWorldPosition(pos);
+    clawLMesh.getWorldQuaternion(quat);
+    clawLBody.position.set(pos.x, pos.y, pos.z);
+    clawLBody.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+    clawLBody.velocity.set(0, 0, 0);
+    clawLBody.angularVelocity.set(0, 0, 0);
+  }
+
+  if (clawRBody && clawRMesh) {
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    clawRMesh.getWorldPosition(pos);
+    clawRMesh.getWorldQuaternion(quat);
+    clawRBody.position.set(pos.x, pos.y, pos.z);
+    clawRBody.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+    clawRBody.velocity.set(0, 0, 0);
+    clawRBody.angularVelocity.set(0, 0, 0);
+  }
+}
+
 function animate(t) {
   requestAnimationFrame(animate);
 
@@ -1767,11 +1807,7 @@ if (autoStarted) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
-      clawLoosenPulseActive = false;
-      clawLoosenPulseDone = false;
-      clawLoosenPulseStartT = 0;
-      clawLoosenPulseBaseOpen01 = clawOpen01;
-      clawLiftKeepOpenUntilRelease = clawCloseBlockedByPressure;
+      step4LiftAssistNoContactT = 0;
     }
 
   } else if (autoStep === 4) {
@@ -1779,12 +1815,21 @@ if (autoStarted) {
     autoT += dt;
     const targetY = dropStartY;
 
-    if (gripStatus.validGrip) {
+    const touchingLeftBox = getClawContactLevel(clawLBody) === 2;
+    const touchingRightBox = getClawContactLevel(clawRBody) === 2;
+    const touchingAnyBox = touchingLeftBox || touchingRightBox;
+
+    if (touchingAnyBox) step4LiftAssistNoContactT = 0;
+    else step4LiftAssistNoContactT += dt;
+
+    const allowLift = gripStatus.validGrip || step4LiftAssistNoContactT < STEP4_LIFT_ASSIST_SEC;
+
+    if (allowLift) {
       gripInvalidHoldT = 0;
       gripReleasePulseT = 0;
       armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
     } else {
-      // Valid Grip でない間は上げない（偶然持ち上げを防止）
+      // Valid Grip でない状態が続いたら上げない（偶然持ち上げを防止）
       gripInvalidHoldT += dt;
 
       // 引っ掛けを外すために短い開きパルス

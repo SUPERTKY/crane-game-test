@@ -1781,8 +1781,10 @@ function followClawBodies(dt) {
   prevClawL.copy(clawLBody.position);
   prevClawR.copy(clawRBody.position);
 
-  const leftContact = getClawContactLevel(clawLBody) > 0;
-  const rightContact = getClawContactLevel(clawRBody) > 0;
+  // 棒など「箱以外」の接触で追従を過剰に遅くすると
+  // 閉じモーションが止まって見えるため、速度制限は箱接触時のみ有効化する。
+  const leftContact = getClawContactLevel(clawLBody) === 2;
+  const rightContact = getClawContactLevel(clawRBody) === 2;
 
   // 接触中はテレポート同期せず、1stepあたりの追従量を制限して押し込みを防ぐ
   moveKinematicBodyTowardMesh(clawLBody, clawLMesh, prevClawL, dt, leftContact);

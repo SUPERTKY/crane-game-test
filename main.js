@@ -1579,7 +1579,7 @@ function stabilizePrizeBody(body) {
   // 常時ガチガチに角速度を止めるとピッチが出にくいので、接触時のみやや緩く制限
   if (ENABLE_BOX_ANGULAR_CLAMP) {
 
-    const maxAngular = clawContact ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
+    
 
     const maxAngular = isClawPressingSomething() ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
 

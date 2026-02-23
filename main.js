@@ -16,7 +16,8 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
-const BOX_CENTER_OF_MASS_FRONT_SHIFT_Z = -0.025;
+const BOX_COM_FRONT_BALLAST_Z = -0.03;
+const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 // 例：到達点（好きに調整）
@@ -1204,10 +1205,8 @@ boxMesh.rotation.y += BOX_YAW;
   const boxShapes = computeConvexShapesFromRoot(boxMesh);
   if (boxShapes.length) {
     for (const shapeDef of boxShapes) {
-      const shiftedOffset = shapeDef.offset.clone();
-      // 形状をわずかに後方(+Z)へ寄せることで、相対的に重心を前方(-Z)へ移す
-      shiftedOffset.z -= BOX_CENTER_OF_MASS_FRONT_SHIFT_Z;
-      boxBody.addShape(shapeDef.shape, shiftedOffset, shapeDef.orient);
+      // 箱の外形コリジョンは見た目と一致させる（offsetは変更しない）
+      boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
     }
   } else {
     const boxHalf = new CANNON.Vec3(
@@ -1218,6 +1217,13 @@ boxMesh.rotation.y += BOX_YAW;
     // 単純Boxフォールバック時も同じく前寄り重心にする
     boxBody.addShape(new CANNON.Box(boxHalf), new CANNON.Vec3(0, 0, -BOX_CENTER_OF_MASS_FRONT_SHIFT_Z));
   }
+
+  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
+  // （箱の内側に置くため外形コリジョンには実質影響しない）
+  boxBody.addShape(
+    new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
+    new CANNON.Vec3(0, 0, BOX_COM_FRONT_BALLAST_Z)
+  );
 
   boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);

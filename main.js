@@ -16,7 +16,7 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
-const BOX_COM_FRONT_BALLAST_Z = -0.5;
+const BOX_COM_FRONT_BALLAST_Z = -0.06;
 const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
 const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
@@ -873,6 +873,29 @@ function updateContactDebugMarkers() {
   }
 }
 
+function getConvexVolume(shape) {
+  if (!(shape instanceof CANNON.ConvexPolyhedron)) return 0;
+
+  let vol6 = 0;
+  for (const face of shape.faces) {
+    if (!face || face.length < 3) continue;
+    const i0 = face[0];
+    for (let i = 1; i < face.length - 1; i++) {
+      const ia = face[i];
+      const ib = face[i + 1];
+      const a = shape.vertices[i0];
+      const b = shape.vertices[ia];
+      const c = shape.vertices[ib];
+      // det(a,b,c) = a・(b×c)
+      vol6 += a.x * (b.y * c.z - b.z * c.y)
+            - a.y * (b.x * c.z - b.z * c.x)
+            + a.z * (b.x * c.y - b.y * c.x);
+    }
+  }
+
+  return Math.abs(vol6) / 6;
+}
+
 function getShapeMassWeight(shape) {
   if (shape instanceof CANNON.Box) {
     const h = shape.halfExtents;
@@ -885,8 +908,8 @@ function getShapeMassWeight(shape) {
     return Math.max(Math.PI * shape.radiusTop * shape.radiusBottom * shape.height, 1e-6);
   }
   if (shape instanceof CANNON.ConvexPolyhedron) {
-    const r = Math.max(shape.boundingSphereRadius || 0.01, 0.01);
-    return (4 / 3) * Math.PI * r * r * r;
+    // boundingSphere近似だと重心シフトが効きにくいので、面から体積を近似算出
+    return Math.max(getConvexVolume(shape), 1e-6);
   }
   return 1;
 }

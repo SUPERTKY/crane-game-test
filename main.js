@@ -1566,24 +1566,23 @@ function clampBodyAngularVelocity(body, maxSpeed) {
 
 function stabilizePrizeBody(body) {
   if (!body) return;
-<<<<<<< codex-55o8nw
+
   const clawContact = getClawContactLevel(clawLBody) > 0 || getClawContactLevel(clawRBody) > 0;
 
   // 接触中は箱側をソフトに減衰させてsolver破綻（潰れ/飛び）を抑える
   body.linearDamping = clawContact ? BOX_CONTACT_LINEAR_DAMPING : BOX_BASE_LINEAR_DAMPING;
   body.angularDamping = clawContact ? BOX_CONTACT_ANGULAR_DAMPING : BOX_BASE_ANGULAR_DAMPING;
 
-=======
->>>>>>> main
+
   clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);
 
   // 常時ガチガチに角速度を止めるとピッチが出にくいので、接触時のみやや緩く制限
   if (ENABLE_BOX_ANGULAR_CLAMP) {
-<<<<<<< codex-55o8nw
+
     const maxAngular = clawContact ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
-=======
+
     const maxAngular = isClawPressingSomething() ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
->>>>>>> main
+
     clampBodyAngularVelocity(body, maxAngular);
   }
 }

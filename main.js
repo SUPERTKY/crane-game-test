@@ -272,12 +272,17 @@ const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかな�
 const CLAW_CLOSE_DAMP_BOX = 0.0;    // 箱接触中は閉じ方向を停止
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
 const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
+const CLAW_AUTORETURN_TO_CLOSED = true;
+const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
+const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
+let boxContactFrames = 0;
+let boxReleaseFrames = 9999;
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -1624,6 +1629,26 @@ if (autoStarted) {
     // ここに到達したら停止（必要なら景品を離す処理を追加可能）
   }
 }
+
+  // 箱接触が切れたあと、一定フレームで爪を完全クローズへ戻す（瞬断対策つき）
+  const boxTouchingNow = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
+  if (boxTouchingNow) {
+    boxContactFrames += 1;
+    boxReleaseFrames = 0;
+  } else {
+    boxReleaseFrames += 1;
+  }
+
+  const autoSequenceBusy = autoStarted && autoStep > 0 && autoStep < 5;
+  if (
+    CLAW_AUTORETURN_TO_CLOSED &&
+    !autoSequenceBusy &&
+    boxReleaseFrames >= CLAW_RELEASE_DEBOUNCE_FRAMES &&
+    clawOpen01 > 0
+  ) {
+    const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
+    setClawOpen01(nextOpen01);
+  }
 
 
   // ★★★ ここがポイント：Cannon側armBodyを "step前" に同期 ★★★

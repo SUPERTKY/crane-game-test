@@ -275,6 +275,13 @@ const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が�
 const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
+const GRIP_CONTACT_DEBOUNCE_FRAMES = 8;
+const GRIP_MAX_UPWARD_NORMAL_Y = 0.45;
+const GRIP_CENTER_MARGIN = 0.22;
+const GRIP_FAIL_TIMEOUT_SEC = 0.8;
+const GRIP_RELEASE_PULSE_OPEN01 = 0.14;
+const GRIP_RELEASE_PULSE_SEC = 0.14;
+const GRIP_DEBUG_LOG_INTERVAL_FRAMES = 20;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -283,6 +290,11 @@ let autoStarted = false;
 let clawDropPenetrationT = 0;
 let boxContactFrames = 0;
 let boxReleaseFrames = 9999;
+let gripLeftFrames = 0;
+let gripRightFrames = 0;
+let gripInvalidHoldT = 0;
+let gripReleasePulseT = 0;
+let gripDebugFrameCounter = 0;
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -359,6 +371,75 @@ function getClawContactLevel(body) {
   }
 
   return level;
+}
+
+function collectClawBoxContactStats() {
+  let normalYSum = 0;
+  let contactCount = 0;
+
+  for (const c of world.contacts) {
+    const bi = c.bi;
+    const bj = c.bj;
+    const isClawBoxPair =
+      ((bi === clawLBody || bi === clawRBody) && bj === boxBody) ||
+      ((bj === clawLBody || bj === clawRBody) && bi === boxBody);
+
+    if (!isClawBoxPair) continue;
+
+    // c.ni は bi->bj。箱側法線Yをそろえて平均する
+    const normalTowardBoxY = bj === boxBody ? c.ni.y : -c.ni.y;
+    normalYSum += normalTowardBoxY;
+    contactCount += 1;
+  }
+
+  const avgNormalY = contactCount > 0 ? normalYSum / contactCount : 0;
+  return { avgNormalY, contactCount };
+}
+
+function isBoxCenterBetweenClaws(margin = GRIP_CENTER_MARGIN) {
+  if (!boxBody || !clawLBody || !clawRBody) return false;
+
+  const l = clawLBody.position;
+  const r = clawRBody.position;
+  const b = boxBody.position;
+
+  const axis = r.vsub(l);
+  const len = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+  if (len < 1e-6) return false;
+
+  const nx = axis.x / len;
+  const ny = axis.y / len;
+  const nz = axis.z / len;
+
+  const relx = b.x - l.x;
+  const rely = b.y - l.y;
+  const relz = b.z - l.z;
+  const t = relx * nx + rely * ny + relz * nz; // L->R への射影
+
+  return t >= -margin && t <= len + margin;
+}
+
+function getValidGripStatus() {
+  const touchingLeftBox = getClawContactLevel(clawLBody) === 2;
+  const touchingRightBox = getClawContactLevel(clawRBody) === 2;
+
+  gripLeftFrames = touchingLeftBox ? gripLeftFrames + 1 : 0;
+  gripRightFrames = touchingRightBox ? gripRightFrames + 1 : 0;
+
+  const contactStats = collectClawBoxContactStats();
+  const centerBetween = isBoxCenterBetweenClaws();
+  const twoSideStable = gripLeftFrames >= GRIP_CONTACT_DEBOUNCE_FRAMES && gripRightFrames >= GRIP_CONTACT_DEBOUNCE_FRAMES;
+  const noJackUpPush = contactStats.avgNormalY < GRIP_MAX_UPWARD_NORMAL_Y;
+
+  const validGrip = twoSideStable && noJackUpPush && centerBetween;
+
+  return {
+    validGrip,
+    avgNormalY: contactStats.avgNormalY,
+    leftFrames: gripLeftFrames,
+    rightFrames: gripRightFrames,
+    centerBetween,
+  };
 }
 
 function softenClosingDelta(delta, isClosingPositive, damp) {
@@ -602,6 +683,10 @@ function startAutoSequence() {
   autoT = 0;
   dropStartY = armGroup.position.y;
   clawDropPenetrationT = 0;
+  gripLeftFrames = 0;
+  gripRightFrames = 0;
+  gripInvalidHoldT = 0;
+  gripReleasePulseT = 0;
 }
 
 // ===== つかみConstraintは使わない（接触のみで保持） =====
@@ -1342,36 +1427,6 @@ boxMesh.rotation.y += BOX_YAW;
     boxBody.addShape(new CANNON.Box(boxHalf), new CANNON.Vec3(0, 0, -BOX_CENTER_OF_MASS_FRONT_SHIFT_Z));
   }
 
-  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
-  // （箱の内側に置くため外形コリジョンには実質影響しない）
-  // 小球1個だと体積比が小さすぎて重心可視化で差が出にくいため、同位置に複数バラストを積む
-  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
-    boxBody.addShape(
-      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
-      new CANNON.Vec3(0, 0, BOX_COM_FRONT_BALLAST_Z)
-    );
-  }
-
-  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
-  // （箱の内側に置くため外形コリジョンには実質影響しない）
-  // 小球1個だと体積比が小さすぎて重心可視化で差が出にくいため、同位置に複数バラストを積む
-  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
-    boxBody.addShape(
-      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
-      new CANNON.Vec3(BOX_COM_FRONT_BALLAST_X, 0, BOX_COM_FRONT_BALLAST_Z)
-    );
-  }
-
-  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
-  // （箱の内側に置くため外形コリジョンには実質影響しない）
-  // 小球1個だと体積比が小さすぎて重心可視化で差が出にくいため、同位置に複数バラストを積む
-  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
-    boxBody.addShape(
-      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
-      new CANNON.Vec3(BOX_COM_FRONT_BALLAST_X, 0, BOX_COM_FRONT_BALLAST_Z)
-    );
-  }
-
   // 見た目とのズレを出さず、重心だけ前寄りへ寄せる内部バラスト
   // ※重複追加バグを防ぐため、この関数呼び出し1箇所に集約する
   addFrontBallastShapes(boxBody);
@@ -1567,6 +1622,14 @@ function animate(t) {
     }
   }
 
+  const gripStatus = getValidGripStatus();
+  gripDebugFrameCounter += 1;
+  if (gripDebugFrameCounter % GRIP_DEBUG_LOG_INTERVAL_FRAMES === 0) {
+    console.log(
+      `[Grip] valid=${gripStatus.validGrip} L=${gripStatus.leftFrames} R=${gripStatus.rightFrames} avgNy=${gripStatus.avgNormalY.toFixed(3)} center=${gripStatus.centerBetween}`
+    );
+  }
+
   // ===== 自動シーケンス（Three側）=====
   // ステップ: 1=開く → 2=下げる → 3=閉じる → 4=上げる → 5=完了
 if (autoStarted) {
@@ -1600,7 +1663,9 @@ if (autoStarted) {
 
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
-    autoT += isClawPressingSomething() ? dt * 0.3 : dt;
+    // 下から押し上げる接触(上向き法線が強い)時は閉じを抑えてジャッキアップを防ぐ
+    const closeScale = gripStatus.avgNormalY >= GRIP_MAX_UPWARD_NORMAL_Y ? 0.1 : 1.0;
+    autoT += (isClawPressingSomething() ? dt * 0.3 : dt) * closeScale;
     setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1));
     if (autoT >= CLAW_CLOSE_TIME) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
@@ -1617,7 +1682,26 @@ if (autoStarted) {
     // ===== ステップ4: アームを元の高さまで上げる =====
     autoT += dt;
     const targetY = dropStartY;
-    armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
+
+    if (gripStatus.validGrip) {
+      gripInvalidHoldT = 0;
+      gripReleasePulseT = 0;
+      armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
+    } else {
+      // Valid Grip でない間は上げない（偶然持ち上げを防止）
+      gripInvalidHoldT += dt;
+
+      // 引っ掛けを外すために短い開きパルス
+      if (gripReleasePulseT < GRIP_RELEASE_PULSE_SEC) {
+        gripReleasePulseT += dt;
+        setClawOpen01(Math.min(1, clawOpen01 + GRIP_RELEASE_PULSE_OPEN01 * dt / GRIP_RELEASE_PULSE_SEC));
+      }
+
+      // 一定時間成立しなければ失敗扱いで終了（箱はその場に落とす）
+      if (gripInvalidHoldT >= GRIP_FAIL_TIMEOUT_SEC) {
+        autoStep = 5;
+      }
+    }
 
     if (armGroup.position.y >= targetY - 1e-6) {
       armGroup.position.y = targetY;

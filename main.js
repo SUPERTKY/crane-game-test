@@ -277,6 +277,7 @@ const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
+const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
@@ -534,11 +535,15 @@ function setClawOpen01(open01) {
     // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
     if (
       levelL === 2 &&
-      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES &&
-      clawReleasePulseCooldownL === 0
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES
     ) {
-      nextL = currentL - CLAW_CLOSE_RELEASE_PULSE;
-      clawReleasePulseCooldownL = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
+      if (CLAW_STOP_CLOSE_ON_BOX_PRESS) {
+        // 圧迫状態が続く間は閉じ方向の回転を止める
+        nextL = currentL;
+      } else if (clawReleasePulseCooldownL === 0) {
+        nextL = currentL - CLAW_CLOSE_RELEASE_PULSE;
+        clawReleasePulseCooldownL = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
+      }
     }
   }
   if (isClosing && clawContactHoldR > 0) {
@@ -548,11 +553,15 @@ function setClawOpen01(open01) {
     // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
     if (
       levelR === 2 &&
-      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES &&
-      clawReleasePulseCooldownR === 0
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES
     ) {
-      nextR = currentR + CLAW_CLOSE_RELEASE_PULSE;
-      clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
+      if (CLAW_STOP_CLOSE_ON_BOX_PRESS) {
+        // 圧迫状態が続く間は閉じ方向の回転を止める
+        nextR = currentR;
+      } else if (clawReleasePulseCooldownR === 0) {
+        nextR = currentR + CLAW_CLOSE_RELEASE_PULSE;
+        clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
+      }
     }
   }
 

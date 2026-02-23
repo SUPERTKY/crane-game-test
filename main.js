@@ -278,6 +278,7 @@ const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
+const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
@@ -312,6 +313,8 @@ let step4LiftAssistNoContactT = 0;
 
 let clawBoxPressFramesL = 0;
 let clawBoxPressFramesR = 0;
+let clawReleasePulseCooldownL = 0;
+let clawReleasePulseCooldownR = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
 let step2LockY = 0;
@@ -490,6 +493,11 @@ function setClawOpen01(open01) {
 
   clawBoxPressFramesL = levelL === 2 ? clawBoxPressFramesL + 1 : 0;
   clawBoxPressFramesR = levelR === 2 ? clawBoxPressFramesR + 1 : 0;
+  clawReleasePulseCooldownL = Math.max(0, clawReleasePulseCooldownL - 1);
+  clawReleasePulseCooldownR = Math.max(0, clawReleasePulseCooldownR - 1);
+
+  if (levelL !== 2) clawReleasePulseCooldownL = 0;
+  if (levelR !== 2) clawReleasePulseCooldownR = 0;
 
   clawContactHoldL = levelL > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
   clawContactHoldR = levelR > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
@@ -502,8 +510,13 @@ function setClawOpen01(open01) {
     nextL = currentL + softenClosingDelta(targetL - currentL, true, dampL);
 
     // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
-    if (levelL === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) {
+    if (
+      levelL === 2 &&
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES &&
+      clawReleasePulseCooldownL === 0
+    ) {
       nextL = currentL - CLAW_CLOSE_RELEASE_PULSE;
+      clawReleasePulseCooldownL = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
     }
   }
   if (isClosing && clawContactHoldR > 0) {
@@ -511,8 +524,13 @@ function setClawOpen01(open01) {
     nextR = currentR + softenClosingDelta(targetR - currentR, false, dampR);
 
     // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
-    if (levelR === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES) {
+    if (
+      levelR === 2 &&
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES &&
+      clawReleasePulseCooldownR === 0
+    ) {
       nextR = currentR + CLAW_CLOSE_RELEASE_PULSE;
+      clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
     }
   }
 

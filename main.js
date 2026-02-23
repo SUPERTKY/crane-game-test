@@ -1423,7 +1423,8 @@ boxMesh.rotation.y += BOX_YAW;
       Math.max(boxSize.y / 2, 0.01),
       Math.max(boxSize.z / 2, 0.01)
     );
-    boxBody.addShape(new CANNON.Box(boxHalf));
+    // 単純Boxフォールバック時も同じく前寄り重心にする
+    boxBody.addShape(new CANNON.Box(boxHalf), new CANNON.Vec3(0, 0, -BOX_CENTER_OF_MASS_FRONT_SHIFT_Z));
   }
 
   // 見た目とのズレを出さず、重心だけ前寄りへ寄せる内部バラスト

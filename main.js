@@ -274,6 +274,8 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
+const CLAW_CLOSE_MAX_WAIT_SEC = 3.2; // 閉じフェーズが進まない時の最大待機
+const CLAW_CLOSE_DONE_OPEN01 = 0.22; // これ以下まで閉じたら掴みフェーズ完了
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
@@ -292,6 +294,7 @@ const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.2;
 const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
 const CLAW_PASSIVE_OPEN_RESISTANCE = 1.45;
 const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
+const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
@@ -327,6 +330,7 @@ let step4LiftAssistNoContactT = 0;
 let step4LiftLatched = false;
 let step4GripLostT = 0;
 let step4ReleasePulseUsed = false;
+let step3ElapsedT = 0;
 
 let clawBoxPressFramesL = 0;
 let clawBoxPressFramesR = 0;
@@ -513,8 +517,16 @@ function setClawPivotAngle(pivot, logicalAngle) {
 let clawContactHoldL = 0;
 let clawContactHoldR = 0;
 
-function applyPassiveOpenByBoxWeight(currentAngle, level, closedAngle, openAngle, currentVel, dt) {
-  if (!CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT || !boxBody || level !== 2) {
+function applyPassiveOpenByBoxWeight(currentAngle, level, closedAngle, openAngle, currentVel, dt, boxPressFrames) {
+  const passiveActive =
+    CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT &&
+    autoStarted &&
+    autoStep === 3 &&
+    boxBody &&
+    level === 2 &&
+    boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
+
+  if (!passiveActive) {
     const dampedVel = currentVel * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
     return {
       nextAngle: currentAngle,
@@ -556,8 +568,8 @@ function setClawOpen01(open01, dt = 1 / 60) {
   if (levelL !== 2) clawReleasePulseCooldownL = 0;
   if (levelR !== 2) clawReleasePulseCooldownR = 0;
 
-  clawContactHoldL = levelL > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
-  clawContactHoldR = levelR > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
+  clawContactHoldL = levelL === 2 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
+  clawContactHoldR = levelR === 2 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
 
   let nextL = targetL;
   let nextR = targetR;
@@ -600,11 +612,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
   }
 
   if (isClosing) {
-    const passiveL = applyPassiveOpenByBoxWeight(nextL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt);
+    const passiveL = applyPassiveOpenByBoxWeight(nextL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt, clawBoxPressFramesL);
     nextL = passiveL.nextAngle;
     clawPassiveOpenVelL = passiveL.nextVel;
 
-    const passiveR = applyPassiveOpenByBoxWeight(nextR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt);
+    const passiveR = applyPassiveOpenByBoxWeight(nextR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt, clawBoxPressFramesR);
     nextR = passiveR.nextAngle;
     clawPassiveOpenVelR = passiveR.nextVel;
   } else {
@@ -831,6 +843,7 @@ function startAutoSequence() {
 
   step2BoxPressFrames = 0;
   step2LockYActive = false;
+  step3ElapsedT = 0;
 
 }
 
@@ -1710,6 +1723,20 @@ function isClawPressingSomething() {
   return false;
 }
 
+function isClawPressingBox() {
+  if (!clawLBody || !clawRBody || !boxBody) return false;
+
+  for (const c of world.contacts) {
+    const bi = c.bi;
+    const bj = c.bj;
+    const isClawBox =
+      ((bi === clawLBody || bi === clawRBody) && bj === boxBody) ||
+      ((bj === clawLBody || bj === clawRBody) && bi === boxBody);
+    if (isClawBox) return true;
+  }
+  return false;
+}
+
 function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact) {
   if (!body || !mesh) return;
 
@@ -1901,12 +1928,20 @@ if (autoStarted) {
     // ===== ステップ3: 爪を閉じる =====
     // 下から押し上げる接触(上向き法線が強い)時は閉じを抑えてジャッキアップを防ぐ
     const closeScale = gripStatus.avgNormalY >= GRIP_MAX_UPWARD_NORMAL_Y ? 0.1 : 1.0;
-    autoT += (isClawPressingSomething() ? dt * 0.3 : dt) * closeScale;
+    const closeDt = (isClawPressingBox() ? dt * 0.3 : dt) * closeScale;
+    autoT += closeDt;
+    step3ElapsedT += dt;
+
+    // 目標を0(完全クローズ)へ寄せ続ける。接触で押し戻されても再度閉じを試みる。
     setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1), dt);
-    if (autoT >= CLAW_CLOSE_TIME) {
+
+    const closeReached = clawOpen01 <= CLAW_CLOSE_DONE_OPEN01;
+    const closeTimedOut = step3ElapsedT >= CLAW_CLOSE_MAX_WAIT_SEC;
+    if ((autoT >= CLAW_CLOSE_TIME && closeReached) || closeTimedOut) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
+      step3ElapsedT = 0;
       step4LiftAssistNoContactT = 0;
       step4LiftLatched = false;
       step4GripLostT = 0;

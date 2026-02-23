@@ -726,11 +726,10 @@ function startAutoSequence() {
   gripRightFrames = 0;
   gripInvalidHoldT = 0;
   gripReleasePulseT = 0;
-<<<<<<< codex-55o8nw
+
   step2BoxPressFrames = 0;
   step2LockYActive = false;
-=======
->>>>>>> main
+
 }
 
 

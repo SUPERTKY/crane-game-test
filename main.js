@@ -275,6 +275,7 @@ const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が�
 const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
+<<<<<<< codex-55o8nw
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
@@ -285,6 +286,8 @@ const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;
 const BOX_CONTACT_LINEAR_DAMPING = 0.30;
 const BOX_CONTACT_ANGULAR_DAMPING = 0.36;
+=======
+>>>>>>> main
 const GRIP_CONTACT_DEBOUNCE_FRAMES = 8;
 const GRIP_MAX_UPWARD_NORMAL_Y = 0.45;
 const GRIP_CENTER_MARGIN = 0.22;
@@ -305,11 +308,14 @@ let gripRightFrames = 0;
 let gripInvalidHoldT = 0;
 let gripReleasePulseT = 0;
 let gripDebugFrameCounter = 0;
+<<<<<<< codex-55o8nw
 let clawBoxPressFramesL = 0;
 let clawBoxPressFramesR = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
 let step2LockY = 0;
+=======
+>>>>>>> main
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -722,8 +728,11 @@ function startAutoSequence() {
   gripRightFrames = 0;
   gripInvalidHoldT = 0;
   gripReleasePulseT = 0;
+<<<<<<< codex-55o8nw
   step2BoxPressFrames = 0;
   step2LockYActive = false;
+=======
+>>>>>>> main
 }
 
 
@@ -1461,7 +1470,8 @@ boxMesh.rotation.y += BOX_YAW;
       Math.max(boxSize.y / 2, 0.01),
       Math.max(boxSize.z / 2, 0.01)
     );
-    boxBody.addShape(new CANNON.Box(boxHalf));
+    // 単純Boxフォールバック時も同じく前寄り重心にする
+    boxBody.addShape(new CANNON.Box(boxHalf), new CANNON.Vec3(0, 0, -BOX_CENTER_OF_MASS_FRONT_SHIFT_Z));
   }
 
   // 見た目とのズレを出さず、重心だけ前寄りへ寄せる内部バラスト
@@ -1559,17 +1569,24 @@ function clampBodyAngularVelocity(body, maxSpeed) {
 
 function stabilizePrizeBody(body) {
   if (!body) return;
+<<<<<<< codex-55o8nw
   const clawContact = getClawContactLevel(clawLBody) > 0 || getClawContactLevel(clawRBody) > 0;
 
   // 接触中は箱側をソフトに減衰させてsolver破綻（潰れ/飛び）を抑える
   body.linearDamping = clawContact ? BOX_CONTACT_LINEAR_DAMPING : BOX_BASE_LINEAR_DAMPING;
   body.angularDamping = clawContact ? BOX_CONTACT_ANGULAR_DAMPING : BOX_BASE_ANGULAR_DAMPING;
 
+=======
+>>>>>>> main
   clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);
 
   // 常時ガチガチに角速度を止めるとピッチが出にくいので、接触時のみやや緩く制限
   if (ENABLE_BOX_ANGULAR_CLAMP) {
+<<<<<<< codex-55o8nw
     const maxAngular = clawContact ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
+=======
+    const maxAngular = isClawPressingSomething() ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
+>>>>>>> main
     clampBodyAngularVelocity(body, maxAngular);
   }
 }

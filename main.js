@@ -277,6 +277,7 @@ const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
+const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
@@ -485,6 +486,16 @@ function angleToOpen01(angle, closed, open) {
   );
 }
 
+function getClawPivotAngle(pivot, fallbackAngle) {
+  if (!pivot) return fallbackAngle;
+  return pivot.rotation[CLAW_AXIS] * CLAW_SIGN;
+}
+
+function setClawPivotAngle(pivot, logicalAngle) {
+  if (!pivot) return;
+  pivot.rotation[CLAW_AXIS] = logicalAngle * CLAW_SIGN;
+}
+
 let clawContactHoldL = 0;
 let clawContactHoldR = 0;
 
@@ -497,8 +508,8 @@ function setClawOpen01(open01) {
   const targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
   const targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
 
-  const currentL = clawLPivot ? clawLPivot.rotation.x : targetL;
-  const currentR = clawRPivot ? clawRPivot.rotation.x : targetR;
+  const currentL = getClawPivotAngle(clawLPivot, targetL);
+  const currentR = getClawPivotAngle(clawRPivot, targetR);
 
   const levelL = getClawContactLevel(clawLBody);
   const levelR = getClawContactLevel(clawRBody);
@@ -524,11 +535,15 @@ function setClawOpen01(open01) {
     // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
     if (
       levelL === 2 &&
-      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES &&
-      clawReleasePulseCooldownL === 0
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES
     ) {
-      nextL = currentL - CLAW_CLOSE_RELEASE_PULSE;
-      clawReleasePulseCooldownL = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
+      if (CLAW_STOP_CLOSE_ON_BOX_PRESS) {
+        // 圧迫状態が続く間は閉じ方向の回転を止める
+        nextL = currentL;
+      } else if (clawReleasePulseCooldownL === 0) {
+        nextL = currentL - CLAW_CLOSE_RELEASE_PULSE;
+        clawReleasePulseCooldownL = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
+      }
     }
   }
   if (isClosing && clawContactHoldR > 0) {
@@ -538,11 +553,15 @@ function setClawOpen01(open01) {
     // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
     if (
       levelR === 2 &&
-      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES &&
-      clawReleasePulseCooldownR === 0
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES
     ) {
-      nextR = currentR + CLAW_CLOSE_RELEASE_PULSE;
-      clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
+      if (CLAW_STOP_CLOSE_ON_BOX_PRESS) {
+        // 圧迫状態が続く間は閉じ方向の回転を止める
+        nextR = currentR;
+      } else if (clawReleasePulseCooldownR === 0) {
+        nextR = currentR + CLAW_CLOSE_RELEASE_PULSE;
+        clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
+      }
     }
   }
 
@@ -553,8 +572,8 @@ function setClawOpen01(open01) {
   nextL = THREE.MathUtils.clamp(nextL, minL, maxL);
   nextR = THREE.MathUtils.clamp(nextR, minR, maxR);
 
-  if (clawLPivot) clawLPivot.rotation.x = nextL; // ←軸は合うやつに（x/y/z）
-  if (clawRPivot) clawRPivot.rotation.x = nextR;
+  setClawPivotAngle(clawLPivot, nextL);
+  setClawPivotAngle(clawRPivot, nextR);
 
   const openL01 = angleToOpen01(nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
   const openR01 = angleToOpen01(nextR, CLAW_R_CLOSED, CLAW_R_OPEN);

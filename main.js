@@ -275,6 +275,19 @@ const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が�
 const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
+<<<<<<< codex-55o8nw
+const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
+const CLAW_CLOSE_RELEASE_PULSE = 0.03;
+const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
+const STEP2_LOCK_ON_BOX_PRESS = true;
+const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
+const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.22;
+const BOX_BASE_LINEAR_DAMPING = 0.08;
+const BOX_BASE_ANGULAR_DAMPING = 0.12;
+const BOX_CONTACT_LINEAR_DAMPING = 0.30;
+const BOX_CONTACT_ANGULAR_DAMPING = 0.36;
+=======
+>>>>>>> main
 const GRIP_CONTACT_DEBOUNCE_FRAMES = 8;
 const GRIP_MAX_UPWARD_NORMAL_Y = 0.45;
 const GRIP_CENTER_MARGIN = 0.22;
@@ -295,6 +308,14 @@ let gripRightFrames = 0;
 let gripInvalidHoldT = 0;
 let gripReleasePulseT = 0;
 let gripDebugFrameCounter = 0;
+<<<<<<< codex-55o8nw
+let clawBoxPressFramesL = 0;
+let clawBoxPressFramesR = 0;
+let step2BoxPressFrames = 0;
+let step2LockYActive = false;
+let step2LockY = 0;
+=======
+>>>>>>> main
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然
@@ -467,6 +488,9 @@ function setClawOpen01(open01) {
   const levelL = getClawContactLevel(clawLBody);
   const levelR = getClawContactLevel(clawRBody);
 
+  clawBoxPressFramesL = levelL === 2 ? clawBoxPressFramesL + 1 : 0;
+  clawBoxPressFramesR = levelR === 2 ? clawBoxPressFramesR + 1 : 0;
+
   clawContactHoldL = levelL > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
   clawContactHoldR = levelR > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
 
@@ -476,11 +500,28 @@ function setClawOpen01(open01) {
   if (isClosing && clawContactHoldL > 0) {
     const dampL = levelL === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
     nextL = currentL + softenClosingDelta(targetL - currentL, true, dampL);
+
+    // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
+    if (levelL === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) {
+      nextL = currentL - CLAW_CLOSE_RELEASE_PULSE;
+    }
   }
   if (isClosing && clawContactHoldR > 0) {
     const dampR = levelR === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
     nextR = currentR + softenClosingDelta(targetR - currentR, false, dampR);
+
+    // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
+    if (levelR === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES) {
+      nextR = currentR + CLAW_CLOSE_RELEASE_PULSE;
+    }
   }
+
+  const minL = Math.min(CLAW_L_CLOSED, CLAW_L_OPEN);
+  const maxL = Math.max(CLAW_L_CLOSED, CLAW_L_OPEN);
+  const minR = Math.min(CLAW_R_CLOSED, CLAW_R_OPEN);
+  const maxR = Math.max(CLAW_R_CLOSED, CLAW_R_OPEN);
+  nextL = THREE.MathUtils.clamp(nextL, minL, maxL);
+  nextR = THREE.MathUtils.clamp(nextR, minR, maxR);
 
   if (clawLPivot) clawLPivot.rotation.x = nextL; // ←軸は合うやつに（x/y/z）
   if (clawRPivot) clawRPivot.rotation.x = nextR;
@@ -687,7 +728,13 @@ function startAutoSequence() {
   gripRightFrames = 0;
   gripInvalidHoldT = 0;
   gripReleasePulseT = 0;
+<<<<<<< codex-55o8nw
+  step2BoxPressFrames = 0;
+  step2LockYActive = false;
+=======
+>>>>>>> main
 }
+
 
 // ===== つかみConstraintは使わない（接触のみで保持） =====
 
@@ -1397,8 +1444,8 @@ boxMesh.rotation.y += BOX_YAW;
   boxBody = new CANNON.Body({
     mass: 1.0,
     material: matBox,
-    linearDamping: 0.08,
-    angularDamping: 0.12,
+    linearDamping: BOX_BASE_LINEAR_DAMPING,
+    angularDamping: BOX_BASE_ANGULAR_DAMPING,
     allowSleep: false,
     sleepSpeedLimit: 0.15,
     sleepTimeLimit: 0.8,
@@ -1522,11 +1569,24 @@ function clampBodyAngularVelocity(body, maxSpeed) {
 
 function stabilizePrizeBody(body) {
   if (!body) return;
+<<<<<<< codex-55o8nw
+  const clawContact = getClawContactLevel(clawLBody) > 0 || getClawContactLevel(clawRBody) > 0;
+
+  // 接触中は箱側をソフトに減衰させてsolver破綻（潰れ/飛び）を抑える
+  body.linearDamping = clawContact ? BOX_CONTACT_LINEAR_DAMPING : BOX_BASE_LINEAR_DAMPING;
+  body.angularDamping = clawContact ? BOX_CONTACT_ANGULAR_DAMPING : BOX_BASE_ANGULAR_DAMPING;
+
+=======
+>>>>>>> main
   clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);
 
   // 常時ガチガチに角速度を止めるとピッチが出にくいので、接触時のみやや緩く制限
   if (ENABLE_BOX_ANGULAR_CLAMP) {
+<<<<<<< codex-55o8nw
+    const maxAngular = clawContact ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
+=======
     const maxAngular = isClawPressingSomething() ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
+>>>>>>> main
     clampBodyAngularVelocity(body, maxAngular);
   }
 }
@@ -1551,6 +1611,40 @@ function isClawPressingSomething() {
   return false;
 }
 
+function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact) {
+  if (!body || !mesh) return;
+
+  mesh.updateWorldMatrix(true, false);
+  const desiredPos3 = new THREE.Vector3();
+  const desiredQuat3 = new THREE.Quaternion();
+  mesh.getWorldPosition(desiredPos3);
+  mesh.getWorldQuaternion(desiredQuat3);
+
+  const desiredPos = threeVecToCannon(desiredPos3);
+
+  const maxMove = Math.max((isContact ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED) * dt, 0);
+  const dx = desiredPos.x - prevPos.x;
+  const dy = desiredPos.y - prevPos.y;
+  const dz = desiredPos.z - prevPos.z;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const moveScale = dist > 1e-8 ? Math.min(1, maxMove / dist) : 1;
+
+  body.position.set(
+    prevPos.x + dx * moveScale,
+    prevPos.y + dy * moveScale,
+    prevPos.z + dz * moveScale
+  );
+
+  // 接触中は回転追従量も制限して、めり込み起点の過大トルクを抑える
+  const currentQ3 = cannonQuatToThree(body.quaternion);
+  const dot = Math.min(1, Math.max(-1, Math.abs(currentQ3.dot(desiredQuat3))));
+  const angle = 2 * Math.acos(dot);
+  const maxAngle = isContact ? CONTACT_KINEMATIC_MAX_ANGLE_STEP : FREE_KINEMATIC_MAX_ANGLE_STEP;
+  const t = angle > 1e-6 ? Math.min(1, maxAngle / angle) : 1;
+  currentQ3.slerp(desiredQuat3, t);
+  body.quaternion.copy(threeQuatToCannon(currentQ3));
+}
+
 function followClawBodies(dt) {
   if (!armBody || !clawLBody || !clawRBody) return;
   if (!armGroup || !clawLMesh || !clawRMesh) return;
@@ -1561,23 +1655,12 @@ function followClawBodies(dt) {
   prevClawL.copy(clawLBody.position);
   prevClawR.copy(clawRBody.position);
 
-  // ★ 方法B: 爪メッシュのワールド姿勢を直接使う
-  //    ピボットではなくメッシュ自体を追跡するので、
-  //    メッシュの position 補正やスケールが自動的に反映される
-  clawLMesh.updateWorldMatrix(true, false);
-  clawLMesh.getWorldPosition(tmpPos);
-  clawLMesh.getWorldQuaternion(tmpQuat);
+  const leftContact = getClawContactLevel(clawLBody) > 0;
+  const rightContact = getClawContactLevel(clawRBody) > 0;
 
-  clawLBody.position.copy(threeVecToCannon(tmpPos));
-  clawLBody.quaternion.copy(threeQuatToCannon(tmpQuat));
-
-  // ★ 右爪も同様にメッシュから取得
-  clawRMesh.updateWorldMatrix(true, false);
-  clawRMesh.getWorldPosition(tmpPos);
-  clawRMesh.getWorldQuaternion(tmpQuat);
-
-  clawRBody.position.copy(threeVecToCannon(tmpPos));
-  clawRBody.quaternion.copy(threeQuatToCannon(tmpQuat));
+  // 接触中はテレポート同期せず、1stepあたりの追従量を制限して押し込みを防ぐ
+  moveKinematicBodyTowardMesh(clawLBody, clawLMesh, prevClawL, dt, leftContact);
+  moveKinematicBodyTowardMesh(clawRBody, clawRMesh, prevClawR, dt, rightContact);
 
   // 速度（kinematic安定化）
   if (dt > 1e-6) {
@@ -1591,9 +1674,6 @@ function followClawBodies(dt) {
       (clawRBody.position.y - prevClawR.y) / dt,
       (clawRBody.position.z - prevClawR.z) / dt
     );
-    const maxSpeed = isClawPressingSomething() ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED;
-    clampBodyLinearVelocity(clawLBody, maxSpeed);
-    clampBodyLinearVelocity(clawRBody, maxSpeed);
   }
   clawLBody.angularVelocity.set(0, 0, 0);
   clawRBody.angularVelocity.set(0, 0, 0);
@@ -1645,20 +1725,40 @@ if (autoStarted) {
     const pressing = isClawPressingSomething();
     const boxPressing = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
     const dropSpeed = pressing ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
-    armGroup.position.y = Math.max(targetY, armGroup.position.y - dropSpeed * dt);
 
-    // 降下中に「刺さり状態」が0.2秒以上続いたら、これ以上押し込まず掴み工程へ移行
+    if (boxPressing) {
+      step2BoxPressFrames += 1;
+      if (STEP2_LOCK_ON_BOX_PRESS && !step2LockYActive) {
+        step2LockYActive = true;
+        step2LockY = armGroup.position.y;
+      }
+    } else {
+      step2BoxPressFrames = 0;
+    }
+
+    if (step2LockYActive) {
+      // 箱接触後はそれ以上押し込まない
+      armGroup.position.y = Math.max(targetY, step2LockY);
+    } else {
+      armGroup.position.y = Math.max(targetY, armGroup.position.y - dropSpeed * dt);
+    }
+
+    // 降下中に「刺さり状態」が続いたら、これ以上押し込まず掴み工程へ移行
     if (boxPressing && pressing) clawDropPenetrationT += dt;
     else clawDropPenetrationT = 0;
 
-    if (clawDropPenetrationT >= CLAW_DROP_PENETRATION_ABORT_SEC) {
+    if (clawDropPenetrationT >= CLAW_DROP_PENETRATION_ABORT_SEC || step2BoxPressFrames >= STEP2_BOX_PRESS_FRAMES_TO_ABORT) {
       autoStep = 3;
       autoT = 0;
       clawDropPenetrationT = 0;
+      step2BoxPressFrames = 0;
+      step2LockYActive = false;
     } else if (armGroup.position.y <= targetY + 1e-6) {
       autoStep = 3;
       autoT = 0;
       clawDropPenetrationT = 0;
+      step2BoxPressFrames = 0;
+      step2LockYActive = false;
     }
 
   } else if (autoStep === 3) {

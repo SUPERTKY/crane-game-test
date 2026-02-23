@@ -16,7 +16,8 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
-const BOX_COM_FRONT_BALLAST_Z = -5;
+const BOX_COM_FRONT_BALLAST_X = 0.0;
+const BOX_COM_FRONT_BALLAST_Z = -0.06;
 const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
 const BOX_COM_FRONT_BALLAST_MULTIPLIER = 24;
 const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
@@ -1340,6 +1341,16 @@ boxMesh.rotation.y += BOX_YAW;
     boxBody.addShape(
       new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
       new CANNON.Vec3(0, 0, BOX_COM_FRONT_BALLAST_Z)
+    );
+  }
+
+  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
+  // （箱の内側に置くため外形コリジョンには実質影響しない）
+  // 小球1個だと体積比が小さすぎて重心可視化で差が出にくいため、同位置に複数バラストを積む
+  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
+    boxBody.addShape(
+      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
+      new CANNON.Vec3(BOX_COM_FRONT_BALLAST_X, 0, BOX_COM_FRONT_BALLAST_Z)
     );
   }
 

@@ -269,7 +269,7 @@ const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
-const CLAW_CLOSE_DAMP_BOX = 0.0;    // 箱接触中は閉じ方向を停止
+const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
 const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
 const CLAW_AUTORETURN_TO_CLOSED = true;
@@ -292,7 +292,7 @@ const GRIP_CONTACT_DEBOUNCE_FRAMES = 8;
 const GRIP_MAX_UPWARD_NORMAL_Y = 0.45;
 const GRIP_CENTER_MARGIN = 0.22;
 const GRIP_FAIL_TIMEOUT_SEC = 0.8;
-const GRIP_RELEASE_PULSE_OPEN01 = 0.14;
+const GRIP_RELEASE_PULSE_OPEN01 = 0.08;
 const GRIP_RELEASE_PULSE_SEC = 0.14;
 const GRIP_DEBUG_LOG_INTERVAL_FRAMES = 20;
 const STEP4_LIFT_ASSIST_SEC = 0.6;
@@ -1897,7 +1897,11 @@ if (autoStarted) {
 
   } else if (autoStep === 5) {
     // ===== ステップ5: 完了 =====
-    // ここに到達したら停止（必要なら景品を離す処理を追加可能）
+    // 完了時は爪を閉じ方向へ戻す（接触状態に依存せず確実に閉める）
+    if (clawOpen01 > 0) {
+      const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
+      setClawOpen01(nextOpen01);
+    }
   }
 }
 

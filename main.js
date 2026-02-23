@@ -16,7 +16,7 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
-const BOX_COM_FRONT_BALLAST_Z = -1;
+const BOX_COM_FRONT_BALLAST_Z = -0.06;
 const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
@@ -1048,7 +1048,7 @@ async function loadScene() {
 function addDebugDotLocal(parent, localPos, size = 0.03) {
   const geo = new THREE.SphereGeometry(size, 12, 12);
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xff00ff,
+    color: 0x00ffff,
     depthTest: false,
     depthWrite: false,
   });
@@ -1304,7 +1304,7 @@ boxMesh.rotation.y += BOX_YAW;
   boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
-  addBodyDebugMeshes(boxBody, 0xff00ff);
+  addBodyDebugMeshes(boxBody, 0x00ffff);
   ensureBoxComDebugMesh();
 
   boxMesh.position.copy(boxBody.position);

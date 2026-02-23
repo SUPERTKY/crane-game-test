@@ -16,17 +16,12 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整
-<<<<<<< 890zj5-codex/adjust-cannon.contactmaterial-settings
-const CLAW_BOX_FRICTION = 0.13;
-const CLAW_BOX_CONTACT_EQUATION_STIFFNESS = 4.5e4;
-const CLAW_BOX_CONTACT_EQUATION_RELAXATION = 14;
-const CLAW_BOX_FRICTION_EQUATION_STIFFNESS = 3.2e4;
-const CLAW_BOX_FRICTION_EQUATION_RELAXATION = 14;
-=======
+
+
 const CLAW_BOX_FRICTION = 0.16;
 const CLAW_BOX_CONTACT_EQUATION_STIFFNESS = 6e4;
 const CLAW_BOX_FRICTION_EQUATION_STIFFNESS = 5e4;
->>>>>>> main
+
 const BOX_YAW = Math.PI / 2;
 const BOX_COM_FRONT_BALLAST_X = 0.0;
 const BOX_COM_FRONT_BALLAST_Z = -0.06;
@@ -656,15 +651,11 @@ world.addContactMaterial(
     friction: CLAW_BOX_FRICTION,
     restitution: 0.0,
     contactEquationStiffness: CLAW_BOX_CONTACT_EQUATION_STIFFNESS,
-<<<<<<< 890zj5-codex/adjust-cannon.contactmaterial-settings
-    contactEquationRelaxation: CLAW_BOX_CONTACT_EQUATION_RELAXATION,
-    frictionEquationStiffness: CLAW_BOX_FRICTION_EQUATION_STIFFNESS,
-    frictionEquationRelaxation: CLAW_BOX_FRICTION_EQUATION_RELAXATION,
-=======
+
     contactEquationRelaxation: 12,
     frictionEquationStiffness: CLAW_BOX_FRICTION_EQUATION_STIFFNESS,
     frictionEquationRelaxation: 12,
->>>>>>> main
+
   })
 );
 

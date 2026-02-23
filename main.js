@@ -926,8 +926,17 @@ function updateBoxCenterOfMassDebug() {
   if (!SHOW_PHYSICS_DEBUG || !boxComDebugMesh || !boxBody) return;
 
   const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
-  const worldCom = boxBody.pointToWorldFrame(localCom, new CANNON.Vec3());
+  const worldCom = new CANNON.Vec3();
+
+  // pointToWorldFrame 依存を避け、位置+姿勢から明示的に重心座標を算出
+  boxBody.quaternion.vmult(localCom, worldCom);
+  worldCom.vadd(boxBody.position, worldCom);
+
   boxComDebugMesh.position.set(worldCom.x, worldCom.y, worldCom.z);
+
+  // 微小パルスで「重心マーカーが更新されている」ことを視覚的に分かりやすくする
+  const pulse = 1.0 + Math.sin(performance.now() * 0.012) * 0.08;
+  boxComDebugMesh.scale.setScalar(pulse);
 }
 
 function makeClawPhysics() {
@@ -1046,7 +1055,8 @@ async function loadScene() {
       loader.loadAsync("./models/ClawR.glb"),
     ]);
 function addDebugDotLocal(parent, localPos, size = 0.03) {
-  const geo = new THREE.SphereGeometry(size, 12, 12);
+  // 重心マーカー（球）と見分けやすいよう、ヒンジ位置は立方体マーカーで表示
+  const geo = new THREE.BoxGeometry(size * 1.4, size * 1.4, size * 1.4);
   const mat = new THREE.MeshBasicMaterial({
     color: 0x00ffff,
     depthTest: false,

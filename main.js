@@ -485,6 +485,16 @@ function angleToOpen01(angle, closed, open) {
   );
 }
 
+function getClawPivotAngle(pivot, fallbackAngle) {
+  if (!pivot) return fallbackAngle;
+  return pivot.rotation[CLAW_AXIS] * CLAW_SIGN;
+}
+
+function setClawPivotAngle(pivot, logicalAngle) {
+  if (!pivot) return;
+  pivot.rotation[CLAW_AXIS] = logicalAngle * CLAW_SIGN;
+}
+
 let clawContactHoldL = 0;
 let clawContactHoldR = 0;
 
@@ -497,8 +507,8 @@ function setClawOpen01(open01) {
   const targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
   const targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
 
-  const currentL = clawLPivot ? clawLPivot.rotation.x : targetL;
-  const currentR = clawRPivot ? clawRPivot.rotation.x : targetR;
+  const currentL = getClawPivotAngle(clawLPivot, targetL);
+  const currentR = getClawPivotAngle(clawRPivot, targetR);
 
   const levelL = getClawContactLevel(clawLBody);
   const levelR = getClawContactLevel(clawRBody);
@@ -553,8 +563,8 @@ function setClawOpen01(open01) {
   nextL = THREE.MathUtils.clamp(nextL, minL, maxL);
   nextR = THREE.MathUtils.clamp(nextR, minR, maxR);
 
-  if (clawLPivot) clawLPivot.rotation.x = nextL; // ←軸は合うやつに（x/y/z）
-  if (clawRPivot) clawRPivot.rotation.x = nextR;
+  setClawPivotAngle(clawLPivot, nextL);
+  setClawPivotAngle(clawRPivot, nextR);
 
   const openL01 = angleToOpen01(nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
   const openR01 = angleToOpen01(nextR, CLAW_R_CLOSED, CLAW_R_OPEN);

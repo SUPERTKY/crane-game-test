@@ -296,6 +296,7 @@ const GRIP_RELEASE_PULSE_OPEN01 = 0.14;
 const GRIP_RELEASE_PULSE_SEC = 0.14;
 const GRIP_DEBUG_LOG_INTERVAL_FRAMES = 20;
 const STEP4_LIFT_ASSIST_SEC = 0.6;
+const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -310,6 +311,9 @@ let gripInvalidHoldT = 0;
 let gripReleasePulseT = 0;
 let gripDebugFrameCounter = 0;
 let step4LiftAssistNoContactT = 0;
+let step4LiftLatched = false;
+let step4GripLostT = 0;
+let step4ReleasePulseUsed = false;
 
 let clawBoxPressFramesL = 0;
 let clawBoxPressFramesR = 0;
@@ -1838,6 +1842,9 @@ if (autoStarted) {
       autoStep = 4;
       autoT = 0;
       step4LiftAssistNoContactT = 0;
+      step4LiftLatched = false;
+      step4GripLostT = 0;
+      step4ReleasePulseUsed = false;
     }
 
   } else if (autoStep === 4) {
@@ -1852,7 +1859,15 @@ if (autoStarted) {
     if (touchingAnyBox) step4LiftAssistNoContactT = 0;
     else step4LiftAssistNoContactT += dt;
 
-    const allowLift = gripStatus.validGrip || step4LiftAssistNoContactT < STEP4_LIFT_ASSIST_SEC;
+    if (gripStatus.validGrip) {
+      step4LiftLatched = true;
+      step4GripLostT = 0;
+    } else if (step4LiftLatched) {
+      step4GripLostT += dt;
+    }
+
+    const gripLiftOk = gripStatus.validGrip || (step4LiftLatched && step4GripLostT < STEP4_GRIP_LOST_GRACE_SEC);
+    const allowLift = gripLiftOk || step4LiftAssistNoContactT < STEP4_LIFT_ASSIST_SEC;
 
     if (allowLift) {
       gripInvalidHoldT = 0;
@@ -1862,10 +1877,11 @@ if (autoStarted) {
       // Valid Grip でない状態が続いたら上げない（偶然持ち上げを防止）
       gripInvalidHoldT += dt;
 
-      // 引っ掛けを外すために短い開きパルス
-      if (gripReleasePulseT < GRIP_RELEASE_PULSE_SEC) {
-        gripReleasePulseT += dt;
-        setClawOpen01(Math.min(1, clawOpen01 + GRIP_RELEASE_PULSE_OPEN01 * dt / GRIP_RELEASE_PULSE_SEC));
+      // 引っ掛けを外すための開きパルスは1回だけにして不自然なガクつきを抑える
+      if (!step4ReleasePulseUsed) {
+        gripReleasePulseT = GRIP_RELEASE_PULSE_SEC;
+        setClawOpen01(Math.min(1, clawOpen01 + GRIP_RELEASE_PULSE_OPEN01));
+        step4ReleasePulseUsed = true;
       }
 
       // 一定時間成立しなければ失敗扱いで終了（箱はその場に落とす）

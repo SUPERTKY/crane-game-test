@@ -19,7 +19,10 @@ const BOX_YAW = Math.PI / 2;
 const BOX_COM_FRONT_BALLAST_X = 0.0;
 const BOX_COM_FRONT_BALLAST_Z = -0.06;
 const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
-const BOX_COM_FRONT_BALLAST_MULTIPLIER = 24;
+const BOX_COM_FRONT_BALLAST_MULTIPLIER = 8;
+const ENABLE_BOX_ANGULAR_CLAMP = true;
+const MAX_BOX_ANGULAR_SPEED_CONTACT = 18.0;
+const MAX_BOX_ANGULAR_SPEED_FREE = 30.0;
 const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
@@ -451,14 +454,14 @@ world.solver.tolerance = 0.001;
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matStick, matBox, {
-    friction: 0.05,
+    friction: 0.12,
     restitution: 0.0,
   })
 );
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
-    friction: 0.01,
+    friction: 0.34,
     restitution: 0.0,
     contactEquationStiffness: 8e4,
     contactEquationRelaxation: 12,
@@ -1364,6 +1367,15 @@ boxMesh.rotation.y += BOX_YAW;
     );
   }
 
+  // 見た目とのズレを出さず、重心だけ前寄りへ寄せる内部バラスト
+  // ※重複追加バグを防ぐため、この関数呼び出し1箇所に集約する
+  addFrontBallastShapes(boxBody);
+
+  // shape追加後に質量・慣性を必ず再計算（重心反映を確実化）
+  boxBody.updateMassProperties();
+  boxBody.updateBoundingRadius();
+  boxBody.aabbNeedsUpdate = true;
+
   boxBody.position.copy(boxMesh.position);
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
@@ -1399,6 +1411,17 @@ function clawStopMotor() {
 }
 
 
+function addFrontBallastShapes(body) {
+  if (!body) return;
+
+  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
+    body.addShape(
+      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
+      new CANNON.Vec3(BOX_COM_FRONT_BALLAST_X, 0, BOX_COM_FRONT_BALLAST_Z)
+    );
+  }
+}
+
 loadScene().catch(console.error);
 
 let lastT;
@@ -1410,9 +1433,8 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 
 const MAX_KINEMATIC_SPEED = 0.8;
-const CONTACT_KINEMATIC_SPEED = 0.22;
+const CONTACT_KINEMATIC_SPEED = 0.30;
 const MAX_BOX_LINEAR_SPEED = 1.8;
-const MAX_BOX_ANGULAR_SPEED = 8.0;
 
 function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
   const vx = body.velocity.x;
@@ -1441,7 +1463,12 @@ function clampBodyAngularVelocity(body, maxSpeed) {
 function stabilizePrizeBody(body) {
   if (!body) return;
   clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);
-  clampBodyAngularVelocity(body, MAX_BOX_ANGULAR_SPEED);
+
+  // 常時ガチガチに角速度を止めるとピッチが出にくいので、接触時のみやや緩く制限
+  if (ENABLE_BOX_ANGULAR_CLAMP) {
+    const maxAngular = isClawPressingSomething() ? MAX_BOX_ANGULAR_SPEED_CONTACT : MAX_BOX_ANGULAR_SPEED_FREE;
+    clampBodyAngularVelocity(body, maxAngular);
+  }
 }
 
 const tmpPos = new THREE.Vector3();

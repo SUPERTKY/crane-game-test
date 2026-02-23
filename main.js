@@ -15,6 +15,10 @@ const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
+// 「持ち上げ成功率」より「ずらし成功率」を優先して調整
+const CLAW_BOX_FRICTION = 0.16;
+const CLAW_BOX_CONTACT_EQUATION_STIFFNESS = 6e4;
+const CLAW_BOX_FRICTION_EQUATION_STIFFNESS = 5e4;
 const BOX_YAW = Math.PI / 2;
 const BOX_COM_FRONT_BALLAST_X = 0.0;
 const BOX_COM_FRONT_BALLAST_Z = -0.06;
@@ -641,11 +645,11 @@ world.addContactMaterial(
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
-    friction: 0.34,
+    friction: CLAW_BOX_FRICTION,
     restitution: 0.0,
-    contactEquationStiffness: 8e4,
+    contactEquationStiffness: CLAW_BOX_CONTACT_EQUATION_STIFFNESS,
     contactEquationRelaxation: 12,
-    frictionEquationStiffness: 7e4,
+    frictionEquationStiffness: CLAW_BOX_FRICTION_EQUATION_STIFFNESS,
     frictionEquationRelaxation: 12,
   })
 );

@@ -1333,7 +1333,38 @@ boxMesh.rotation.y += BOX_YAW;
       Math.max(boxSize.y / 2, 0.01),
       Math.max(boxSize.z / 2, 0.01)
     );
-    boxBody.addShape(new CANNON.Box(boxHalf));
+    // 単純Boxフォールバック時も同じく前寄り重心にする
+    boxBody.addShape(new CANNON.Box(boxHalf), new CANNON.Vec3(0, 0, -BOX_CENTER_OF_MASS_FRONT_SHIFT_Z));
+  }
+
+  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
+  // （箱の内側に置くため外形コリジョンには実質影響しない）
+  // 小球1個だと体積比が小さすぎて重心可視化で差が出にくいため、同位置に複数バラストを積む
+  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
+    boxBody.addShape(
+      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
+      new CANNON.Vec3(0, 0, BOX_COM_FRONT_BALLAST_Z)
+    );
+  }
+
+  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
+  // （箱の内側に置くため外形コリジョンには実質影響しない）
+  // 小球1個だと体積比が小さすぎて重心可視化で差が出にくいため、同位置に複数バラストを積む
+  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
+    boxBody.addShape(
+      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
+      new CANNON.Vec3(BOX_COM_FRONT_BALLAST_X, 0, BOX_COM_FRONT_BALLAST_Z)
+    );
+  }
+
+  // 見た目とのズレを出さず、重心だけ少し前(-Z)へ寄せるための内部バラスト
+  // （箱の内側に置くため外形コリジョンには実質影響しない）
+  // 小球1個だと体積比が小さすぎて重心可視化で差が出にくいため、同位置に複数バラストを積む
+  for (let i = 0; i < BOX_COM_FRONT_BALLAST_MULTIPLIER; i++) {
+    boxBody.addShape(
+      new CANNON.Sphere(BOX_COM_FRONT_BALLAST_RADIUS),
+      new CANNON.Vec3(BOX_COM_FRONT_BALLAST_X, 0, BOX_COM_FRONT_BALLAST_Z)
+    );
   }
 
   // 見た目とのズレを出さず、重心だけ前寄りへ寄せる内部バラスト

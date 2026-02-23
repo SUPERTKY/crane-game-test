@@ -1260,6 +1260,8 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 const MAX_KINEMATIC_SPEED = 0.8;
 const CONTACT_KINEMATIC_SPEED = 0.22;
+const MAX_BOX_LINEAR_SPEED = 1.8;
+const MAX_BOX_ANGULAR_SPEED = 8.0;
 
 function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
   const vx = body.velocity.x;
@@ -1271,6 +1273,24 @@ function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
 
   const scale = maxSpeed / Math.sqrt(speedSq);
   body.velocity.set(vx * scale, vy * scale, vz * scale);
+}
+
+function clampBodyAngularVelocity(body, maxSpeed) {
+  const wx = body.angularVelocity.x;
+  const wy = body.angularVelocity.y;
+  const wz = body.angularVelocity.z;
+  const speedSq = wx * wx + wy * wy + wz * wz;
+  const maxSq = maxSpeed * maxSpeed;
+  if (speedSq <= maxSq) return;
+
+  const scale = maxSpeed / Math.sqrt(speedSq);
+  body.angularVelocity.set(wx * scale, wy * scale, wz * scale);
+}
+
+function stabilizePrizeBody(body) {
+  if (!body) return;
+  clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);
+  clampBodyAngularVelocity(body, MAX_BOX_ANGULAR_SPEED);
 }
 
 const tmpPos = new THREE.Vector3();
@@ -1460,6 +1480,7 @@ const FIXED = 1 / 120;
 const MAX_SUB = 8;
 
 world.step(FIXED, dt, MAX_SUB);
+  stabilizePrizeBody(boxBody);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();
 

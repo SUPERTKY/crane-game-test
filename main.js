@@ -739,6 +739,7 @@ let clawLVis = [];
 let clawRVis = [];
 const physicsDebugEntries = [];
 const contactDebugMeshes = [];
+let boxComDebugMesh = null;
 
 function createWireframeBoxMesh(halfExtents, color = 0x00ffff) {
   const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
@@ -787,6 +788,18 @@ function addBodyDebugMeshes(body, color = 0x00ffff) {
       geo.rotateZ(Math.PI / 2); // ThreeのY軸CylinderをCannonのX軸向きに合わせる
       mesh = new THREE.Mesh(
         geo,
+        new THREE.MeshBasicMaterial({
+          color,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+        })
+      );
+      mesh.renderOrder = 9998;
+    } else if (shape instanceof CANNON.Sphere) {
+      mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(shape.radius, 12, 12),
         new THREE.MeshBasicMaterial({
           color,
           wireframe: true,
@@ -852,6 +865,62 @@ function updateContactDebugMarkers() {
   for (let i = showCount; i < contactDebugMeshes.length; i++) {
     contactDebugMeshes[i].visible = false;
   }
+}
+
+function getShapeMassWeight(shape) {
+  if (shape instanceof CANNON.Box) {
+    const h = shape.halfExtents;
+    return Math.max(8 * h.x * h.y * h.z, 1e-6);
+  }
+  if (shape instanceof CANNON.Sphere) {
+    return Math.max((4 / 3) * Math.PI * shape.radius * shape.radius * shape.radius, 1e-6);
+  }
+  if (shape instanceof CANNON.Cylinder) {
+    return Math.max(Math.PI * shape.radiusTop * shape.radiusBottom * shape.height, 1e-6);
+  }
+  if (shape instanceof CANNON.ConvexPolyhedron) {
+    const r = Math.max(shape.boundingSphereRadius || 0.01, 0.01);
+    return (4 / 3) * Math.PI * r * r * r;
+  }
+  return 1;
+}
+
+function computeBodyLocalCenterOfMassApprox(body) {
+  const com = new CANNON.Vec3(0, 0, 0);
+  if (!body || !body.shapes.length) return com;
+
+  let totalWeight = 0;
+  for (let i = 0; i < body.shapes.length; i++) {
+    const w = getShapeMassWeight(body.shapes[i]);
+    const off = body.shapeOffsets[i];
+    com.x += off.x * w;
+    com.y += off.y * w;
+    com.z += off.z * w;
+    totalWeight += w;
+  }
+
+  if (totalWeight <= 1e-6) return com;
+  com.scale(1 / totalWeight, com);
+  return com;
+}
+
+function ensureBoxComDebugMesh() {
+  if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh) return;
+
+  boxComDebugMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.02, 14, 14),
+    new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.95 })
+  );
+  boxComDebugMesh.renderOrder = 10000;
+  scene.add(boxComDebugMesh);
+}
+
+function updateBoxCenterOfMassDebug() {
+  if (!SHOW_PHYSICS_DEBUG || !boxComDebugMesh || !boxBody) return;
+
+  const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
+  const worldCom = boxBody.pointToWorldFrame(localCom, new CANNON.Vec3());
+  boxComDebugMesh.position.set(worldCom.x, worldCom.y, worldCom.z);
 }
 
 function makeClawPhysics() {
@@ -1229,6 +1298,7 @@ boxMesh.rotation.y += BOX_YAW;
   boxBody.quaternion.copy(boxMesh.quaternion);
   world.addBody(boxBody);
   addBodyDebugMeshes(boxBody, 0xff00ff);
+  ensureBoxComDebugMesh();
 
   boxMesh.position.copy(boxBody.position);
 
@@ -1494,6 +1564,7 @@ world.step(FIXED, dt, MAX_SUB);
   stabilizePrizeBody(boxBody);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();
+  updateBoxCenterOfMassDebug();
 
 
 

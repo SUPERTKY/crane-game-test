@@ -473,6 +473,14 @@ function softenClosingDelta(delta, isClosingPositive, damp) {
   return openingPart + closingPart * damp;
 }
 
+function angleToOpen01(angle, closed, open) {
+  return THREE.MathUtils.clamp(
+    THREE.MathUtils.inverseLerp(closed, open, angle),
+    0,
+    1,
+  );
+}
+
 let clawContactHoldL = 0;
 let clawContactHoldR = 0;
 
@@ -544,7 +552,11 @@ function setClawOpen01(open01) {
   if (clawLPivot) clawLPivot.rotation.x = nextL; // ←軸は合うやつに（x/y/z）
   if (clawRPivot) clawRPivot.rotation.x = nextR;
 
-  clawOpen01 = nextOpen01;
+  const openL01 = angleToOpen01(nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
+  const openR01 = angleToOpen01(nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
+  // 目標値ではなく実際の爪角度から開閉率を更新する。
+  // これにより接触で閉じが抑制されたときも内部状態がズレない。
+  clawOpen01 = Math.max(openL01, openR01);
 }
 
 

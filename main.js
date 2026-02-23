@@ -16,8 +16,9 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
-const BOX_COM_FRONT_BALLAST_Z = -0.5;
+const BOX_COM_FRONT_BALLAST_Z = -0.06;
 const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
+const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 // 例：到達点（好きに調整）
@@ -761,6 +762,11 @@ function addBodyDebugMeshes(body, color = 0x00ffff) {
   for (let i = 0; i < body.shapes.length; i++) {
     const shape = body.shapes[i];
 
+    // 箱の内部バラスト球は重心調整用で、見た目上は重心マーカーと紛らわしいため通常は非表示
+    if (!SHOW_BOX_INTERNAL_BALLAST_DEBUG && body === boxBody && shape instanceof CANNON.Sphere) {
+      continue;
+    }
+
     let mesh;
     if (shape instanceof CANNON.Box) {
       mesh = createWireframeBoxMesh(shape.halfExtents, color);
@@ -908,7 +914,7 @@ function ensureBoxComDebugMesh() {
   if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh) return;
 
   boxComDebugMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.035, 16, 16),
+    new THREE.SphereGeometry(0.022, 16, 16),
     new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       transparent: true,
@@ -934,9 +940,8 @@ function updateBoxCenterOfMassDebug() {
 
   boxComDebugMesh.position.set(worldCom.x, worldCom.y, worldCom.z);
 
-  // 微小パルスで「重心マーカーが更新されている」ことを視覚的に分かりやすくする
-  const pulse = 1.0 + Math.sin(performance.now() * 0.012) * 0.08;
-  boxComDebugMesh.scale.setScalar(pulse);
+  // サイズは固定（見た目の違和感を減らす）
+  boxComDebugMesh.scale.setScalar(1);
 }
 
 function makeClawPhysics() {

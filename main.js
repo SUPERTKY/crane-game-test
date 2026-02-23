@@ -1805,11 +1805,6 @@ if (autoStarted) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
-      clawLoosenPulseActive = false;
-      clawLoosenPulseDone = false;
-      clawLoosenPulseStartT = 0;
-      clawLoosenPulseBaseOpen01 = clawOpen01;
-      clawLiftKeepOpenUntilRelease = clawCloseBlockedByPressure;
     }
 
   } else if (autoStep === 4) {

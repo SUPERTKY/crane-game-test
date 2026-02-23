@@ -16,6 +16,7 @@ const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 const BOX_YAW = Math.PI / 2;
+const BOX_CENTER_OF_MASS_FRONT_SHIFT_Z = -0.025;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 // 例：到達点（好きに調整）
@@ -453,7 +454,7 @@ world.addContactMaterial(
 
 world.addContactMaterial(
   new CANNON.ContactMaterial(matClaw, matBox, {
-    friction: 0.18,
+    friction: 0.03,
     restitution: 0.0,
     contactEquationStiffness: 8e4,
     contactEquationRelaxation: 12,
@@ -1203,7 +1204,10 @@ boxMesh.rotation.y += BOX_YAW;
   const boxShapes = computeConvexShapesFromRoot(boxMesh);
   if (boxShapes.length) {
     for (const shapeDef of boxShapes) {
-      boxBody.addShape(shapeDef.shape, shapeDef.offset, shapeDef.orient);
+      const shiftedOffset = shapeDef.offset.clone();
+      // 形状をわずかに後方(+Z)へ寄せることで、相対的に重心を前方(-Z)へ移す
+      shiftedOffset.z -= BOX_CENTER_OF_MASS_FRONT_SHIFT_Z;
+      boxBody.addShape(shapeDef.shape, shiftedOffset, shapeDef.orient);
     }
   } else {
     const boxHalf = new CANNON.Vec3(
@@ -1211,7 +1215,8 @@ boxMesh.rotation.y += BOX_YAW;
       Math.max(boxSize.y / 2, 0.01),
       Math.max(boxSize.z / 2, 0.01)
     );
-    boxBody.addShape(new CANNON.Box(boxHalf));
+    // 単純Boxフォールバック時も同じく前寄り重心にする
+    boxBody.addShape(new CANNON.Box(boxHalf), new CANNON.Vec3(0, 0, -BOX_CENTER_OF_MASS_FRONT_SHIFT_Z));
   }
 
   boxBody.position.copy(boxMesh.position);
@@ -1260,6 +1265,8 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 const MAX_KINEMATIC_SPEED = 0.8;
 const CONTACT_KINEMATIC_SPEED = 0.22;
+const MAX_BOX_LINEAR_SPEED = 1.8;
+const MAX_BOX_ANGULAR_SPEED = 8.0;
 
 function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
   const vx = body.velocity.x;
@@ -1271,6 +1278,24 @@ function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
 
   const scale = maxSpeed / Math.sqrt(speedSq);
   body.velocity.set(vx * scale, vy * scale, vz * scale);
+}
+
+function clampBodyAngularVelocity(body, maxSpeed) {
+  const wx = body.angularVelocity.x;
+  const wy = body.angularVelocity.y;
+  const wz = body.angularVelocity.z;
+  const speedSq = wx * wx + wy * wy + wz * wz;
+  const maxSq = maxSpeed * maxSpeed;
+  if (speedSq <= maxSq) return;
+
+  const scale = maxSpeed / Math.sqrt(speedSq);
+  body.angularVelocity.set(wx * scale, wy * scale, wz * scale);
+}
+
+function stabilizePrizeBody(body) {
+  if (!body) return;
+  clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);
+  clampBodyAngularVelocity(body, MAX_BOX_ANGULAR_SPEED);
 }
 
 const tmpPos = new THREE.Vector3();
@@ -1460,6 +1485,7 @@ const FIXED = 1 / 120;
 const MAX_SUB = 8;
 
 world.step(FIXED, dt, MAX_SUB);
+  stabilizePrizeBody(boxBody);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();
 

@@ -1852,43 +1852,9 @@ if (autoStarted) {
     autoT += dt;
     const targetY = dropStartY;
 
-    const touchingLeftBox = getClawContactLevel(clawLBody) === 2;
-    const touchingRightBox = getClawContactLevel(clawRBody) === 2;
-    const touchingAnyBox = touchingLeftBox || touchingRightBox;
-
-    if (touchingAnyBox) step4LiftAssistNoContactT = 0;
-    else step4LiftAssistNoContactT += dt;
-
-    if (gripStatus.validGrip) {
-      step4LiftLatched = true;
-      step4GripLostT = 0;
-    } else if (step4LiftLatched) {
-      step4GripLostT += dt;
-    }
-
-    const gripLiftOk = gripStatus.validGrip || (step4LiftLatched && step4GripLostT < STEP4_GRIP_LOST_GRACE_SEC);
-    const allowLift = gripLiftOk || step4LiftAssistNoContactT < STEP4_LIFT_ASSIST_SEC;
-
-    if (allowLift) {
-      gripInvalidHoldT = 0;
-      gripReleasePulseT = 0;
-      armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
-    } else {
-      // Valid Grip でない状態が続いたら上げない（偶然持ち上げを防止）
-      gripInvalidHoldT += dt;
-
-      // 引っ掛けを外すための開きパルスは1回だけにして不自然なガクつきを抑える
-      if (!step4ReleasePulseUsed) {
-        gripReleasePulseT = GRIP_RELEASE_PULSE_SEC;
-        setClawOpen01(Math.min(1, clawOpen01 + GRIP_RELEASE_PULSE_OPEN01));
-        step4ReleasePulseUsed = true;
-      }
-
-      // 一定時間成立しなければ失敗扱いで終了（箱はその場に落とす）
-      if (gripInvalidHoldT >= GRIP_FAIL_TIMEOUT_SEC) {
-        autoStep = 5;
-      }
-    }
+    // 上昇は常に実行する。掴み判定に依存すると
+    // 条件が揃わないケースでステップ4が停止してしまうため。
+    armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
 
     if (armGroup.position.y >= targetY - 1e-6) {
       armGroup.position.y = targetY;

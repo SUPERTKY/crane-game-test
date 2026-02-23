@@ -1359,6 +1359,7 @@ console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
 makeClawPhysics();
 // 初期は閉じ
 setClawOpen01(0);
+syncKinematicBodiesToVisualNow();
 
 
   // ===== クレーン台（見た目だけ）=====
@@ -1675,6 +1676,43 @@ function followClawBodies(dt) {
   clawRBody.angularVelocity.set(0, 0, 0);
 }
 
+function syncKinematicBodiesToVisualNow() {
+  if (!armGroup || !armBody) return;
+
+  armGroup.updateWorldMatrix(true, true);
+  armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
+  armBody.quaternion.set(
+    armGroup.quaternion.x,
+    armGroup.quaternion.y,
+    armGroup.quaternion.z,
+    armGroup.quaternion.w
+  );
+  armBody.velocity.set(0, 0, 0);
+  armBody.angularVelocity.set(0, 0, 0);
+
+  if (clawLBody && clawLMesh) {
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    clawLMesh.getWorldPosition(pos);
+    clawLMesh.getWorldQuaternion(quat);
+    clawLBody.position.set(pos.x, pos.y, pos.z);
+    clawLBody.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+    clawLBody.velocity.set(0, 0, 0);
+    clawLBody.angularVelocity.set(0, 0, 0);
+  }
+
+  if (clawRBody && clawRMesh) {
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    clawRMesh.getWorldPosition(pos);
+    clawRMesh.getWorldQuaternion(quat);
+    clawRBody.position.set(pos.x, pos.y, pos.z);
+    clawRBody.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+    clawRBody.velocity.set(0, 0, 0);
+    clawRBody.angularVelocity.set(0, 0, 0);
+  }
+}
+
 function animate(t) {
   requestAnimationFrame(animate);
 
@@ -1767,11 +1805,6 @@ if (autoStarted) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
-      clawLoosenPulseActive = false;
-      clawLoosenPulseDone = false;
-      clawLoosenPulseStartT = 0;
-      clawLoosenPulseBaseOpen01 = clawOpen01;
-      clawLiftKeepOpenUntilRelease = clawCloseBlockedByPressure;
     }
 
   } else if (autoStep === 4) {

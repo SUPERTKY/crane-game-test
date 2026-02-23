@@ -307,14 +307,13 @@ let gripRightFrames = 0;
 let gripInvalidHoldT = 0;
 let gripReleasePulseT = 0;
 let gripDebugFrameCounter = 0;
-<<<<<<< codex-55o8nw
+
 let clawBoxPressFramesL = 0;
 let clawBoxPressFramesR = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
 let step2LockY = 0;
-=======
->>>>>>> main
+
 
 // ===== つかみ（Constraint）設定 =====
 const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっくりめが自然

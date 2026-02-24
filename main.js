@@ -276,7 +276,7 @@ const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
 const CLAW_CLOSE_MAX_WAIT_SEC = 3.2; // 閉じフェーズが進まない時の最大待機
 const CLAW_CLOSE_DONE_OPEN01 = 0.22; // これ以下まで閉じたら掴みフェーズ完了
-const CLAW_DROP_END_OPEN_SKIP_CLOSE_OPEN01 = 0.98; // 降下終了時にほぼ全開なら閉じ工程をスキップして上昇
+const CLAW_DROP_END_OPEN_SKIP_CLOSE_OPEN01 = 0.6; // 刺さりで開いたままなら閉じ工程をスキップして上昇
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
@@ -1893,9 +1893,9 @@ if (autoStarted) {
     const dropSpeed = pressing ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
 
     const finishDropStep = () => {
-      // 棒/箱に刺さって全開のまま降下が終わった場合は、
+      // 棒/箱に刺さって爪が開いたまま降下が終わった場合は、
       // 閉じ工程を待たずにそのまま上昇へ遷移する。
-      const skipClose = clawOpen01 >= CLAW_DROP_END_OPEN_SKIP_CLOSE_OPEN01;
+      const skipClose = pressing && clawOpen01 >= CLAW_DROP_END_OPEN_SKIP_CLOSE_OPEN01;
       autoStep = skipClose ? 4 : 3;
       autoT = 0;
       clawDropPenetrationT = 0;

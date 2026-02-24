@@ -274,9 +274,6 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
-const CLAW_CLOSE_MAX_WAIT_SEC = 3.2; // 閉じフェーズが進まない時の最大待機
-const CLAW_CLOSE_DONE_OPEN01 = 0.22; // これ以下まで閉じたら掴みフェーズ完了
-const CLAW_DROP_END_OPEN_SKIP_CLOSE_OPEN01 = 0.98; // 降下終了時にほぼ全開なら閉じ工程をスキップして上昇
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
@@ -331,7 +328,6 @@ let step4LiftAssistNoContactT = 0;
 let step4LiftLatched = false;
 let step4GripLostT = 0;
 let step4ReleasePulseUsed = false;
-let step3ElapsedT = 0;
 
 let clawBoxPressFramesL = 0;
 let clawBoxPressFramesR = 0;
@@ -844,7 +840,6 @@ function startAutoSequence() {
 
   step2BoxPressFrames = 0;
   step2LockYActive = false;
-  step3ElapsedT = 0;
 
 }
 
@@ -1893,21 +1888,12 @@ if (autoStarted) {
     const dropSpeed = pressing ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
 
     const finishDropStep = () => {
-      // 棒/箱に刺さって全開のまま降下が終わった場合は、
-      // 閉じ工程を待たずにそのまま上昇へ遷移する。
-      const skipClose = clawOpen01 >= CLAW_DROP_END_OPEN_SKIP_CLOSE_OPEN01;
-      autoStep = skipClose ? 4 : 3;
+      // 降下完了後は必ず一定時間だけ閉じ工程を実行してから上昇する。
+      autoStep = 3;
       autoT = 0;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
-      step3ElapsedT = 0;
-      if (skipClose) {
-        step4LiftAssistNoContactT = 0;
-        step4LiftLatched = false;
-        step4GripLostT = 0;
-        step4ReleasePulseUsed = false;
-      }
     };
 
     if (boxPressing) {
@@ -1943,18 +1929,14 @@ if (autoStarted) {
     const closeScale = gripStatus.avgNormalY >= GRIP_MAX_UPWARD_NORMAL_Y ? 0.1 : 1.0;
     const closeDt = (isClawPressingBox() ? dt * 0.3 : dt) * closeScale;
     autoT += closeDt;
-    step3ElapsedT += dt;
 
     // 目標を0(完全クローズ)へ寄せ続ける。接触で押し戻されても再度閉じを試みる。
     setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1), dt);
 
-    const closeReached = clawOpen01 <= CLAW_CLOSE_DONE_OPEN01;
-    const closeTimedOut = step3ElapsedT >= CLAW_CLOSE_MAX_WAIT_SEC;
-    if ((autoT >= CLAW_CLOSE_TIME && closeReached) || closeTimedOut) {
+    if (autoT >= CLAW_CLOSE_TIME) {
       // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
-      step3ElapsedT = 0;
       step4LiftAssistNoContactT = 0;
       step4LiftLatched = false;
       step4GripLostT = 0;

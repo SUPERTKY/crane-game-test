@@ -276,6 +276,7 @@ const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
 const CLAW_CLOSE_MAX_WAIT_SEC = 3.2; // 閉じフェーズが進まない時の最大待機
 const CLAW_CLOSE_DONE_OPEN01 = 0.22; // これ以下まで閉じたら掴みフェーズ完了
+const CLAW_DROP_END_OPEN_SKIP_CLOSE_OPEN01 = 0.98; // 降下終了時にほぼ全開なら閉じ工程をスキップして上昇
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
@@ -1891,6 +1892,24 @@ if (autoStarted) {
     const boxPressing = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
     const dropSpeed = pressing ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
 
+    const finishDropStep = () => {
+      // 棒/箱に刺さって全開のまま降下が終わった場合は、
+      // 閉じ工程を待たずにそのまま上昇へ遷移する。
+      const skipClose = clawOpen01 >= CLAW_DROP_END_OPEN_SKIP_CLOSE_OPEN01;
+      autoStep = skipClose ? 4 : 3;
+      autoT = 0;
+      clawDropPenetrationT = 0;
+      step2BoxPressFrames = 0;
+      step2LockYActive = false;
+      step3ElapsedT = 0;
+      if (skipClose) {
+        step4LiftAssistNoContactT = 0;
+        step4LiftLatched = false;
+        step4GripLostT = 0;
+        step4ReleasePulseUsed = false;
+      }
+    };
+
     if (boxPressing) {
       step2BoxPressFrames += 1;
       if (STEP2_LOCK_ON_BOX_PRESS && !step2LockYActive) {
@@ -1913,17 +1932,9 @@ if (autoStarted) {
     else clawDropPenetrationT = 0;
 
     if (clawDropPenetrationT >= CLAW_DROP_PENETRATION_ABORT_SEC || step2BoxPressFrames >= STEP2_BOX_PRESS_FRAMES_TO_ABORT) {
-      autoStep = 3;
-      autoT = 0;
-      clawDropPenetrationT = 0;
-      step2BoxPressFrames = 0;
-      step2LockYActive = false;
+      finishDropStep();
     } else if (armGroup.position.y <= targetY + 1e-6) {
-      autoStep = 3;
-      autoT = 0;
-      clawDropPenetrationT = 0;
-      step2BoxPressFrames = 0;
-      step2LockYActive = false;
+      finishDropStep();
     }
 
   } else if (autoStep === 3) {

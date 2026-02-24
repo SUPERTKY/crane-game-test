@@ -11,12 +11,12 @@ const ARM_ROT_SPEED = 0.8; // rad/sec（0.2〜2.0で調整）
 let CLAW_AXIS = "x";   // "x" | "y" | "z" を試す
 let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
-const ARM_HOLD_SPEED_X = 0.6; // 横移動速度（1秒あたり）
-const ARM_HOLD_SPEED_Z = 0.6; // 前移動速度（1秒あたり）
+const ARM_HOLD_SPEED_X = 2; // 横移動速度（1秒あたり）
+const ARM_HOLD_SPEED_Z = 2; // 前移動速度（1秒あたり）
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整
-const CLAW_BOX_FRICTION = 0.13;
+const CLAW_BOX_FRICTION = 0.03;
 const CLAW_BOX_CONTACT_EQUATION_STIFFNESS = 4.5e4;
 const CLAW_BOX_CONTACT_EQUATION_RELAXATION = 14;
 const CLAW_BOX_FRICTION_EQUATION_STIFFNESS = 3.2e4;
@@ -45,7 +45,7 @@ const CLAW_L_OPEN   = -0.3;
 
 
 // ===== 爪ヒットボックス：メッシュ頂点からConvexPolyhedronを生成 =====
-const BOX_SCALE = 0.9; // 例：1.3倍（小さくするなら 0.8 など）
+const BOX_SCALE = 0.7; // 例：1.3倍（小さくするなら 0.8 など）
 
 function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
   const posAttr = mesh.geometry?.attributes?.position;

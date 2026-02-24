@@ -1925,10 +1925,9 @@ if (autoStarted) {
 
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
-    // 下から押し上げる接触(上向き法線が強い)時は閉じを抑えてジャッキアップを防ぐ
-    const closeScale = gripStatus.avgNormalY >= GRIP_MAX_UPWARD_NORMAL_Y ? 0.1 : 1.0;
-    const closeDt = (isClawPressingBox() ? dt * 0.3 : dt) * closeScale;
-    autoT += closeDt;
+    // 閉じ工程は「接触状態に関係なく」実時間で進める。
+    // これで箱に刺さった状態でも、指定秒数(CLAW_CLOSE_TIME)で次工程へ進む。
+    autoT += dt;
 
     // 目標を0(完全クローズ)へ寄せ続ける。接触で押し戻されても再度閉じを試みる。
     setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1), dt);

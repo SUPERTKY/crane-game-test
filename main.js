@@ -301,6 +301,9 @@ const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;
 const BOX_CONTACT_LINEAR_DAMPING = 0.30;
 const BOX_CONTACT_ANGULAR_DAMPING = 0.36;
+const BOX_RELEASE_SETTLE_SECONDS = 0.22;
+const BOX_RELEASE_EXTRA_LINEAR_DAMPING = 0.42;
+const BOX_RELEASE_MAX_UPWARD_SPEED = 0.05;
 
 const GRIP_CONTACT_DEBOUNCE_FRAMES = 8;
 const GRIP_MAX_UPWARD_NORMAL_Y = 0.45;
@@ -1651,6 +1654,8 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 const MAX_KINEMATIC_SPEED = 0.8;
 const CONTACT_KINEMATIC_SPEED = 0.30;
 const MAX_BOX_LINEAR_SPEED = 1.8;
+let boxReleaseSettleTimer = 0;
+let wasClawContactLastFrame = false;
 
 function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
   const vx = body.velocity.x;
@@ -1681,9 +1686,26 @@ function stabilizePrizeBody(body) {
 
   const clawContact = getClawContactLevel(clawLBody) > 0 || getClawContactLevel(clawRBody) > 0;
 
+  if (!clawContact && wasClawContactLastFrame) {
+    boxReleaseSettleTimer = BOX_RELEASE_SETTLE_SECONDS;
+  }
+  wasClawContactLastFrame = clawContact;
+
+  if (boxReleaseSettleTimer > 0) {
+    boxReleaseSettleTimer = Math.max(0, boxReleaseSettleTimer - FIXED);
+  }
+
   // 接触中は箱側をソフトに減衰させてsolver破綻（潰れ/飛び）を抑える
   body.linearDamping = clawContact ? BOX_CONTACT_LINEAR_DAMPING : BOX_BASE_LINEAR_DAMPING;
   body.angularDamping = clawContact ? BOX_CONTACT_ANGULAR_DAMPING : BOX_BASE_ANGULAR_DAMPING;
+
+  // 爪から離れた直後にだけ減衰を強め、上方向の跳ね返りを抑える
+  if (boxReleaseSettleTimer > 0) {
+    body.linearDamping = Math.max(body.linearDamping, BOX_RELEASE_EXTRA_LINEAR_DAMPING);
+    if (body.velocity.y > BOX_RELEASE_MAX_UPWARD_SPEED) {
+      body.velocity.y = BOX_RELEASE_MAX_UPWARD_SPEED;
+    }
+  }
 
 
   clampBodyLinearVelocity(body, MAX_BOX_LINEAR_SPEED);

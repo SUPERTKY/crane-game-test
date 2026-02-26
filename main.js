@@ -321,6 +321,7 @@ const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
+let step3WaitT = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -1919,6 +1920,7 @@ if (autoStarted) {
       // 降下完了後は必ず一定時間だけ閉じ工程を実行してから上昇する。
       autoStep = 3;
       autoT = 0;
+      step3WaitT = 0;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;

@@ -13,6 +13,7 @@ let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
 const ARM_HOLD_SPEED_X = 2; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 2; // 前移動速度（1秒あたり）
+const PHYSICS_FIXED_DT = 1 / 120;
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整
@@ -22,8 +23,8 @@ const CLAW_BOX_CONTACT_EQUATION_RELAXATION = 14;
 const CLAW_BOX_FRICTION_EQUATION_STIFFNESS = 3.2e4;
 const CLAW_BOX_FRICTION_EQUATION_RELAXATION = 14;
 const BOX_YAW = Math.PI / 2;
-const BOX_COM_FRONT_BALLAST_X = -80;
-const BOX_COM_FRONT_BALLAST_Z = -20;
+const BOX_COM_FRONT_BALLAST_X = -0.08;
+const BOX_COM_FRONT_BALLAST_Z = -0.02;
 const BOX_COM_FRONT_BALLAST_RADIUS = 0.02;
 const BOX_COM_FRONT_BALLAST_MULTIPLIER = 8;
 const ENABLE_BOX_ANGULAR_CLAMP = true;
@@ -273,7 +274,7 @@ const CLAW_R_OPEN   = 0.2;
 const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
-const CLAW_CLOSE_TIME = 1.8;  // 閉じるのにかける秒（遅くして押し込みを軽減）
+const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（接触に関係なく2秒で上昇へ移行）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
@@ -312,6 +313,7 @@ const GRIP_FAIL_TIMEOUT_SEC = 0.8;
 const GRIP_RELEASE_PULSE_OPEN01 = 0.08;
 const GRIP_RELEASE_PULSE_SEC = 0.14;
 const GRIP_DEBUG_LOG_INTERVAL_FRAMES = 20;
+const ENABLE_GRIP_DEBUG_LOG = false;
 const STEP4_LIFT_ASSIST_SEC = 0.6;
 const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 
@@ -1692,7 +1694,7 @@ function stabilizePrizeBody(body) {
   wasClawContactLastFrame = clawContact;
 
   if (boxReleaseSettleTimer > 0) {
-    boxReleaseSettleTimer = Math.max(0, boxReleaseSettleTimer - FIXED);
+    boxReleaseSettleTimer = Math.max(0, boxReleaseSettleTimer - PHYSICS_FIXED_DT);
   }
 
   // 接触中は箱側をソフトに減衰させてsolver破綻（潰れ/飛び）を抑える
@@ -1866,7 +1868,7 @@ function animate(t) {
   requestAnimationFrame(animate);
 
   if (lastT == null) lastT = t;
-  const dt = Math.min((t - lastT) / 1000, 1 / 120);
+  const dt = Math.min((t - lastT) / 1000, 1 / 30);
 
   lastT = t;
 
@@ -1886,11 +1888,13 @@ function animate(t) {
   }
 
   const gripStatus = getValidGripStatus();
-  gripDebugFrameCounter += 1;
-  if (gripDebugFrameCounter % GRIP_DEBUG_LOG_INTERVAL_FRAMES === 0) {
-    console.log(
-      `[Grip] valid=${gripStatus.validGrip} L=${gripStatus.leftFrames} R=${gripStatus.rightFrames} avgNy=${gripStatus.avgNormalY.toFixed(3)} center=${gripStatus.centerBetween}`
-    );
+  if (ENABLE_GRIP_DEBUG_LOG) {
+    gripDebugFrameCounter += 1;
+    if (gripDebugFrameCounter % GRIP_DEBUG_LOG_INTERVAL_FRAMES === 0) {
+      console.log(
+        `[Grip] valid=${gripStatus.validGrip} L=${gripStatus.leftFrames} R=${gripStatus.rightFrames} avgNy=${gripStatus.avgNormalY.toFixed(3)} center=${gripStatus.centerBetween}`
+      );
+    }
   }
 
   // ===== 自動シーケンス（Three側）=====
@@ -2037,10 +2041,9 @@ if (autoStarted) {
   // ===== 物理ステップ（armBody同期の後！）=====
 followClawBodies(dt);
   updateClawHitboxVisuals();
-const FIXED = 1 / 120;
 const MAX_SUB = 8;
 
-world.step(FIXED, dt, MAX_SUB);
+world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
   stabilizePrizeBody(boxBody);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();

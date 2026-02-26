@@ -1655,7 +1655,7 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 const MAX_KINEMATIC_SPEED = 0.8;
 const CONTACT_KINEMATIC_SPEED = 0.30;
-const MAX_BOX_LINEAR_SPEED = 1.8;
+const MAX_BOX_LINEAR_SPEED = 12.0;
 let boxReleaseSettleTimer = 0;
 let wasClawContactLastFrame = false;
 
@@ -1955,8 +1955,9 @@ if (autoStarted) {
     // これで箱に刺さった状態でも、指定秒数(CLAW_CLOSE_TIME)で次工程へ進む。
     autoT += dt;
 
-    // 目標を0(完全クローズ)へ寄せ続ける。接触で押し戻されても再度閉じを試みる。
-    setClawOpen01(1 - Math.min(autoT / CLAW_CLOSE_TIME, 1), dt);
+    // 「閉じ角0を目標に補間」ではなく、現在角度から一定速度で閉じる。
+    // これで回転が止められている状態でも、2秒後に必ず次工程へ進める。
+    setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
 
     if (autoT >= CLAW_CLOSE_TIME) {
       // 閉じ終わったらそのまま上昇（吸着はしない）

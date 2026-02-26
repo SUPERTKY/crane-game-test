@@ -1955,8 +1955,7 @@ if (autoStarted) {
     // これで箱に刺さった状態でも、指定秒数(CLAW_CLOSE_TIME)で次工程へ進む。
     autoT += dt;
 
-    // 「閉じ角0を目標に補間」ではなく、現在角度から一定速度で閉じる。
-    // これで回転が止められている状態でも、2秒後に必ず次工程へ進める。
+    // 完全な時間制: 現在値から一定速度で閉じるだけにする（固定目標カーブは使わない）。
     setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
 
     if (autoT >= CLAW_CLOSE_TIME) {

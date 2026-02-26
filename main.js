@@ -284,6 +284,8 @@ const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が�
 const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
+const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
+const STEP3_CLOSE_TIMEOUT_FRAMES = 180; // 掴み→上昇遷移のフレーム系フェイルセーフ（約3秒@60fps）
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -325,6 +327,7 @@ let step3WaitT = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
+let step3CloseFrames = 0;
 let boxContactFrames = 0;
 let boxReleaseFrames = 9999;
 let gripLeftFrames = 0;
@@ -1922,6 +1925,7 @@ if (autoStarted) {
       autoT = 0;
       step3WaitT = 0;
       clawDropPenetrationT = 0;
+      step3CloseFrames = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
     };
@@ -1956,15 +1960,17 @@ if (autoStarted) {
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
     autoT += dt;
+    step3CloseFrames += 1;
 
     // 基本は時間制で閉じる。接触で抑制されると実角度が追従しない場合がある。
     setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
 
     // ステップ3は時間で確実に終了して上昇へ進む。
     // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
-    if (autoT >= CLAW_CLOSE_TIME) {
+    if (autoT >= CLAW_CLOSE_TIME || step3CloseFrames >= STEP3_CLOSE_TIMEOUT_FRAMES) {
       autoStep = 4;
       autoT = 0;
+      step3CloseFrames = 0;
       step4LiftAssistNoContactT = 0;
       step4LiftLatched = false;
       step4GripLostT = 0;
@@ -1982,7 +1988,10 @@ if (autoStarted) {
     const liftingBoxPressing =
       (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
       (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
-    if (clawOpen01 > 0 && !liftingBoxPressing) {
+    if (liftingBoxPressing) {
+      // 刺さり状態で上昇を止めないため、圧迫中は一旦わずかに開いて食い込みを逃がす。
+      setClawOpen01(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, dt);
+    } else if (clawOpen01 > 0) {
       setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
     }
 

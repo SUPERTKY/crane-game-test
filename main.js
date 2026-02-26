@@ -1868,7 +1868,7 @@ function animate(t) {
   requestAnimationFrame(animate);
 
   if (lastT == null) lastT = t;
-  const dt = Math.min((t - lastT) / 1000, 1 / 120);
+  const dt = Math.min((t - lastT) / 1000, 1 / 30);
 
   lastT = t;
 

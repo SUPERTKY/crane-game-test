@@ -1984,6 +1984,12 @@ if (autoStarted) {
     autoT += dt;
     const targetY = dropStartY;
 
+    // 持ち上げ中も閉じ方向の駆動は継続する。
+    // これにより、圧迫で閉じ切れなかった場合でも、上昇中に解放されれば追従して閉じる。
+    if (clawOpen01 > 0) {
+      setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
+    }
+
     // 上昇は常に実行する。掴み判定に依存すると
     // 条件が揃わないケースでステップ4が停止してしまうため。
     armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);

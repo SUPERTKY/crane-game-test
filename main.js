@@ -275,7 +275,7 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（接触に関係なく2秒で上昇へ移行）
-const CLAW_CLOSE_WAIT_MAX_SEC = 2.0; // 閉じ阻害が解除された後に追い閉じする猶予（無限待ち防止）
+const CLAW_CLOSE_WAIT_MAX_SEC = 2.0; // 閉じ工程の追加猶予（無限待ち防止）
 const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
@@ -1960,34 +1960,24 @@ if (autoStarted) {
     // 基本は時間制で閉じる。接触で抑制されると実角度が追従しない場合がある。
     setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
 
-    const leftPressed = getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES;
-    const rightPressed = getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES;
-    const closeBlockedByPress = leftPressed || rightPressed;
     const needsMoreClose = clawOpen01 > CLAW_FULLY_CLOSED_EPS;
 
-    // 2秒経過しても圧迫で閉じきっていない場合は、圧迫解除後だけ追い閉じを継続する。
+    // 規定時間後、閉じ切っていれば即上昇。まだ閉じ切っていなくても、
+    // 圧迫が解放されればこのまま閉じ続け、追加猶予の上限で必ず上昇へ進む。
     if (autoT >= CLAW_CLOSE_TIME) {
-      if (!needsMoreClose) {
-        step3WaitT = 0;
-      } else if (!closeBlockedByPress) {
-        step3WaitT += dt;
-      } else {
-        step3WaitT = 0;
-      }
-
       const hardTimeout = autoT >= CLAW_CLOSE_TIME + CLAW_CLOSE_WAIT_MAX_SEC;
-      const finishedByReleaseClose = step3WaitT >= CLAW_CLOSE_WAIT_MAX_SEC || !needsMoreClose;
-      if (finishedByReleaseClose || hardTimeout) {
+      const canProceed = !needsMoreClose || hardTimeout;
+      if (canProceed) {
         // 閉じ終わった（または安全上のタイムアウト）ら上昇へ。
         autoStep = 4;
         autoT = 0;
-        step3WaitT = 0;
         step4LiftAssistNoContactT = 0;
         step4LiftLatched = false;
         step4GripLostT = 0;
         step4ReleasePulseUsed = false;
       }
     }
+
 
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====

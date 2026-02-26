@@ -1977,9 +1977,12 @@ if (autoStarted) {
     autoT += dt;
     const targetY = dropStartY;
 
-    // 持ち上げ中も閉じ方向の駆動は継続する。
+    // 持ち上げ中も、箱を強く圧迫していない間は閉じ方向の駆動を継続する。
     // これにより、圧迫で閉じ切れなかった場合でも、上昇中に解放されれば追従して閉じる。
-    if (clawOpen01 > 0) {
+    const liftingBoxPressing =
+      (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
+      (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
+    if (clawOpen01 > 0 && !liftingBoxPressing) {
       setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
     }
 

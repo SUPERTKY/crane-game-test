@@ -313,6 +313,7 @@ const GRIP_FAIL_TIMEOUT_SEC = 0.8;
 const GRIP_RELEASE_PULSE_OPEN01 = 0.08;
 const GRIP_RELEASE_PULSE_SEC = 0.14;
 const GRIP_DEBUG_LOG_INTERVAL_FRAMES = 20;
+const ENABLE_GRIP_DEBUG_LOG = false;
 const STEP4_LIFT_ASSIST_SEC = 0.6;
 const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 
@@ -1887,11 +1888,13 @@ function animate(t) {
   }
 
   const gripStatus = getValidGripStatus();
-  gripDebugFrameCounter += 1;
-  if (gripDebugFrameCounter % GRIP_DEBUG_LOG_INTERVAL_FRAMES === 0) {
-    console.log(
-      `[Grip] valid=${gripStatus.validGrip} L=${gripStatus.leftFrames} R=${gripStatus.rightFrames} avgNy=${gripStatus.avgNormalY.toFixed(3)} center=${gripStatus.centerBetween}`
-    );
+  if (ENABLE_GRIP_DEBUG_LOG) {
+    gripDebugFrameCounter += 1;
+    if (gripDebugFrameCounter % GRIP_DEBUG_LOG_INTERVAL_FRAMES === 0) {
+      console.log(
+        `[Grip] valid=${gripStatus.validGrip} L=${gripStatus.leftFrames} R=${gripStatus.rightFrames} avgNy=${gripStatus.avgNormalY.toFixed(3)} center=${gripStatus.centerBetween}`
+      );
+    }
   }
 
   // ===== 自動シーケンス（Three側）=====

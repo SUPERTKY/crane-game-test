@@ -275,6 +275,8 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（接触に関係なく2秒で上昇へ移行）
+const CLAW_CLOSE_WAIT_MAX_SEC = 2.0; // 閉じ阻害が解除された後に追い閉じする猶予（無限待ち防止）
+const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
@@ -319,6 +321,7 @@ const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
+let step3WaitT = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -1917,6 +1920,7 @@ if (autoStarted) {
       // 降下完了後は必ず一定時間だけ閉じ工程を実行してから上昇する。
       autoStep = 3;
       autoT = 0;
+      step3WaitT = 0;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -1951,21 +1955,38 @@ if (autoStarted) {
 
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
-    // 閉じ工程は「接触状態に関係なく」実時間で進める。
-    // これで箱に刺さった状態でも、指定秒数(CLAW_CLOSE_TIME)で次工程へ進む。
     autoT += dt;
 
-    // 完全な時間制: 現在値から一定速度で閉じるだけにする（固定目標カーブは使わない）。
+    // 基本は時間制で閉じる。接触で抑制されると実角度が追従しない場合がある。
     setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
 
+    const leftPressed = getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES;
+    const rightPressed = getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES;
+    const closeBlockedByPress = leftPressed || rightPressed;
+    const needsMoreClose = clawOpen01 > CLAW_FULLY_CLOSED_EPS;
+
+    // 2秒経過しても圧迫で閉じきっていない場合は、圧迫解除後だけ追い閉じを継続する。
     if (autoT >= CLAW_CLOSE_TIME) {
-      // 閉じ終わったらそのまま上昇（吸着はしない）
-      autoStep = 4;
-      autoT = 0;
-      step4LiftAssistNoContactT = 0;
-      step4LiftLatched = false;
-      step4GripLostT = 0;
-      step4ReleasePulseUsed = false;
+      if (!needsMoreClose) {
+        step3WaitT = 0;
+      } else if (!closeBlockedByPress) {
+        step3WaitT += dt;
+      } else {
+        step3WaitT = 0;
+      }
+
+      const hardTimeout = autoT >= CLAW_CLOSE_TIME + CLAW_CLOSE_WAIT_MAX_SEC;
+      const finishedByReleaseClose = step3WaitT >= CLAW_CLOSE_WAIT_MAX_SEC || !needsMoreClose;
+      if (finishedByReleaseClose || hardTimeout) {
+        // 閉じ終わった（または安全上のタイムアウト）ら上昇へ。
+        autoStep = 4;
+        autoT = 0;
+        step3WaitT = 0;
+        step4LiftAssistNoContactT = 0;
+        step4LiftLatched = false;
+        step4GripLostT = 0;
+        step4ReleasePulseUsed = false;
+      }
     }
 
   } else if (autoStep === 4) {

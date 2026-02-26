@@ -1960,22 +1960,15 @@ if (autoStarted) {
     // 基本は時間制で閉じる。接触で抑制されると実角度が追従しない場合がある。
     setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
 
-    const needsMoreClose = clawOpen01 > CLAW_FULLY_CLOSED_EPS;
-
-    // 規定時間後、閉じ切っていれば即上昇。まだ閉じ切っていなくても、
-    // 圧迫が解放されればこのまま閉じ続け、追加猶予の上限で必ず上昇へ進む。
+    // ステップ3は時間で確実に終了して上昇へ進む。
+    // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
     if (autoT >= CLAW_CLOSE_TIME) {
-      const hardTimeout = autoT >= CLAW_CLOSE_TIME + CLAW_CLOSE_WAIT_MAX_SEC;
-      const canProceed = !needsMoreClose || hardTimeout;
-      if (canProceed) {
-        // 閉じ終わった（または安全上のタイムアウト）ら上昇へ。
-        autoStep = 4;
-        autoT = 0;
-        step4LiftAssistNoContactT = 0;
-        step4LiftLatched = false;
-        step4GripLostT = 0;
-        step4ReleasePulseUsed = false;
-      }
+      autoStep = 4;
+      autoT = 0;
+      step4LiftAssistNoContactT = 0;
+      step4LiftLatched = false;
+      step4GripLostT = 0;
+      step4ReleasePulseUsed = false;
     }
 
 

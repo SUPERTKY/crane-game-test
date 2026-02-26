@@ -275,6 +275,8 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（接触に関係なく2秒で上昇へ移行）
+const CLAW_CLOSE_WAIT_MAX_SEC = 2.0; // 閉じ工程の追加猶予（無限待ち防止）
+const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
@@ -319,6 +321,7 @@ const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
+let step3WaitT = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -1917,6 +1920,7 @@ if (autoStarted) {
       // 降下完了後は必ず一定時間だけ閉じ工程を実行してから上昇する。
       autoStep = 3;
       autoT = 0;
+      step3WaitT = 0;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;

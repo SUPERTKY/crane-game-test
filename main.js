@@ -13,6 +13,7 @@ let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
 const ARM_HOLD_SPEED_X = 2; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 2; // 前移動速度（1秒あたり）
+const PHYSICS_FIXED_DT = 1 / 120;
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整
@@ -1692,7 +1693,7 @@ function stabilizePrizeBody(body) {
   wasClawContactLastFrame = clawContact;
 
   if (boxReleaseSettleTimer > 0) {
-    boxReleaseSettleTimer = Math.max(0, boxReleaseSettleTimer - FIXED);
+    boxReleaseSettleTimer = Math.max(0, boxReleaseSettleTimer - PHYSICS_FIXED_DT);
   }
 
   // 接触中は箱側をソフトに減衰させてsolver破綻（潰れ/飛び）を抑える
@@ -2037,10 +2038,9 @@ if (autoStarted) {
   // ===== 物理ステップ（armBody同期の後！）=====
 followClawBodies(dt);
   updateClawHitboxVisuals();
-const FIXED = 1 / 120;
 const MAX_SUB = 8;
 
-world.step(FIXED, dt, MAX_SUB);
+world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
   stabilizePrizeBody(boxBody);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();

@@ -1951,15 +1951,14 @@ if (autoStarted) {
 
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
-    // 閉じ工程は「接触状態に関係なく」実時間で進める。
-    // これで箱に刺さった状態でも、指定秒数(CLAW_CLOSE_TIME)で次工程へ進む。
     autoT += dt;
 
-    // 完全な時間制: 現在値から一定速度で閉じるだけにする（固定目標カーブは使わない）。
+    // 基本は時間制で閉じる。接触で抑制されると実角度が追従しない場合がある。
     setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
 
+    // ステップ3は時間で確実に終了して上昇へ進む。
+    // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
     if (autoT >= CLAW_CLOSE_TIME) {
-      // 閉じ終わったらそのまま上昇（吸着はしない）
       autoStep = 4;
       autoT = 0;
       step4LiftAssistNoContactT = 0;
@@ -1968,10 +1967,17 @@ if (autoStarted) {
       step4ReleasePulseUsed = false;
     }
 
+
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
     autoT += dt;
     const targetY = dropStartY;
+
+    // 持ち上げ中も閉じ方向の駆動は継続する。
+    // これにより、圧迫で閉じ切れなかった場合でも、上昇中に解放されれば追従して閉じる。
+    if (clawOpen01 > 0) {
+      setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
+    }
 
     // 上昇は常に実行する。掴み判定に依存すると
     // 条件が揃わないケースでステップ4が停止してしまうため。

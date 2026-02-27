@@ -18,8 +18,8 @@ const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整
 const CLAW_BOX_FRICTION = 0.03;
-const CLAW_BOX_CONTACT_EQUATION_STIFFNESS = 4.5e4;
-const CLAW_BOX_CONTACT_EQUATION_RELAXATION = 14;
+const CLAW_BOX_CONTACT_EQUATION_STIFFNESS = 6.2e4;
+const CLAW_BOX_CONTACT_EQUATION_RELAXATION = 10;
 const CLAW_BOX_FRICTION_EQUATION_STIFFNESS = 3.2e4;
 const CLAW_BOX_FRICTION_EQUATION_RELAXATION = 14;
 const BOX_YAW = Math.PI / 2;
@@ -292,9 +292,12 @@ const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
 // 箱接触時のみ、重量由来の押し戻しで爪が開き方向に回る（自動開きはしない）
 const CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT = true;
-const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.2;
+// 圧力で開きにくくしたい時の全体つまみ（大きいほど開きにくい）
+// 目安: 0.85=開きやすい / 1.0=標準 / 1.15=少し開きにくい / 1.3=かなり開きにくい
+const CLAW_PRESSURE_OPEN_HARDNESS = 1.15;
+const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 1.9 / CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
-const CLAW_PASSIVE_OPEN_RESISTANCE = 1.45;
+const CLAW_PASSIVE_OPEN_RESISTANCE = 1.6 * CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
 const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
@@ -642,9 +645,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
 
   const openL01 = angleToOpen01(nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
   const openR01 = angleToOpen01(nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
-  // 目標値ではなく実際の爪角度から開閉率を更新する。
-  // これにより接触で閉じが抑制されたときも内部状態がズレない。
-  clawOpen01 = Math.max(openL01, openR01);
+  clawOpen01L = openL01;
+  clawOpen01R = openR01;
+  // コマンド値は入力(open01)を保持する。
+  // 圧力で片側だけ受動的に開いても、もう片側へ同期しないようにする。
+  clawOpen01 = nextOpen01;
 }
 
 
@@ -1611,7 +1616,9 @@ boxMesh.rotation.y += BOX_YAW;
 
   camera.lookAt(0, 0.4, 0);
 }
-let clawOpen01 = 0; // 0=閉じる, 1=開く
+let clawOpen01 = 0;  // 両爪へ与える開閉コマンド値（0=閉, 1=開）
+let clawOpen01L = 0; // 左爪の実開度（0=閉, 1=開）
+let clawOpen01R = 0; // 右爪の実開度（0=閉, 1=開）
 
 function clawOpenMotor() {
   if (!hingeL || !hingeR) return;
@@ -1658,7 +1665,7 @@ const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
 
 
 const MAX_KINEMATIC_SPEED = 0.8;
-const CONTACT_KINEMATIC_SPEED = 0.30;
+const CONTACT_KINEMATIC_SPEED = 0.24;
 const MAX_BOX_LINEAR_SPEED = 12.0;
 let boxReleaseSettleTimer = 0;
 let wasClawContactLastFrame = false;

@@ -19,3 +19,22 @@ with sync_playwright() as p:
     page.screenshot(path="artifacts/crane-game-firefox.png", full_page=True)
     browser.close()
 ```
+
+
+## 開きにくさを自分でアレンジするには
+
+`main.js` の以下を調整してください。
+
+- `CLAW_PRESSURE_OPEN_HARDNESS`（新規）
+  - **大きいほど開きにくい**
+  - 目安: `0.85` = 開きやすい / `1.0` = 標準 / `1.15` = 少し開きにくい / `1.3` = かなり開きにくい
+
+この値は、内部的に次の2つへ連動して反映されます。
+- `CLAW_PASSIVE_OPEN_ACCEL_PER_KG`（値が下がる → 開きにくくなる）
+- `CLAW_PASSIVE_OPEN_RESISTANCE`（値が上がる → 開きにくくなる）
+
+まずは `1.15` から始めて、
+- まだ開くなら `+0.05` ずつ上げる
+- 開かなすぎるなら `-0.05` ずつ下げる
+
+のように微調整するのがおすすめです。

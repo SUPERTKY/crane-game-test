@@ -304,7 +304,12 @@ const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
 const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.22;
+<<<<<<< wx9bis-codex/adjust-nail-pressure-resistance
+const CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中の位置追従は弱めて押し込みを抑える
+const CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE = 0.85; // 回転追従は位置より追従させ、見た目と当たり判定のズレを減らす
+=======
 const CLOSE_STEP_CONTACT_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中は追従を弱め、指定位置への押し込みを減らす
+>>>>>>> main
 const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;
 const BOX_CONTACT_LINEAR_DAMPING = 0.30;
@@ -1781,8 +1786,15 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact) {
 
   const desiredPos = threeVecToCannon(desiredPos3);
 
+<<<<<<< wx9bis-codex/adjust-nail-pressure-resistance
+  const inCloseContact = isContact && autoStarted && autoStep === 3;
+  const posFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE : 1.0;
+  const angleFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE : 1.0;
+  const maxMove = Math.max((isContact ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED) * posFollowScale * dt, 0);
+=======
   const followScale = (isContact && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_FOLLOW_SCALE : 1.0;
   const maxMove = Math.max((isContact ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED) * followScale * dt, 0);
+>>>>>>> main
   const dx = desiredPos.x - prevPos.x;
   const dy = desiredPos.y - prevPos.y;
   const dz = desiredPos.z - prevPos.z;
@@ -1800,7 +1812,11 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact) {
   const dot = Math.min(1, Math.max(-1, Math.abs(currentQ3.dot(desiredQuat3))));
   const angle = 2 * Math.acos(dot);
   const maxAngleBase = isContact ? CONTACT_KINEMATIC_MAX_ANGLE_STEP : FREE_KINEMATIC_MAX_ANGLE_STEP;
+<<<<<<< wx9bis-codex/adjust-nail-pressure-resistance
+  const maxAngle = maxAngleBase * angleFollowScale;
+=======
   const maxAngle = maxAngleBase * followScale;
+>>>>>>> main
   const t = angle > 1e-6 ? Math.min(1, maxAngle / angle) : 1;
   currentQ3.slerp(desiredQuat3, t);
   body.quaternion.copy(threeQuatToCannon(currentQ3));

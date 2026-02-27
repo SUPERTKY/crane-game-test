@@ -304,6 +304,7 @@ const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
 const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.22;
+const CLOSE_STEP_CONTACT_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中は追従を弱め、指定位置への押し込みを減らす
 const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;
 const BOX_CONTACT_LINEAR_DAMPING = 0.30;
@@ -326,6 +327,7 @@ const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
 let step3WaitT = 0;
+let step3StartOpen01 = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -1779,7 +1781,8 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact) {
 
   const desiredPos = threeVecToCannon(desiredPos3);
 
-  const maxMove = Math.max((isContact ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED) * dt, 0);
+  const followScale = (isContact && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_FOLLOW_SCALE : 1.0;
+  const maxMove = Math.max((isContact ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED) * followScale * dt, 0);
   const dx = desiredPos.x - prevPos.x;
   const dy = desiredPos.y - prevPos.y;
   const dz = desiredPos.z - prevPos.z;
@@ -1796,7 +1799,8 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact) {
   const currentQ3 = cannonQuatToThree(body.quaternion);
   const dot = Math.min(1, Math.max(-1, Math.abs(currentQ3.dot(desiredQuat3))));
   const angle = 2 * Math.acos(dot);
-  const maxAngle = isContact ? CONTACT_KINEMATIC_MAX_ANGLE_STEP : FREE_KINEMATIC_MAX_ANGLE_STEP;
+  const maxAngleBase = isContact ? CONTACT_KINEMATIC_MAX_ANGLE_STEP : FREE_KINEMATIC_MAX_ANGLE_STEP;
+  const maxAngle = maxAngleBase * followScale;
   const t = angle > 1e-6 ? Math.min(1, maxAngle / angle) : 1;
   currentQ3.slerp(desiredQuat3, t);
   body.quaternion.copy(threeQuatToCannon(currentQ3));
@@ -1929,6 +1933,7 @@ if (autoStarted) {
       autoStep = 3;
       autoT = 0;
       step3WaitT = 0;
+      step3StartOpen01 = clawOpen01;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -1964,11 +1969,13 @@ if (autoStarted) {
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
     autoT += dt;
-    // 基本は時間制で閉じる。接触で抑制されると実角度が追従しない場合がある。
-    setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
+    // 閉じコマンドは elapsed time から直接計算する。
+    // これにより接触状態や前フレーム値に引きずられず、常に時間制で進行する。
+    const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
+    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
+    setClawOpen01(closeCmdOpen01, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
-    // これにより「掴み中にすぐ上昇する」挙動を防ぐ。
     // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
     if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
       autoStep = 4;

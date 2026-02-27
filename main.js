@@ -306,6 +306,8 @@ const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
 const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.22;
 const CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中の位置追従は弱めて押し込みを抑える
 const CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE = 0.85; // 回転追従は位置より追従させ、見た目と当たり判定のズレを減らす
+const CONTACT_VISUAL_MAX_ANGLE_STEP = 0.018; // 接触中の見た目回転の1フレーム上限（rad）
+const CLOSE_STEP_CONTACT_VISUAL_SCALE = 0.7; // 閉じ工程の接触時はさらに見た目回転を抑える
 const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;
 const BOX_CONTACT_LINEAR_DAMPING = 0.30;
@@ -508,6 +510,13 @@ function softenClosingDelta(delta, isClosingPositive, damp) {
   return openingPart + closingPart * damp;
 }
 
+function limitAngleStep(current, target, maxStep) {
+  if (!Number.isFinite(maxStep) || maxStep <= 0) return target;
+  const delta = target - current;
+  if (Math.abs(delta) <= maxStep) return target;
+  return current + Math.sign(delta) * maxStep;
+}
+
 function angleToOpen01(angle, closed, open) {
   return THREE.MathUtils.clamp(
     THREE.MathUtils.inverseLerp(closed, open, angle),
@@ -636,6 +645,13 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveOpenVelL *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
     clawPassiveOpenVelR *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
   }
+
+  const visualScaleL = (levelL === 2 && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
+  const visualScaleR = (levelR === 2 && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
+  const maxVisualStepL = levelL === 2 ? CONTACT_VISUAL_MAX_ANGLE_STEP * visualScaleL : Infinity;
+  const maxVisualStepR = levelR === 2 ? CONTACT_VISUAL_MAX_ANGLE_STEP * visualScaleR : Infinity;
+  nextL = limitAngleStep(currentL, nextL, maxVisualStepL);
+  nextR = limitAngleStep(currentR, nextR, maxVisualStepR);
 
   const minL = Math.min(CLAW_L_CLOSED, CLAW_L_OPEN);
   const maxL = Math.max(CLAW_L_CLOSED, CLAW_L_OPEN);

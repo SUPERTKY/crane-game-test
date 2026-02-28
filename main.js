@@ -304,7 +304,7 @@ const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
-const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.22;
+const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.14; // 非接触時も回転追従を少し抑え、接触復帰直後の過大押し込みを減らす
 const CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中の位置追従は弱めて押し込みを抑える
 const CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE = 0.85; // 回転追従は位置より追従させ、見た目と当たり判定のズレを減らす
 const CONTACT_VISUAL_MAX_ANGLE_STEP = 0.018; // 接触中の見た目回転の1フレーム上限（rad）
@@ -1888,8 +1888,11 @@ function followClawBodies(dt) {
 
   // 棒など「箱以外」の接触で追従を過剰に遅くすると
   // 閉じモーションが止まって見えるため、速度制限は箱接触時のみ有効化する。
-  const leftContact = getClawContactLevel(clawLBody) === 2;
-  const rightContact = getClawContactLevel(clawRBody) === 2;
+  // ただし箱接触は narrowphase の瞬断がありうるので、短いホールド中も接触扱いを継続する。
+  const leftLevel = getClawContactLevel(clawLBody);
+  const rightLevel = getClawContactLevel(clawRBody);
+  const leftContact = leftLevel === 2 || clawBoxContactHoldL > 0;
+  const rightContact = rightLevel === 2 || clawBoxContactHoldR > 0;
 
   // 接触中はテレポート同期せず、1stepあたりの追従量を制限して押し込みを防ぐ
   moveKinematicBodyTowardMesh(clawLBody, clawLMesh, prevClawL, dt, leftContact);

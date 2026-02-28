@@ -304,10 +304,11 @@ const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.08;
-const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.22;
+const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.14; // 非接触時も回転追従を少し抑え、接触復帰直後の過大押し込みを減らす
 const CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中の位置追従は弱めて押し込みを抑える
 const CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE = 0.85; // 回転追従は位置より追従させ、見た目と当たり判定のズレを減らす
 const CONTACT_VISUAL_MAX_ANGLE_STEP = 0.018; // 接触中の見た目回転の1フレーム上限（rad）
+const FREE_VISUAL_MAX_ANGLE_STEP = 0.045; // 非接触時も見た目の急回転を抑え、当たり判定とのズレを防ぐ
 const CLOSE_STEP_CONTACT_VISUAL_SCALE = 0.7; // 閉じ工程の接触時はさらに見た目回転を抑える
 const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;
@@ -683,10 +684,16 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveOpenVelR *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
   }
 
-  const visualScaleL = (levelL === 2 && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
-  const visualScaleR = (levelR === 2 && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
-  const maxVisualStepL = levelL === 2 ? CONTACT_VISUAL_MAX_ANGLE_STEP * visualScaleL : Infinity;
-  const maxVisualStepR = levelR === 2 ? CONTACT_VISUAL_MAX_ANGLE_STEP * visualScaleR : Infinity;
+  const boxHoldL = levelL === 2 || clawBoxContactHoldL > 0;
+  const boxHoldR = levelR === 2 || clawBoxContactHoldR > 0;
+  const visualScaleL = (boxHoldL && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
+  const visualScaleR = (boxHoldR && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
+  const maxVisualStepL = boxHoldL
+    ? CONTACT_VISUAL_MAX_ANGLE_STEP * visualScaleL
+    : FREE_VISUAL_MAX_ANGLE_STEP;
+  const maxVisualStepR = boxHoldR
+    ? CONTACT_VISUAL_MAX_ANGLE_STEP * visualScaleR
+    : FREE_VISUAL_MAX_ANGLE_STEP;
   nextL = limitAngleStep(currentL, nextL, maxVisualStepL);
   nextR = limitAngleStep(currentR, nextR, maxVisualStepR);
 
@@ -1517,6 +1524,12 @@ addDebugDotLocal(clawPivot, hingeR_local, 0.03);
 // ★爪の原点がヒンジに無い場合の補正（要調整）
 clawLMesh.position.set(0, -1.95, -0.2);
 clawRMesh.position.set(0, -1.85, -0.2);
+
+// Web起動直後の見た目を必ず「閉じ」に固定する。
+// （GLBの初期ポーズが開き気味でも、最初の1フレームで閉じ状態を維持する）
+setClawPivotAngle(clawLPivot, CLAW_L_CLOSED);
+setClawPivotAngle(clawRPivot, CLAW_R_CLOSED);
+
 armGroup = new THREE.Group();
   // グループ化
 armGroup.name = "ArmGroup";
@@ -1875,8 +1888,11 @@ function followClawBodies(dt) {
 
   // 棒など「箱以外」の接触で追従を過剰に遅くすると
   // 閉じモーションが止まって見えるため、速度制限は箱接触時のみ有効化する。
-  const leftContact = getClawContactLevel(clawLBody) === 2;
-  const rightContact = getClawContactLevel(clawRBody) === 2;
+  // ただし箱接触は narrowphase の瞬断がありうるので、短いホールド中も接触扱いを継続する。
+  const leftLevel = getClawContactLevel(clawLBody);
+  const rightLevel = getClawContactLevel(clawRBody);
+  const leftContact = leftLevel === 2 || clawBoxContactHoldL > 0;
+  const rightContact = rightLevel === 2 || clawBoxContactHoldR > 0;
 
   // 接触中はテレポート同期せず、1stepあたりの追従量を制限して押し込みを防ぐ
   moveKinematicBodyTowardMesh(clawLBody, clawLMesh, prevClawL, dt, leftContact);

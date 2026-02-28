@@ -223,7 +223,6 @@ function computeConvexShapesFromRoot(meshRoot) {
 function computeClawFingerBox(meshRoot, {
   shrinkXZ = 0.55,
   tipHeightRatio = 0.48,
-  tipLiftRatio = 0,
   minHalf = 0.01,
 } = {}) {
   meshRoot.updateWorldMatrix(true, true);
@@ -240,7 +239,7 @@ function computeClawFingerBox(meshRoot, {
 
   const tipCenterWorld = new THREE.Vector3(
     (worldBox.min.x + worldBox.max.x) * 0.5,
-    worldBox.min.y + size.y * (tipHeightRatio * 0.5 + tipLiftRatio),
+    worldBox.min.y + size.y * (tipHeightRatio * 0.5),
     (worldBox.min.z + worldBox.max.z) * 0.5,
   );
 
@@ -286,12 +285,6 @@ const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
-const STEP3_EMBED_GUARD_CONTACT_FRAMES = 5;
-const STEP3_EMBED_GUARD_OPEN_SPEED = 0.32; // 両爪で挟んだまま押し込み続けるのを防ぐ
-const CLAW_USE_SIMPLE_FINGER_HITBOX = true;
-const CLAW_FINGER_HITBOX_SHRINK_XZ = 0.42;
-const CLAW_FINGER_HITBOX_TIP_HEIGHT_RATIO = 0.34;
-const CLAW_FINGER_HITBOX_TIP_LIFT_RATIO = 0.10;
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -362,7 +355,6 @@ let clawPassiveOpenVelR = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
 let step2LockY = 0;
-let step3EmbedGuardFrames = 0;
 
 
 // ===== つかみ（Constraint）設定 =====
@@ -1500,24 +1492,11 @@ scene.add(armGroup);
 // ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-if (CLAW_USE_SIMPLE_FINGER_HITBOX) {
-  clawLHitboxes = [computeClawFingerBox(clawLMesh, {
-    shrinkXZ: CLAW_FINGER_HITBOX_SHRINK_XZ,
-    tipHeightRatio: CLAW_FINGER_HITBOX_TIP_HEIGHT_RATIO,
-    tipLiftRatio: CLAW_FINGER_HITBOX_TIP_LIFT_RATIO,
-  })];
-  clawRHitboxes = [computeClawFingerBox(clawRMesh, {
-    shrinkXZ: CLAW_FINGER_HITBOX_SHRINK_XZ,
-    tipHeightRatio: CLAW_FINGER_HITBOX_TIP_HEIGHT_RATIO,
-    tipLiftRatio: CLAW_FINGER_HITBOX_TIP_LIFT_RATIO,
-  })];
-} else {
-  clawLHitboxes = computeClawConvexHitboxes(clawLMesh);
-  clawRHitboxes = computeClawConvexHitboxes(clawRMesh);
+clawLHitboxes = computeClawConvexHitboxes(clawLMesh);
+clawRHitboxes = computeClawConvexHitboxes(clawRMesh);
 
-  if (!clawLHitboxes.length) clawLHitboxes = [computeClawFingerBox(clawLMesh)];
-  if (!clawRHitboxes.length) clawRHitboxes = [computeClawFingerBox(clawRMesh)];
-}
+if (!clawLHitboxes.length) clawLHitboxes = [computeClawFingerBox(clawLMesh)];
+if (!clawRHitboxes.length) clawRHitboxes = [computeClawFingerBox(clawRMesh)];
 
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");
@@ -1978,7 +1957,6 @@ if (autoStarted) {
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
-      step3EmbedGuardFrames = 0;
     };
 
     if (boxPressing) {
@@ -2011,24 +1989,11 @@ if (autoStarted) {
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
     autoT += dt;
-    const bothClawsPressingBox =
-      getClawContactLevel(clawLBody) === 2 &&
-      getClawContactLevel(clawRBody) === 2 &&
-      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES &&
-      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES;
-    step3EmbedGuardFrames = bothClawsPressingBox ? step3EmbedGuardFrames + 1 : 0;
-
     // 閉じコマンドは elapsed time から直接計算する。
     // これにより接触状態や前フレーム値に引きずられず、常に時間制で進行する。
     const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
     const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
-
-    // 両爪で箱を挟んだ状態が続くなら、さらに閉じて押し込まず少し開いて逃がす。
-    if (step3EmbedGuardFrames >= STEP3_EMBED_GUARD_CONTACT_FRAMES) {
-      setClawOpen01(clawOpen01 + STEP3_EMBED_GUARD_OPEN_SPEED * dt, dt);
-    } else {
-      setClawOpen01(closeCmdOpen01, dt);
-    }
+    setClawOpen01(closeCmdOpen01, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
     // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。

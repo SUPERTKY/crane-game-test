@@ -223,6 +223,7 @@ function computeConvexShapesFromRoot(meshRoot) {
 function computeClawFingerBox(meshRoot, {
   shrinkXZ = 0.55,
   tipHeightRatio = 0.48,
+  tipLiftRatio = 0,
   minHalf = 0.01,
 } = {}) {
   meshRoot.updateWorldMatrix(true, true);
@@ -239,7 +240,7 @@ function computeClawFingerBox(meshRoot, {
 
   const tipCenterWorld = new THREE.Vector3(
     (worldBox.min.x + worldBox.max.x) * 0.5,
-    worldBox.min.y + size.y * (tipHeightRatio * 0.5),
+    worldBox.min.y + size.y * (tipHeightRatio * 0.5 + tipLiftRatio),
     (worldBox.min.z + worldBox.max.z) * 0.5,
   );
 
@@ -287,6 +288,10 @@ const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
 const STEP3_EMBED_GUARD_CONTACT_FRAMES = 5;
 const STEP3_EMBED_GUARD_OPEN_SPEED = 0.32; // 両爪で挟んだまま押し込み続けるのを防ぐ
+const CLAW_USE_SIMPLE_FINGER_HITBOX = true;
+const CLAW_FINGER_HITBOX_SHRINK_XZ = 0.42;
+const CLAW_FINGER_HITBOX_TIP_HEIGHT_RATIO = 0.34;
+const CLAW_FINGER_HITBOX_TIP_LIFT_RATIO = 0.10;
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -1495,11 +1500,24 @@ scene.add(armGroup);
 // ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
 armGroup.updateMatrixWorld(true);
-clawLHitboxes = computeClawConvexHitboxes(clawLMesh);
-clawRHitboxes = computeClawConvexHitboxes(clawRMesh);
+if (CLAW_USE_SIMPLE_FINGER_HITBOX) {
+  clawLHitboxes = [computeClawFingerBox(clawLMesh, {
+    shrinkXZ: CLAW_FINGER_HITBOX_SHRINK_XZ,
+    tipHeightRatio: CLAW_FINGER_HITBOX_TIP_HEIGHT_RATIO,
+    tipLiftRatio: CLAW_FINGER_HITBOX_TIP_LIFT_RATIO,
+  })];
+  clawRHitboxes = [computeClawFingerBox(clawRMesh, {
+    shrinkXZ: CLAW_FINGER_HITBOX_SHRINK_XZ,
+    tipHeightRatio: CLAW_FINGER_HITBOX_TIP_HEIGHT_RATIO,
+    tipLiftRatio: CLAW_FINGER_HITBOX_TIP_LIFT_RATIO,
+  })];
+} else {
+  clawLHitboxes = computeClawConvexHitboxes(clawLMesh);
+  clawRHitboxes = computeClawConvexHitboxes(clawRMesh);
 
-if (!clawLHitboxes.length) clawLHitboxes = [computeClawFingerBox(clawLMesh)];
-if (!clawRHitboxes.length) clawRHitboxes = [computeClawFingerBox(clawRMesh)];
+  if (!clawLHitboxes.length) clawLHitboxes = [computeClawFingerBox(clawLMesh)];
+  if (!clawRHitboxes.length) clawRHitboxes = [computeClawFingerBox(clawRMesh)];
+}
 
 console.log("左爪ヒットボックス:", clawLHitboxes.length, "個");
 console.log("右爪ヒットボックス:", clawRHitboxes.length, "個");

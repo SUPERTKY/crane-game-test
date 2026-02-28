@@ -290,6 +290,7 @@ const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
+const CLAW_CLOSE_CONTACT_BLOCK_FRAMES = 1; // 箱接触直後から閉じ込みを止めて、見た目のめり込みを抑える
 // 箱接触時のみ、重量由来の押し戻しで爪が開き方向に回る（自動開きはしない）
 const CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT = true;
 // 圧力で開きにくくしたい時の全体つまみ（大きいほど開きにくい）
@@ -510,6 +511,16 @@ function softenClosingDelta(delta, isClosingPositive, damp) {
   return openingPart + closingPart * damp;
 }
 
+function blockClosingRotationOnContact(currentAngle, nextAngle, closedAngle, openAngle) {
+  // 閉じ方向へ進む成分のみ止める（開き方向は許可）
+  const closingDir = Math.sign(closedAngle - openAngle);
+  if (closingDir === 0) return nextAngle;
+
+  const delta = nextAngle - currentAngle;
+  if (delta * closingDir > 0) return currentAngle;
+  return nextAngle;
+}
+
 function limitAngleStep(current, target, maxStep) {
   if (!Number.isFinite(maxStep) || maxStep <= 0) return target;
   const delta = target - current;
@@ -537,6 +548,8 @@ function setClawPivotAngle(pivot, logicalAngle) {
 
 let clawContactHoldL = 0;
 let clawContactHoldR = 0;
+let clawBoxContactHoldL = 0;
+let clawBoxContactHoldR = 0;
 
 function applyPassiveOpenByBoxWeight(currentAngle, level, closedAngle, openAngle, currentVel, dt, boxPressFrames) {
   const passiveActive =
@@ -590,8 +603,10 @@ function setClawOpen01(open01, dt = 1 / 60) {
   if (levelL !== 2) clawReleasePulseCooldownL = 0;
   if (levelR !== 2) clawReleasePulseCooldownR = 0;
 
-  clawContactHoldL = levelL === 2 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
-  clawContactHoldR = levelR === 2 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
+  clawContactHoldL = levelL > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
+  clawContactHoldR = levelR > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
+  clawBoxContactHoldL = levelL === 2 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawBoxContactHoldL - 1);
+  clawBoxContactHoldR = levelR === 2 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawBoxContactHoldR - 1);
 
   let nextL = targetL;
   let nextR = targetR;
@@ -613,6 +628,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
         clawReleasePulseCooldownL = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
       }
     }
+
+    if (clawBoxContactHoldL > 0 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
+      // 箱接触が瞬断しても短時間は閉じ込みを禁止する
+      nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
+    }
   }
   if (isClosing && clawContactHoldR > 0) {
     const dampR = levelR === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
@@ -631,6 +651,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
         clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
       }
     }
+
+    if (clawBoxContactHoldR > 0 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
+      // 箱接触が瞬断しても短時間は閉じ込みを禁止する
+      nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
+    }
   }
 
   if (isClosing) {
@@ -641,6 +666,14 @@ function setClawOpen01(open01, dt = 1 / 60) {
     const passiveR = applyPassiveOpenByBoxWeight(nextR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt, clawBoxPressFramesR);
     nextR = passiveR.nextAngle;
     clawPassiveOpenVelR = passiveR.nextVel;
+
+    // 受動開き等の後段処理で値が再計算されても、接触中の閉じ込みは最終的に禁止する
+    if (clawBoxContactHoldL > 0 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
+      nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
+    }
+    if (clawBoxContactHoldR > 0 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
+      nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
+    }
   } else {
     clawPassiveOpenVelL *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
     clawPassiveOpenVelR *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);

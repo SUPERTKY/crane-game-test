@@ -660,6 +660,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
       nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
 
   }
+  }
 
   if (isClosing) {
     const passiveL = applyPassiveOpenByBoxWeight(nextL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt, clawBoxPressFramesL);

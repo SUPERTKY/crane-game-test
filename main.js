@@ -629,15 +629,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
       }
     }
 
-<<<<<<< codex-yfy433
+
     if (clawBoxContactHoldL > 0 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
       // 箱接触が瞬断しても短時間は閉じ込みを禁止する
       nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
-=======
-    if (levelL === 2 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
-      // 左爪: 箱に触れている間は「これ以上閉じる角度」を禁止
-      nextL = Math.min(nextL, currentL);
->>>>>>> main
+
     }
   }
   if (isClosing && clawContactHoldR > 0) {
@@ -658,16 +654,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
       }
     }
 
-<<<<<<< codex-yfy433
+
     if (clawBoxContactHoldR > 0 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
       // 箱接触が瞬断しても短時間は閉じ込みを禁止する
       nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
-=======
-    if (levelR === 2 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
-      // 右爪: 箱に触れている間は「これ以上閉じる角度」を禁止
-      nextR = Math.max(nextR, currentR);
->>>>>>> main
-    }
+
   }
 
   if (isClosing) {

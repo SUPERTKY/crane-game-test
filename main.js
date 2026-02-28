@@ -285,6 +285,8 @@ const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
+const STEP3_EMBED_GUARD_CONTACT_FRAMES = 5;
+const STEP3_EMBED_GUARD_OPEN_SPEED = 0.32; // 両爪で挟んだまま押し込み続けるのを防ぐ
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -355,6 +357,7 @@ let clawPassiveOpenVelR = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
 let step2LockY = 0;
+let step3EmbedGuardFrames = 0;
 
 
 // ===== つかみ（Constraint）設定 =====
@@ -1957,6 +1960,7 @@ if (autoStarted) {
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
+      step3EmbedGuardFrames = 0;
     };
 
     if (boxPressing) {
@@ -1989,11 +1993,24 @@ if (autoStarted) {
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
     autoT += dt;
+    const bothClawsPressingBox =
+      getClawContactLevel(clawLBody) === 2 &&
+      getClawContactLevel(clawRBody) === 2 &&
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES &&
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES;
+    step3EmbedGuardFrames = bothClawsPressingBox ? step3EmbedGuardFrames + 1 : 0;
+
     // 閉じコマンドは elapsed time から直接計算する。
     // これにより接触状態や前フレーム値に引きずられず、常に時間制で進行する。
     const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
     const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
-    setClawOpen01(closeCmdOpen01, dt);
+
+    // 両爪で箱を挟んだ状態が続くなら、さらに閉じて押し込まず少し開いて逃がす。
+    if (step3EmbedGuardFrames >= STEP3_EMBED_GUARD_CONTACT_FRAMES) {
+      setClawOpen01(clawOpen01 + STEP3_EMBED_GUARD_OPEN_SPEED * dt, dt);
+    } else {
+      setClawOpen01(closeCmdOpen01, dt);
+    }
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
     // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。

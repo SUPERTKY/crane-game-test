@@ -290,6 +290,7 @@ const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
+const CLAW_CLOSE_CONTACT_BLOCK_FRAMES = 1; // 箱接触直後から閉じ込みを止めて、見た目のめり込みを抑える
 // 箱接触時のみ、重量由来の押し戻しで爪が開き方向に回る（自動開きはしない）
 const CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT = true;
 // 圧力で開きにくくしたい時の全体つまみ（大きいほど開きにくい）
@@ -613,6 +614,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
         clawReleasePulseCooldownL = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
       }
     }
+
+    if (levelL === 2 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
+      // 左爪: 箱に触れている間は「これ以上閉じる角度」を禁止
+      nextL = Math.min(nextL, currentL);
+    }
   }
   if (isClosing && clawContactHoldR > 0) {
     const dampR = levelR === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
@@ -630,6 +636,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
         nextR = currentR + CLAW_CLOSE_RELEASE_PULSE;
         clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
       }
+    }
+
+    if (levelR === 2 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
+      // 右爪: 箱に触れている間は「これ以上閉じる角度」を禁止
+      nextR = Math.max(nextR, currentR);
     }
   }
 

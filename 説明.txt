@@ -1,31 +1,92 @@
-# Step4 修正: 持ち上げ時に爪を閉じ直さない
+# Step4 根本修正: 実際のピボット角度を保持して持ち上げる
 
-## 変更箇所: `autoStep === 4` 内の `else` ブロック（1箇所のみ）
+## 問題の根本原因
 
-### 変更前
+Step 3 の閉じ工程で:
+- `clawOpen01`（コマンド値）は **0**（完全閉じ命令）に到達する
+- しかし実際のピボット角度は **接触ブロックにより部分的に開いたまま**
+
+Step 4 で `setClawOpen01(0 + 少量)` が呼ばれると:
+- `isClosing = false`（前回値0より大きいので「開き方向」と判定される）
+- **接触ブロックが一切適用されない**
+- 目標角度が「ほぼ全閉」→ ピボットが急にスナップ → 無理な圧迫
+
+## 修正 3箇所
+
+---
+
+### 修正1: 新しい変数を追加（既存変数宣言の近くに）
+
+`let step4PressureReleasedT = 0;` の直後に追加：
 
 ```javascript
-    } else {
-      if (step4PressureLatched) {
-        // 圧迫が解消された → 一定時間待ってからラッチ解除
-        step4PressureReleasedT += dt;
-        if (step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
-          step4PressureLatched = false;
-          step4PressureReleasedT = 0;
-        }
-        // 待機中は現在角度を維持（閉じも開きもしない）
-      } else {
-        // ラッチ解除済み → 通常の閉じ駆動
-        if (clawOpen01 > 0) {
-          setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
-        }
-      }
+// ★ 修正追加: Step4で保持する実効開度（Step3終了時の実際のピボット角度から算出）
+let step4HoldOpen01 = 0;
+```
+
+---
+
+### 修正2: Step3 → Step4 遷移時に実効開度を記録
+
+Step 3 の末尾、`autoStep = 4;` 付近を修正：
+
+**変更前:**
+```javascript
+    if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
+      autoStep = 4;
+      autoT = 0;
+      step4LiftAssistNoContactT = 0;
+      step4LiftLatched = false;
+      step4GripLostT = 0;
+      step4ReleasePulseUsed = false;
+      // Fix 4: Step4 開始時にラッチ状態をリセット
+      step4PressureLatched = false;
+      step4PressureReleasedT = 0;
     }
 ```
 
-### 変更後
-
+**変更後:**
 ```javascript
+    if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
+      autoStep = 4;
+      autoT = 0;
+      step4LiftAssistNoContactT = 0;
+      step4LiftLatched = false;
+      step4GripLostT = 0;
+      step4ReleasePulseUsed = false;
+      // Fix 4: Step4 開始時にラッチ状態をリセット
+      step4PressureLatched = false;
+      step4PressureReleasedT = 0;
+      // ★ 修正: Step3終了時の「実際の」開度を記録する。
+      // clawOpen01（コマンド値=0）ではなく、接触ブロック後の実ピボット角度を使う。
+      step4HoldOpen01 = Math.max(clawOpen01L, clawOpen01R, 0.01);
+    }
+```
+
+---
+
+### 修正3: Step4 本体を全面書き換え
+
+**変更前:**
+```javascript
+  } else if (autoStep === 4) {
+    // ===== ステップ4: アームを元の高さまで上げる =====
+    // Fix 4: ラッチ方式で圧迫時の開閉振動を防止
+    autoT += dt;
+    const targetY = dropStartY;
+
+    const liftingBoxPressing =
+      (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
+      (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
+
+    if (liftingBoxPressing) {
+      // 圧迫検出 → ラッチを立てて開き方向へ微小に動かす（上限付き）
+      if (!step4PressureLatched) {
+        step4PressureLatched = true;
+      }
+      step4PressureReleasedT = 0; // 圧迫中はリリースタイマーをリセット
+      const openTarget = Math.min(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, STEP4_PRESSURE_OPEN_MAX);
+      setClawOpen01(openTarget, dt);
     } else {
       if (step4PressureLatched) {
         // 圧迫が解消された → 一定時間待ってからラッチ解除
@@ -37,9 +98,59 @@
       }
       // ラッチ解除後も閉じ駆動はしない。Step3終了時の角度をそのまま維持して持ち上げる。
     }
+
+    // 上昇は常に実行する。掴み判定に依存すると
+    // 条件が揃わないケースでステップ4が停止してしまうため。
+    armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
+
+    if (armGroup.position.y >= targetY - 1e-6) {
+      armGroup.position.y = targetY;
+      autoStep = 5;
+    }
+
+  }
 ```
 
-## 何が変わるか
+**変更後:**
+```javascript
+  } else if (autoStep === 4) {
+    // ===== ステップ4: アームを元の高さまで上げる =====
+    // Step3終了時の実効開度(step4HoldOpen01)を基準に維持し、閉じ駆動は一切行わない。
+    // 圧迫検出時のみ微小に開いて逃がす。
+    autoT += dt;
+    const targetY = dropStartY;
 
-- **削除**: `else { ... setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt); }` — ラッチ解除後に爪を閉じ直す処理
-- **効果**: Step3（閉じ工程）で圧迫停止した角度をそのまま保持したまま持ち上げる。無理な圧力をかけなくなる。
+    const liftingBoxPressing =
+      (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
+      (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
+
+    if (liftingBoxPressing) {
+      // 圧迫検出 → 保持開度を少し開く（上限付き）
+      step4HoldOpen01 = Math.min(step4HoldOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, STEP4_PRESSURE_OPEN_MAX);
+    }
+
+    // 常にstep4HoldOpen01で爪角度を維持する。
+    // これによりclawOpen01が実際のピボット角度と一致し、
+    // isClosing誤判定による急スナップを防ぐ。
+    setClawOpen01(step4HoldOpen01, dt);
+
+    // 上昇は常に実行する。
+    armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
+
+    if (armGroup.position.y >= targetY - 1e-6) {
+      armGroup.position.y = targetY;
+      autoStep = 5;
+    }
+
+  }
+```
+
+---
+
+## なぜこの修正で直るか
+
+| 問題 | 原因 | 修正後 |
+|------|------|--------|
+| Step4で爪がスナップして閉じる | `clawOpen01`=0 なのに実ピボットは開き状態。`setClawOpen01`の`isClosing`判定がズレて接触ブロックが効かない | `step4HoldOpen01`で実際の開度を保持。`clawOpen01`と実角度が常に一致するため、ズレが起きない |
+| 圧迫→解消のサイクルで振動 | ラッチの遅延解除中にも角度がブレる | `step4HoldOpen01`を単調増加のみ許可（開くだけ、閉じない）。解消後も開いた角度を維持 |
+| 前回の修正が効かなかった | 「何もしない」だけでは`clawOpen01`=0が残り、次に`setClawOpen01`が呼ばれた時にスナップする | 毎フレーム`setClawOpen01(step4HoldOpen01)`を呼んで`clawOpen01`を正しい値に同期し続ける |

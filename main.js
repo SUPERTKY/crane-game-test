@@ -1852,7 +1852,9 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPres
 
   const desiredPos = threeVecToCannon(desiredPos3);
 
-  const inCloseContact = isContact && autoStarted && (autoStep === 3 || autoStep === 4);
+  const step3ClosingContact = isContact && autoStarted && autoStep === 3;
+  const step4PressingContact = isContact && autoStarted && autoStep === 4 && boxPressFrames >= PRESSING_KINEMATIC_MIN_FRAMES;
+  const inCloseContact = step3ClosingContact || step4PressingContact;
   const isPressing = inCloseContact && boxPressFrames >= PRESSING_KINEMATIC_MIN_FRAMES;
   const posFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE : 1.0;
   const angleFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE : 1.0;

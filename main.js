@@ -276,41 +276,15 @@ const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（見た目上の閉じ切り目安）
 const CLAW_CLOSE_WAIT_MAX_SEC = 3.0; // 閉じ工程の最短待機秒（この秒数未満では上昇へ移行しない）
 const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
-const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
-const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
-const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
-const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
 const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
-const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
-
-const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
-const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
-const CLAW_CLOSE_RELEASE_PULSE = 0.03;
-const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
-const CLAW_CLOSE_CONTACT_BLOCK_FRAMES = 1; // 箱接触直後から閉じ込みを止めて、見た目のめり込みを抑える
-// 箱接触時のみ、重量由来の押し戻しで爪が開き方向に回る（自動開きはしない）
-const CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT = true;
-// 圧力で開きにくくしたい時の全体つまみ（大きいほど開きにくい）
-// 目安: 0.85=開きやすい / 1.0=標準 / 1.15=少し開きにくい / 1.3=かなり開きにくい
-const CLAW_PRESSURE_OPEN_HARDNESS = 1.15;
-const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 1.9 / CLAW_PRESSURE_OPEN_HARDNESS;
-const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
-const CLAW_PASSIVE_OPEN_RESISTANCE = 1.6 * CLAW_PRESSURE_OPEN_HARDNESS;
-const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
-const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
-const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
-const STEP2_LOCK_ON_BOX_PRESS = true;
-const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.022;
-const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.05; // 非接触時の追従回転も抑え、接触復帰直後の過大押し込みを減らす
-const PRESSING_KINEMATIC_MAX_ANGLE_STEP = 0.008; // 箱を押し続けている間は回転追従をさらに絞り、急な食い込みトルクを防ぐ
-const PRESSING_KINEMATIC_MIN_FRAMES = 4;
-const CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中の位置追従は弱めて押し込みを抑える
-const CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE = 0.55; // 閉じ工程で箱接触中は回転追従を弱め、急回転での押し込みを防ぐ
-const CONTACT_VISUAL_MAX_ANGLE_STEP = 0.018; // 接触中の見た目回転の1フレーム上限（rad）
-const FREE_VISUAL_MAX_ANGLE_STEP = 0.045; // 非接触時も見た目の急回転を抑え、当たり判定とのズレを防ぐ
-const CLOSE_STEP_CONTACT_VISUAL_SCALE = 0.7; // 閉じ工程の接触時はさらに見た目回転を抑える
+// ===== ポストステップ侵入補正 =====
+const PENETRATION_THRESHOLD = 0.001;          // これ未満の侵入は無視
+const PENETRATION_CORRECTION_SCALE = 2.0;     // 侵入量→爪開き角度の補正倍率
+const ARM_PENETRATION_PUSHBACK = 0.5;         // 降下中の侵入→アーム押し戻し倍率
+// スムーズアニメーション用（接触状態に依存しない統一値）
+const CLAW_MAX_ANGLE_STEP_PER_FRAME = 0.045;
 const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;
 const BOX_CONTACT_LINEAR_DAMPING = 0.30;
@@ -327,18 +301,6 @@ const GRIP_RELEASE_PULSE_OPEN01 = 0.08;
 const GRIP_RELEASE_PULSE_SEC = 0.14;
 const GRIP_DEBUG_LOG_INTERVAL_FRAMES = 20;
 const ENABLE_GRIP_DEBUG_LOG = false;
-const STEP4_LIFT_ASSIST_SEC = 0.6;
-const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
-
-// ===== Fix 1 & 2: 侵入検出定数 =====
-const KINEMATIC_PENETRATION_PUSHBACK = 0.5;
-const KINEMATIC_PENETRATION_THRESHOLD = 0.001;
-const CLAW_CLOSE_PENETRATION_THRESHOLD = 0.003;
-const CLAW_CLOSE_PENETRATION_BLOCK = true;
-
-// ===== Fix 4: Step4 圧迫ラッチ定数 =====
-const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
-const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -346,7 +308,6 @@ let step3WaitT = 0;
 let step3StartOpen01 = 0;
 let dropStartY = 0;
 let autoStarted = false;
-let clawDropPenetrationT = 0;
 let boxContactFrames = 0;
 let boxReleaseFrames = 9999;
 let gripLeftFrames = 0;
@@ -354,24 +315,6 @@ let gripRightFrames = 0;
 let gripInvalidHoldT = 0;
 let gripReleasePulseT = 0;
 let gripDebugFrameCounter = 0;
-let step4LiftAssistNoContactT = 0;
-let step4LiftLatched = false;
-let step4GripLostT = 0;
-let step4ReleasePulseUsed = false;
-
-let clawBoxPressFramesL = 0;
-let clawBoxPressFramesR = 0;
-let clawReleasePulseCooldownL = 0;
-let clawReleasePulseCooldownR = 0;
-let clawPassiveOpenVelL = 0;
-let clawPassiveOpenVelR = 0;
-let step2BoxPressFrames = 0;
-let step2LockYActive = false;
-let step2LockY = 0;
-
-// Fix 4: Step4 圧迫ラッチ状態
-let step4PressureLatched = false;
-let step4PressureReleasedT = 0;
 
 
 // ===== つかみ（Constraint）設定 =====
@@ -435,61 +378,19 @@ arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
 
-// ===== Fix 1: 爪→箱の接触法線と侵入深度を算出 =====
-function computeContactNormalAgainstBox(body) {
-  if (!body || !boxBody) return null;
-  let nx = 0, ny = 0, nz = 0;
-  let count = 0;
-  let maxPenetration = 0;
-
-  for (const c of world.contacts) {
-    if (c.bi !== body && c.bj !== body) continue;
-    const other = c.bi === body ? c.bj : c.bi;
-    if (other !== boxBody) continue;
-
-    // 侵入量を推定: gap = (bi.pos + ri - bj.pos - rj) · ni
-    const piWorld = c.bi.position.vadd(c.ri);
-    const pjWorld = c.bj.position.vadd(c.rj);
-    const gap = piWorld.vsub(pjWorld).dot(c.ni);
-
-    if (gap < -KINEMATIC_PENETRATION_THRESHOLD) {
-      // body から箱へ向かう法線方向を統一
-      const sign = c.bi === body ? 1 : -1;
-      nx += c.ni.x * sign;
-      ny += c.ni.y * sign;
-      nz += c.ni.z * sign;
-      count++;
-      maxPenetration = Math.max(maxPenetration, Math.abs(gap));
-    }
-  }
-
-  if (count === 0) return null;
-  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-  if (len < 1e-8) return null;
-
-  return {
-    nx: nx / len, ny: ny / len, nz: nz / len,
-    penetration: maxPenetration,
-  };
-}
-
-// ===== Fix 2: 爪→箱の最大侵入深度を取得 =====
-function getMaxPenetrationDepth(clawBody, targetBody) {
-  if (!clawBody || !targetBody) return 0;
+// ===== 侵入深度の汎用検出（ポストステップ補正で使用）=====
+function getMaxPenetrationAgainst(clawBody) {
+  if (!clawBody) return 0;
   let maxPen = 0;
-
   for (const c of world.contacts) {
     if (c.bi !== clawBody && c.bj !== clawBody) continue;
     const other = c.bi === clawBody ? c.bj : c.bi;
-    if (other !== targetBody) continue;
+    if (!other || other === armBody) continue;
 
     const piWorld = c.bi.position.vadd(c.ri);
     const pjWorld = c.bj.position.vadd(c.rj);
     const gap = piWorld.vsub(pjWorld).dot(c.ni);
-
-    if (gap < 0) {
-      maxPen = Math.max(maxPen, Math.abs(gap));
-    }
+    if (gap < 0) maxPen = Math.max(maxPen, Math.abs(gap));
   }
   return maxPen;
 }
@@ -580,23 +481,6 @@ function getValidGripStatus() {
   };
 }
 
-function softenClosingDelta(delta, isClosingPositive, damp) {
-  // 閉じ方向の成分だけを減衰し、開き方向はそのまま通す
-  const closingPart = isClosingPositive ? Math.max(delta, 0) : Math.min(delta, 0);
-  const openingPart = delta - closingPart;
-  return openingPart + closingPart * damp;
-}
-
-function blockClosingRotationOnContact(currentAngle, nextAngle, closedAngle, openAngle) {
-  // 閉じ方向へ進む成分のみ止める（開き方向は許可）
-  const closingDir = Math.sign(closedAngle - openAngle);
-  if (closingDir === 0) return nextAngle;
-
-  const delta = nextAngle - currentAngle;
-  if (delta * closingDir > 0) return currentAngle;
-  return nextAngle;
-}
-
 function limitAngleStep(current, target, maxStep) {
   if (!Number.isFinite(maxStep) || maxStep <= 0) return target;
   const delta = target - current;
@@ -622,44 +506,8 @@ function setClawPivotAngle(pivot, logicalAngle) {
   pivot.rotation[CLAW_AXIS] = logicalAngle * CLAW_SIGN;
 }
 
-let clawContactHoldL = 0;
-let clawContactHoldR = 0;
-let clawBoxContactHoldL = 0;
-let clawBoxContactHoldR = 0;
-
-function applyPassiveOpenByBoxWeight(currentAngle, level, closedAngle, openAngle, currentVel, dt, boxPressFrames) {
-  const passiveActive =
-    CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT &&
-    autoStarted &&
-    autoStep === 3 &&
-    boxBody &&
-    level === 2 &&
-    boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
-
-  if (!passiveActive) {
-    const dampedVel = currentVel * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-    return {
-      nextAngle: currentAngle,
-      nextVel: Math.abs(dampedVel) < 1e-4 ? 0 : dampedVel,
-    };
-  }
-
-  const openDir = Math.sign(openAngle - closedAngle) || 1;
-  const accel = (boxBody.mass * CLAW_PASSIVE_OPEN_ACCEL_PER_KG / CLAW_PASSIVE_OPEN_RESISTANCE) * openDir;
-  let nextVel = (currentVel + accel * dt) * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-  nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_PASSIVE_OPEN_MAX_SPEED, CLAW_PASSIVE_OPEN_MAX_SPEED);
-
-  return {
-    nextAngle: currentAngle + nextVel * dt,
-    nextVel,
-  };
-}
-
 function setClawOpen01(open01, dt = 1 / 60) {
-  // 0=閉, 1=開
   const nextOpen01 = THREE.MathUtils.clamp(open01, 0, 1);
-  const prevOpen01 = clawOpen01;
-  const isClosing = nextOpen01 < prevOpen01;
 
   const targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
   const targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
@@ -667,124 +515,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
   const currentL = getClawPivotAngle(clawLPivot, targetL);
   const currentR = getClawPivotAngle(clawRPivot, targetR);
 
-  const levelL = getClawContactLevel(clawLBody);
-  const levelR = getClawContactLevel(clawRBody);
+  // スムーズアニメーション（接触状態に依存しない統一ステップ）
+  let nextL = limitAngleStep(currentL, targetL, CLAW_MAX_ANGLE_STEP_PER_FRAME);
+  let nextR = limitAngleStep(currentR, targetR, CLAW_MAX_ANGLE_STEP_PER_FRAME);
 
-  // 接触判定の瞬断で「圧迫フレーム」が途切れないよう減衰方式にする
-  clawBoxPressFramesL = levelL === 2 ? clawBoxPressFramesL + 1 : Math.max(0, clawBoxPressFramesL - 1);
-  clawBoxPressFramesR = levelR === 2 ? clawBoxPressFramesR + 1 : Math.max(0, clawBoxPressFramesR - 1);
-  clawReleasePulseCooldownL = Math.max(0, clawReleasePulseCooldownL - 1);
-  clawReleasePulseCooldownR = Math.max(0, clawReleasePulseCooldownR - 1);
-
-  if (levelL !== 2) clawReleasePulseCooldownL = 0;
-  if (levelR !== 2) clawReleasePulseCooldownR = 0;
-
-  clawContactHoldL = levelL > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldL - 1);
-  clawContactHoldR = levelR > 0 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawContactHoldR - 1);
-  clawBoxContactHoldL = levelL === 2 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawBoxContactHoldL - 1);
-  clawBoxContactHoldR = levelR === 2 ? CLAW_CONTACT_HOLD_FRAMES : Math.max(0, clawBoxContactHoldR - 1);
-
-  let nextL = targetL;
-  let nextR = targetR;
-
-  if (isClosing && clawContactHoldL > 0) {
-    const dampL = levelL === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
-    nextL = currentL + softenClosingDelta(targetL - currentL, true, dampL);
-
-    // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
-    if (
-      levelL === 2 &&
-      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES
-    ) {
-      if (CLAW_STOP_CLOSE_ON_BOX_PRESS) {
-        // 圧迫状態が続く間は閉じ方向の回転を止める
-        nextL = currentL;
-      } else if (clawReleasePulseCooldownL === 0) {
-        nextL = currentL - CLAW_CLOSE_RELEASE_PULSE;
-        clawReleasePulseCooldownL = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
-      }
-    }
-
-
-    if (clawBoxContactHoldL > 0 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
-      // 箱接触が瞬断しても短時間は閉じ込みを禁止する
-      nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
-
-    }
-  }
-  if (isClosing && clawContactHoldR > 0) {
-    const dampR = levelR === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
-    nextR = currentR + softenClosingDelta(targetR - currentR, false, dampR);
-
-    // 箱への押し込み継続を防ぐ：箱接触が続いたら閉じ停止+微小に開き戻す
-    if (
-      levelR === 2 &&
-      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES
-    ) {
-      if (CLAW_STOP_CLOSE_ON_BOX_PRESS) {
-        // 圧迫状態が続く間は閉じ方向の回転を止める
-        nextR = currentR;
-      } else if (clawReleasePulseCooldownR === 0) {
-        nextR = currentR + CLAW_CLOSE_RELEASE_PULSE;
-        clawReleasePulseCooldownR = CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES;
-      }
-    }
-
-
-    if (clawBoxContactHoldR > 0 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
-      // 箱接触が瞬断しても短時間は閉じ込みを禁止する
-      nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
-
-  }
-  }
-
-  if (isClosing) {
-    const passiveL = applyPassiveOpenByBoxWeight(nextL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt, clawBoxPressFramesL);
-    nextL = passiveL.nextAngle;
-    clawPassiveOpenVelL = passiveL.nextVel;
-
-    const passiveR = applyPassiveOpenByBoxWeight(nextR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt, clawBoxPressFramesR);
-    nextR = passiveR.nextAngle;
-    clawPassiveOpenVelR = passiveR.nextVel;
-
-    // 受動開き等の後段処理で値が再計算されても、接触中の閉じ込みは最終的に禁止する
-    if (clawBoxContactHoldL > 0 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
-      nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
-    }
-    if (clawBoxContactHoldR > 0 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
-      nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
-    }
-  } else {
-    clawPassiveOpenVelL *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-    clawPassiveOpenVelR *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-  }
-
-  // ===== Fix 2: 侵入深度が閾値を超えたら閉じ方向の角度変化をブロック =====
-  if (CLAW_CLOSE_PENETRATION_BLOCK && isClosing) {
-    const penL = getMaxPenetrationDepth(clawLBody, boxBody);
-    const penR = getMaxPenetrationDepth(clawRBody, boxBody);
-    if (penL > CLAW_CLOSE_PENETRATION_THRESHOLD) {
-      // 閉じ方向のみブロック（開き方向は許可）
-      nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
-    }
-    if (penR > CLAW_CLOSE_PENETRATION_THRESHOLD) {
-      nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
-    }
-  }
-
-  const boxHoldL = levelL === 2 || clawBoxContactHoldL > 0;
-  const boxHoldR = levelR === 2 || clawBoxContactHoldR > 0;
-  const visualScaleL = (boxHoldL && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
-  const visualScaleR = (boxHoldR && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
-  const maxVisualStepL = boxHoldL
-    ? CONTACT_VISUAL_MAX_ANGLE_STEP * visualScaleL
-    : FREE_VISUAL_MAX_ANGLE_STEP;
-  const maxVisualStepR = boxHoldR
-    ? CONTACT_VISUAL_MAX_ANGLE_STEP * visualScaleR
-    : FREE_VISUAL_MAX_ANGLE_STEP;
-  nextL = limitAngleStep(currentL, nextL, maxVisualStepL);
-  nextR = limitAngleStep(currentR, nextR, maxVisualStepR);
-
+  // 有効範囲にクランプ
   const minL = Math.min(CLAW_L_CLOSED, CLAW_L_OPEN);
   const maxL = Math.max(CLAW_L_CLOSED, CLAW_L_OPEN);
   const minR = Math.min(CLAW_R_CLOSED, CLAW_R_OPEN);
@@ -795,12 +530,8 @@ function setClawOpen01(open01, dt = 1 / 60) {
   setClawPivotAngle(clawLPivot, nextL);
   setClawPivotAngle(clawRPivot, nextR);
 
-  const openL01 = angleToOpen01(nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
-  const openR01 = angleToOpen01(nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
-  clawOpen01L = openL01;
-  clawOpen01R = openR01;
-  // コマンド値は入力(open01)を保持する。
-  // 圧力で片側だけ受動的に開いても、もう片側へ同期しないようにする。
+  clawOpen01L = angleToOpen01(nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
+  clawOpen01R = angleToOpen01(nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
   clawOpen01 = nextOpen01;
 }
 
@@ -998,18 +729,10 @@ function startAutoSequence() {
   autoStep = 1;   // 開くから開始
   autoT = 0;
   dropStartY = armGroup.position.y;
-  clawDropPenetrationT = 0;
   gripLeftFrames = 0;
   gripRightFrames = 0;
   gripInvalidHoldT = 0;
   gripReleasePulseT = 0;
-
-  step2BoxPressFrames = 0;
-  step2LockYActive = false;
-
-  // Fix 4: ラッチ状態リセット
-  step4PressureLatched = false;
-  step4PressureReleasedT = 0;
 }
 
 
@@ -1818,20 +1541,11 @@ function addFrontBallastShapes(body) {
 loadScene().catch(console.error);
 
 let lastT;
-const clawL_local = new CANNON.Vec3(0, -0.25,  0.12);
-const clawR_local = new CANNON.Vec3(0, -0.25, -0.12);
-
-
-
-
-
-const MAX_KINEMATIC_SPEED = 0.8;
-const CONTACT_KINEMATIC_SPEED = 0.24;
 const MAX_BOX_LINEAR_SPEED = 12.0;
 let boxReleaseSettleTimer = 0;
 let wasClawContactLastFrame = false;
 
-function clampBodyLinearVelocity(body, maxSpeed = MAX_KINEMATIC_SPEED) {
+function clampBodyLinearVelocity(body, maxSpeed) {
   const vx = body.velocity.x;
   const vy = body.velocity.y;
   const vz = body.velocity.z;
@@ -1895,11 +1609,6 @@ function stabilizePrizeBody(body) {
   }
 }
 
-const tmpPos = new THREE.Vector3();
-const tmpQuat = new THREE.Quaternion();
-const prevClawL = new CANNON.Vec3();
-const prevClawR = new CANNON.Vec3();
-
 function isClawPressingSomething() {
   if (!clawLBody || !clawRBody) return false;
 
@@ -1929,147 +1638,90 @@ function isClawPressingBox() {
   return false;
 }
 
-// ===== Fix 1: 侵入方向を除外した kinematic 追従 =====
-function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPressFrames = 0) {
+// ===== 常時テレポート同期：Bodyをメッシュのワールド位置に無条件で合わせる =====
+function teleportBodyToMesh(body, mesh) {
   if (!body || !mesh) return;
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  mesh.getWorldPosition(pos);
+  mesh.getWorldQuaternion(quat);
+  body.position.set(pos.x, pos.y, pos.z);
+  body.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+  body.velocity.set(0, 0, 0);
+  body.angularVelocity.set(0, 0, 0);
+}
 
-  mesh.updateWorldMatrix(true, false);
-  const desiredPos3 = new THREE.Vector3();
-  const desiredQuat3 = new THREE.Quaternion();
-  mesh.getWorldPosition(desiredPos3);
-  mesh.getWorldQuaternion(desiredQuat3);
+function teleportAllBodiesToMesh() {
+  if (!armGroup) return;
+  armGroup.updateMatrixWorld(true);
 
-  const desiredPos = threeVecToCannon(desiredPos3);
+  if (armBody) {
+    armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
+    armBody.quaternion.set(
+      armGroup.quaternion.x, armGroup.quaternion.y,
+      armGroup.quaternion.z, armGroup.quaternion.w
+    );
+    armBody.velocity.set(0, 0, 0);
+    armBody.angularVelocity.set(0, 0, 0);
+  }
 
-  const inCloseContact = isContact && autoStarted && autoStep === 3;
-  const isPressing = inCloseContact && boxPressFrames >= PRESSING_KINEMATIC_MIN_FRAMES;
-  const posFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE : 1.0;
-  const angleFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE : 1.0;
-  const maxMove = Math.max((isContact ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED) * posFollowScale * dt, 0);
-  const dx = desiredPos.x - prevPos.x;
-  const dy = desiredPos.y - prevPos.y;
-  const dz = desiredPos.z - prevPos.z;
-  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  const moveScale = dist > 1e-8 ? Math.min(1, maxMove / dist) : 1;
+  teleportBodyToMesh(clawLBody, clawLMesh);
+  teleportBodyToMesh(clawRBody, clawRMesh);
+}
 
-  let finalX = prevPos.x + dx * moveScale;
-  let finalY = prevPos.y + dy * moveScale;
-  let finalZ = prevPos.z + dz * moveScale;
+// ===== ポストステップ侵入補正：物理ステップ後に侵入を検出し、メッシュ側を補正 =====
+function postStepPenetrationCorrection() {
+  const penL = getMaxPenetrationAgainst(clawLBody);
+  const penR = getMaxPenetrationAgainst(clawRBody);
 
-  // Fix 1: 箱との接触侵入時に、侵入方向への移動を除外し、侵入分だけ押し戻す
-  if (isContact) {
-    const contactInfo = computeContactNormalAgainstBox(body);
-    if (contactInfo && contactInfo.penetration > KINEMATIC_PENETRATION_THRESHOLD) {
-      // 移動ベクトルのうち箱方向への成分を除去
-      const moveDx = finalX - prevPos.x;
-      const moveDy = finalY - prevPos.y;
-      const moveDz = finalZ - prevPos.z;
-      const dotIntoBox = moveDx * contactInfo.nx + moveDy * contactInfo.ny + moveDz * contactInfo.nz;
+  let corrected = false;
 
-      if (dotIntoBox > 0) {
-        finalX -= contactInfo.nx * dotIntoBox;
-        finalY -= contactInfo.ny * dotIntoBox;
-        finalZ -= contactInfo.nz * dotIntoBox;
-      }
+  // 爪の侵入 → ピボット角度を開き方向に補正
+  if (penL > PENETRATION_THRESHOLD && clawLPivot) {
+    const currentL = getClawPivotAngle(clawLPivot, CLAW_L_CLOSED);
+    const openDir = Math.sign(CLAW_L_OPEN - CLAW_L_CLOSED) || 1;
+    const correction = penL * PENETRATION_CORRECTION_SCALE * openDir;
+    const newAngle = THREE.MathUtils.clamp(
+      currentL + correction,
+      Math.min(CLAW_L_CLOSED, CLAW_L_OPEN),
+      Math.max(CLAW_L_CLOSED, CLAW_L_OPEN)
+    );
+    setClawPivotAngle(clawLPivot, newAngle);
+    clawOpen01L = angleToOpen01(newAngle, CLAW_L_CLOSED, CLAW_L_OPEN);
+    corrected = true;
+  }
 
-      // 侵入量に比例して押し戻す
-      const pushback = contactInfo.penetration * KINEMATIC_PENETRATION_PUSHBACK;
-      finalX -= contactInfo.nx * pushback;
-      finalY -= contactInfo.ny * pushback;
-      finalZ -= contactInfo.nz * pushback;
+  if (penR > PENETRATION_THRESHOLD && clawRPivot) {
+    const currentR = getClawPivotAngle(clawRPivot, CLAW_R_CLOSED);
+    const openDir = Math.sign(CLAW_R_OPEN - CLAW_R_CLOSED) || 1;
+    const correction = penR * PENETRATION_CORRECTION_SCALE * openDir;
+    const newAngle = THREE.MathUtils.clamp(
+      currentR + correction,
+      Math.min(CLAW_R_CLOSED, CLAW_R_OPEN),
+      Math.max(CLAW_R_CLOSED, CLAW_R_OPEN)
+    );
+    setClawPivotAngle(clawRPivot, newAngle);
+    clawOpen01R = angleToOpen01(newAngle, CLAW_R_CLOSED, CLAW_R_OPEN);
+    corrected = true;
+  }
+
+  // 降下中にアームが押し込んでいたら上方向に逃がす
+  if (armGroup && autoStarted && autoStep === 2) {
+    const maxPen = Math.max(penL, penR);
+    if (maxPen > PENETRATION_THRESHOLD) {
+      armGroup.position.y += maxPen * ARM_PENETRATION_PUSHBACK;
+      corrected = true;
     }
   }
 
-  body.position.set(finalX, finalY, finalZ);
-
-  // 接触中は回転追従量も制限して、めり込み起点の過大トルクを抑える
-  const currentQ3 = cannonQuatToThree(body.quaternion);
-  const dot = Math.min(1, Math.max(-1, Math.abs(currentQ3.dot(desiredQuat3))));
-  const angle = 2 * Math.acos(dot);
-  const maxAngleBase = isPressing
-    ? PRESSING_KINEMATIC_MAX_ANGLE_STEP
-    : (isContact ? CONTACT_KINEMATIC_MAX_ANGLE_STEP : FREE_KINEMATIC_MAX_ANGLE_STEP);
-  const maxAngle = maxAngleBase * angleFollowScale;
-  const t = angle > 1e-6 ? Math.min(1, maxAngle / angle) : 1;
-  currentQ3.slerp(desiredQuat3, t);
-  body.quaternion.copy(threeQuatToCannon(currentQ3));
-}
-
-function followClawBodies(dt) {
-  if (!armBody || !clawLBody || !clawRBody) return;
-  if (!armGroup || !clawLMesh || !clawRMesh) return;
-
-  // armBody は armGroup に同期（animate側でやっている）
-
-  // 速度計算用（前フレームの位置を保存）
-  prevClawL.copy(clawLBody.position);
-  prevClawR.copy(clawRBody.position);
-
-  // 棒など「箱以外」の接触で追従を過剰に遅くすると
-  // 閉じモーションが止まって見えるため、速度制限は箱接触時のみ有効化する。
-  // ただし箱接触は narrowphase の瞬断がありうるので、短いホールド中も接触扱いを継続する。
-  const leftLevel = getClawContactLevel(clawLBody);
-  const rightLevel = getClawContactLevel(clawRBody);
-  const leftContact = leftLevel === 2 || clawBoxContactHoldL > 0;
-  const rightContact = rightLevel === 2 || clawBoxContactHoldR > 0;
-
-  // 接触中はテレポート同期せず、1stepあたりの追従量を制限して押し込みを防ぐ
-  moveKinematicBodyTowardMesh(clawLBody, clawLMesh, prevClawL, dt, leftContact, clawBoxPressFramesL);
-  moveKinematicBodyTowardMesh(clawRBody, clawRMesh, prevClawR, dt, rightContact, clawBoxPressFramesR);
-
-  // 速度（kinematic安定化）
-  if (dt > 1e-6) {
-    clawLBody.velocity.set(
-      (clawLBody.position.x - prevClawL.x) / dt,
-      (clawLBody.position.y - prevClawL.y) / dt,
-      (clawLBody.position.z - prevClawL.z) / dt
-    );
-    clawRBody.velocity.set(
-      (clawRBody.position.x - prevClawR.x) / dt,
-      (clawRBody.position.y - prevClawR.y) / dt,
-      (clawRBody.position.z - prevClawR.z) / dt
-    );
-  }
-  clawLBody.angularVelocity.set(0, 0, 0);
-  clawRBody.angularVelocity.set(0, 0, 0);
-}
-
-function syncKinematicBodiesToVisualNow() {
-  if (!armGroup || !armBody) return;
-
-  armGroup.updateWorldMatrix(true, true);
-  armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
-  armBody.quaternion.set(
-    armGroup.quaternion.x,
-    armGroup.quaternion.y,
-    armGroup.quaternion.z,
-    armGroup.quaternion.w
-  );
-  armBody.velocity.set(0, 0, 0);
-  armBody.angularVelocity.set(0, 0, 0);
-
-  if (clawLBody && clawLMesh) {
-    const pos = new THREE.Vector3();
-    const quat = new THREE.Quaternion();
-    clawLMesh.getWorldPosition(pos);
-    clawLMesh.getWorldQuaternion(quat);
-    clawLBody.position.set(pos.x, pos.y, pos.z);
-    clawLBody.quaternion.set(quat.x, quat.y, quat.z, quat.w);
-    clawLBody.velocity.set(0, 0, 0);
-    clawLBody.angularVelocity.set(0, 0, 0);
-  }
-
-  if (clawRBody && clawRMesh) {
-    const pos = new THREE.Vector3();
-    const quat = new THREE.Quaternion();
-    clawRMesh.getWorldPosition(pos);
-    clawRMesh.getWorldQuaternion(quat);
-    clawRBody.position.set(pos.x, pos.y, pos.z);
-    clawRBody.quaternion.set(quat.x, quat.y, quat.z, quat.w);
-    clawRBody.velocity.set(0, 0, 0);
-    clawRBody.angularVelocity.set(0, 0, 0);
+  // メッシュを補正したら行列更新→再テレポートで見た目≡物理を維持
+  if (corrected) {
+    teleportAllBodiesToMesh();
   }
 }
+
+// syncKinematicBodiesToVisualNow は teleportAllBodiesToMesh に統合済み
+const syncKinematicBodiesToVisualNow = teleportAllBodiesToMesh;
 
 function animate(t) {
   requestAnimationFrame(animate);
@@ -2111,52 +1763,19 @@ if (autoStarted) {
     // ===== ステップ1: 爪を開く =====
     autoT += dt;
     setClawOpen01(Math.min(autoT / CLAW_OPEN_TIME, 1), dt);
-    if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; clawDropPenetrationT = 0; }
+    if (autoT >= CLAW_OPEN_TIME) { autoStep = 2; autoT = 0; dropStartY = armGroup.position.y; }
 
   } else if (autoStep === 2) {
     // ===== ステップ2: アームを下げる =====
+    // 単純に目標位置まで降下する。侵入はポストステップ補正が処理する。
     const targetY = dropStartY - ARM_DROP_DIST;
-    const pressing = isClawPressingSomething();
-    const boxPressing = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
-    const dropSpeed = pressing ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
+    armGroup.position.y = Math.max(targetY, armGroup.position.y - ARM_DROP_SPEED * dt);
 
-    const finishDropStep = () => {
-      // 降下完了後は必ず一定時間だけ閉じ工程を実行してから上昇する。
+    if (armGroup.position.y <= targetY + 1e-6) {
       autoStep = 3;
       autoT = 0;
       step3WaitT = 0;
       step3StartOpen01 = clawOpen01;
-      clawDropPenetrationT = 0;
-      step2BoxPressFrames = 0;
-      step2LockYActive = false;
-    };
-
-    // Fix 3: 瞬断耐性のある減衰方式（即0リセットではなく1ずつ減少）
-    if (boxPressing) {
-      step2BoxPressFrames += 1;
-      if (STEP2_LOCK_ON_BOX_PRESS && !step2LockYActive) {
-        step2LockYActive = true;
-        step2LockY = armGroup.position.y;
-      }
-    } else {
-      step2BoxPressFrames = Math.max(0, step2BoxPressFrames - 1);
-    }
-
-    if (step2LockYActive) {
-      // 箱接触後はそれ以上押し込まない
-      armGroup.position.y = Math.max(targetY, step2LockY);
-    } else {
-      armGroup.position.y = Math.max(targetY, armGroup.position.y - dropSpeed * dt);
-    }
-
-    // 降下中に「刺さり状態」が続いたら、これ以上押し込まず掴み工程へ移行
-    if (boxPressing && pressing) clawDropPenetrationT += dt;
-    else clawDropPenetrationT = 0;
-
-    if (clawDropPenetrationT >= CLAW_DROP_PENETRATION_ABORT_SEC || step2BoxPressFrames >= STEP2_BOX_PRESS_FRAMES_TO_ABORT) {
-      finishDropStep();
-    } else if (armGroup.position.y <= targetY + 1e-6) {
-      finishDropStep();
     }
 
   } else if (autoStep === 3) {
@@ -2173,53 +1792,20 @@ if (autoStarted) {
     if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
       autoStep = 4;
       autoT = 0;
-      step4LiftAssistNoContactT = 0;
-      step4LiftLatched = false;
-      step4GripLostT = 0;
-      step4ReleasePulseUsed = false;
-      // Fix 4: Step4 開始時にラッチ状態をリセット
-      step4PressureLatched = false;
-      step4PressureReleasedT = 0;
     }
 
 
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
-    // Fix 4: ラッチ方式で圧迫時の開閉振動を防止
+    // 閉じ駆動を継続。侵入はポストステップ補正が爪を開いて解消する。
     autoT += dt;
     const targetY = dropStartY;
 
-    const liftingBoxPressing =
-      (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
-      (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
-
-    if (liftingBoxPressing) {
-      // 圧迫検出 → ラッチを立てて開き方向へ微小に動かす（上限付き）
-      if (!step4PressureLatched) {
-        step4PressureLatched = true;
-      }
-      step4PressureReleasedT = 0; // 圧迫中はリリースタイマーをリセット
-      const openTarget = Math.min(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, STEP4_PRESSURE_OPEN_MAX);
-      setClawOpen01(openTarget, dt);
-    } else {
-      if (step4PressureLatched) {
-        // 圧迫が解消された → 一定時間待ってからラッチ解除
-        step4PressureReleasedT += dt;
-        if (step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
-          step4PressureLatched = false;
-          step4PressureReleasedT = 0;
-        }
-        // 待機中は現在角度を維持（閉じも開きもしない）
-      } else {
-        // ラッチ解除済み → 通常の閉じ駆動
-        if (clawOpen01 > 0) {
-          setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
-        }
-      }
+    if (clawOpen01 > 0) {
+      setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
     }
 
-    // 上昇は常に実行する。掴み判定に依存すると
-    // 条件が揃わないケースでステップ4が停止してしまうため。
+    // 上昇は常に実行
     armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
 
     if (armGroup.position.y >= targetY - 1e-6) {
@@ -2258,42 +1844,16 @@ if (autoStarted) {
   }
 
 
-  // ★★★ ここがポイント：Cannon側armBodyを "step前" に同期 ★★★
-  if (armGroup && armBody) {
-    // kinematic安定化：速度も入れる（拘束が追従しやすい）
-    const prev = armBody.position.clone();
-
-    armBody.position.set(armGroup.position.x, armGroup.position.y, armGroup.position.z);
-    armBody.quaternion.set(
-      armGroup.quaternion.x,
-      armGroup.quaternion.y,
-      armGroup.quaternion.z,
-      armGroup.quaternion.w
-    );
-
-    // 速度を入れる（dtが0に近いときは保険）
-    if (dt > 1e-6) {
-      armBody.velocity.set(
-        (armBody.position.x - prev.x) / dt,
-        (armBody.position.y - prev.y) / dt,
-        (armBody.position.z - prev.z) / dt
-      );
-      clampBodyLinearVelocity(armBody);
-    }
-    armBody.angularVelocity.set(0, 0, 0);
-  }
-
-  // ===== Fix 5: 爪回転変更後にワールド行列を確定させてから物理同期 =====
-  if (armGroup) {
-    armGroup.updateMatrixWorld(true);
-  }
-
-  // ===== 物理ステップ（armBody同期の後！）=====
-followClawBodies(dt);
+  // ===== 物理同期：メッシュ → Body 無条件テレポート → Step → 侵入補正 → 再テレポート =====
+  teleportAllBodiesToMesh();
   updateClawHitboxVisuals();
-const MAX_SUB = 8;
 
-world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
+  const MAX_SUB = 8;
+  world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
+
+  // 物理ステップ後に侵入を検出し、メッシュ側を補正して再テレポート
+  postStepPenetrationCorrection();
+
   stabilizePrizeBody(boxBody);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();

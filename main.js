@@ -1,5 +1,3 @@
-
-
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
@@ -332,6 +330,16 @@ const ENABLE_GRIP_DEBUG_LOG = false;
 const STEP4_LIFT_ASSIST_SEC = 0.6;
 const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 
+// ===== Fix 1 & 2: 侵入検出定数 =====
+const KINEMATIC_PENETRATION_PUSHBACK = 0.5;
+const KINEMATIC_PENETRATION_THRESHOLD = 0.001;
+const CLAW_CLOSE_PENETRATION_THRESHOLD = 0.003;
+const CLAW_CLOSE_PENETRATION_BLOCK = true;
+
+// ===== Fix 4: Step4 圧迫ラッチ定数 =====
+const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
+const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
+
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
 let step3WaitT = 0;
@@ -360,6 +368,10 @@ let clawPassiveOpenVelR = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
 let step2LockY = 0;
+
+// Fix 4: Step4 圧迫ラッチ状態
+let step4PressureLatched = false;
+let step4PressureReleasedT = 0;
 
 
 // ===== つかみ（Constraint）設定 =====
@@ -422,6 +434,66 @@ arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
+
+// ===== Fix 1: 爪→箱の接触法線と侵入深度を算出 =====
+function computeContactNormalAgainstBox(body) {
+  if (!body || !boxBody) return null;
+  let nx = 0, ny = 0, nz = 0;
+  let count = 0;
+  let maxPenetration = 0;
+
+  for (const c of world.contacts) {
+    if (c.bi !== body && c.bj !== body) continue;
+    const other = c.bi === body ? c.bj : c.bi;
+    if (other !== boxBody) continue;
+
+    // 侵入量を推定: gap = (bi.pos + ri - bj.pos - rj) · ni
+    const piWorld = c.bi.position.vadd(c.ri);
+    const pjWorld = c.bj.position.vadd(c.rj);
+    const gap = piWorld.vsub(pjWorld).dot(c.ni);
+
+    if (gap < -KINEMATIC_PENETRATION_THRESHOLD) {
+      // body から箱へ向かう法線方向を統一
+      const sign = c.bi === body ? 1 : -1;
+      nx += c.ni.x * sign;
+      ny += c.ni.y * sign;
+      nz += c.ni.z * sign;
+      count++;
+      maxPenetration = Math.max(maxPenetration, Math.abs(gap));
+    }
+  }
+
+  if (count === 0) return null;
+  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  if (len < 1e-8) return null;
+
+  return {
+    nx: nx / len, ny: ny / len, nz: nz / len,
+    penetration: maxPenetration,
+  };
+}
+
+// ===== Fix 2: 爪→箱の最大侵入深度を取得 =====
+function getMaxPenetrationDepth(clawBody, targetBody) {
+  if (!clawBody || !targetBody) return 0;
+  let maxPen = 0;
+
+  for (const c of world.contacts) {
+    if (c.bi !== clawBody && c.bj !== clawBody) continue;
+    const other = c.bi === clawBody ? c.bj : c.bi;
+    if (other !== targetBody) continue;
+
+    const piWorld = c.bi.position.vadd(c.ri);
+    const pjWorld = c.bj.position.vadd(c.rj);
+    const gap = piWorld.vsub(pjWorld).dot(c.ni);
+
+    if (gap < 0) {
+      maxPen = Math.max(maxPen, Math.abs(gap));
+    }
+  }
+  return maxPen;
+}
+
 function getClawContactLevel(body) {
   // 0: 接触なし / 1: 箱以外に接触 / 2: 箱に接触
   if (!body) return 0;
@@ -687,6 +759,19 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveOpenVelR *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
   }
 
+  // ===== Fix 2: 侵入深度が閾値を超えたら閉じ方向の角度変化をブロック =====
+  if (CLAW_CLOSE_PENETRATION_BLOCK && isClosing) {
+    const penL = getMaxPenetrationDepth(clawLBody, boxBody);
+    const penR = getMaxPenetrationDepth(clawRBody, boxBody);
+    if (penL > CLAW_CLOSE_PENETRATION_THRESHOLD) {
+      // 閉じ方向のみブロック（開き方向は許可）
+      nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
+    }
+    if (penR > CLAW_CLOSE_PENETRATION_THRESHOLD) {
+      nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
+    }
+  }
+
   const boxHoldL = levelL === 2 || clawBoxContactHoldL > 0;
   const boxHoldR = levelR === 2 || clawBoxContactHoldR > 0;
   const visualScaleL = (boxHoldL && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
@@ -922,6 +1007,9 @@ function startAutoSequence() {
   step2BoxPressFrames = 0;
   step2LockYActive = false;
 
+  // Fix 4: ラッチ状態リセット
+  step4PressureLatched = false;
+  step4PressureReleasedT = 0;
 }
 
 
@@ -1841,6 +1929,7 @@ function isClawPressingBox() {
   return false;
 }
 
+// ===== Fix 1: 侵入方向を除外した kinematic 追従 =====
 function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPressFrames = 0) {
   if (!body || !mesh) return;
 
@@ -1863,11 +1952,35 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPres
   const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
   const moveScale = dist > 1e-8 ? Math.min(1, maxMove / dist) : 1;
 
-  body.position.set(
-    prevPos.x + dx * moveScale,
-    prevPos.y + dy * moveScale,
-    prevPos.z + dz * moveScale
-  );
+  let finalX = prevPos.x + dx * moveScale;
+  let finalY = prevPos.y + dy * moveScale;
+  let finalZ = prevPos.z + dz * moveScale;
+
+  // Fix 1: 箱との接触侵入時に、侵入方向への移動を除外し、侵入分だけ押し戻す
+  if (isContact) {
+    const contactInfo = computeContactNormalAgainstBox(body);
+    if (contactInfo && contactInfo.penetration > KINEMATIC_PENETRATION_THRESHOLD) {
+      // 移動ベクトルのうち箱方向への成分を除去
+      const moveDx = finalX - prevPos.x;
+      const moveDy = finalY - prevPos.y;
+      const moveDz = finalZ - prevPos.z;
+      const dotIntoBox = moveDx * contactInfo.nx + moveDy * contactInfo.ny + moveDz * contactInfo.nz;
+
+      if (dotIntoBox > 0) {
+        finalX -= contactInfo.nx * dotIntoBox;
+        finalY -= contactInfo.ny * dotIntoBox;
+        finalZ -= contactInfo.nz * dotIntoBox;
+      }
+
+      // 侵入量に比例して押し戻す
+      const pushback = contactInfo.penetration * KINEMATIC_PENETRATION_PUSHBACK;
+      finalX -= contactInfo.nx * pushback;
+      finalY -= contactInfo.ny * pushback;
+      finalZ -= contactInfo.nz * pushback;
+    }
+  }
+
+  body.position.set(finalX, finalY, finalZ);
 
   // 接触中は回転追従量も制限して、めり込み起点の過大トルクを抑える
   const currentQ3 = cannonQuatToThree(body.quaternion);
@@ -2018,6 +2131,7 @@ if (autoStarted) {
       step2LockYActive = false;
     };
 
+    // Fix 3: 瞬断耐性のある減衰方式（即0リセットではなく1ずつ減少）
     if (boxPressing) {
       step2BoxPressFrames += 1;
       if (STEP2_LOCK_ON_BOX_PRESS && !step2LockYActive) {
@@ -2025,7 +2139,7 @@ if (autoStarted) {
         step2LockY = armGroup.position.y;
       }
     } else {
-      step2BoxPressFrames = 0;
+      step2BoxPressFrames = Math.max(0, step2BoxPressFrames - 1);
     }
 
     if (step2LockYActive) {
@@ -2063,24 +2177,45 @@ if (autoStarted) {
       step4LiftLatched = false;
       step4GripLostT = 0;
       step4ReleasePulseUsed = false;
+      // Fix 4: Step4 開始時にラッチ状態をリセット
+      step4PressureLatched = false;
+      step4PressureReleasedT = 0;
     }
 
 
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
+    // Fix 4: ラッチ方式で圧迫時の開閉振動を防止
     autoT += dt;
     const targetY = dropStartY;
 
-    // 持ち上げ中も、箱を強く圧迫していない間は閉じ方向の駆動を継続する。
-    // これにより、圧迫で閉じ切れなかった場合でも、上昇中に解放されれば追従して閉じる。
     const liftingBoxPressing =
       (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
       (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
+
     if (liftingBoxPressing) {
-      // 刺さり状態で上昇を止めないため、圧迫中は一旦わずかに開いて食い込みを逃がす。
-      setClawOpen01(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, dt);
-    } else if (clawOpen01 > 0) {
-      setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
+      // 圧迫検出 → ラッチを立てて開き方向へ微小に動かす（上限付き）
+      if (!step4PressureLatched) {
+        step4PressureLatched = true;
+      }
+      step4PressureReleasedT = 0; // 圧迫中はリリースタイマーをリセット
+      const openTarget = Math.min(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, STEP4_PRESSURE_OPEN_MAX);
+      setClawOpen01(openTarget, dt);
+    } else {
+      if (step4PressureLatched) {
+        // 圧迫が解消された → 一定時間待ってからラッチ解除
+        step4PressureReleasedT += dt;
+        if (step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
+          step4PressureLatched = false;
+          step4PressureReleasedT = 0;
+        }
+        // 待機中は現在角度を維持（閉じも開きもしない）
+      } else {
+        // ラッチ解除済み → 通常の閉じ駆動
+        if (clawOpen01 > 0) {
+          setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
+        }
+      }
     }
 
     // 上昇は常に実行する。掴み判定に依存すると
@@ -2146,6 +2281,11 @@ if (autoStarted) {
       clampBodyLinearVelocity(armBody);
     }
     armBody.angularVelocity.set(0, 0, 0);
+  }
+
+  // ===== Fix 5: 爪回転変更後にワールド行列を確定させてから物理同期 =====
+  if (armGroup) {
+    armGroup.updateMatrixWorld(true);
   }
 
   // ===== 物理ステップ（armBody同期の後！）=====

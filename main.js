@@ -275,7 +275,9 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1.0;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（見た目上の閉じ切り目安）
-const CLAW_CLOSE_WAIT_MAX_SEC = 3.0; // 閉じ工程の最短待機秒（この秒数未満では上昇へ移行しない）
+// ステップ3（閉じ工程）は、この秒数が経過したら次ステップへ進む。
+// 以前は別の待機秒数があり、閉じ時間を変更しても遷移秒数に反映されない状態だったため統一する。
+const CLAW_CLOSE_STEP_SEC = CLAW_CLOSE_TIME;
 const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
@@ -2053,9 +2055,9 @@ if (autoStarted) {
     const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
     setClawOpen01(closeCmdOpen01, dt);
 
-    // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
+    // 閉じ工程は秒数ベースで遷移する。
     // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
-    if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
+    if (autoT >= CLAW_CLOSE_STEP_SEC) {
       autoStep = 4;
       autoT = 0;
       step4LiftAssistNoContactT = 0;

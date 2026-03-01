@@ -1,45 +1,33 @@
-コードを分析して、回転が動作しない原因を特定します。
+コードを詳しく分析しました。アームが景品に食い込む現象について、以下の問題点を報告します。
 
-## 原因報告
+---
 
-主な問題は **`setClawOpen01` 関数が `CLAW_AXIS` / `CLAW_SIGN` の設定値を完全に無視している**ことです。
+**1. Kinematic Body の位置追従が接触判定を上書きしている**
 
-ファイル冒頭でこう定義されています：
+爪（clawLBody / clawRBody）は `CANNON.Body.KINEMATIC` として設定されており、`moveKinematicBodyTowardMesh` で毎フレーム見た目メッシュの位置へ強制的に追従させています。Kinematic体は物理エンジンの衝突応答で押し戻されないため、接触中でも爪がメッシュ位置へ向かって動き続け、箱にめり込みます。
 
-```js
-let CLAW_AXIS = "x";   // "x" | "y" | "z" を試す
-let CLAW_SIGN = 1;      // 1 か -1 を試す
-```
+`CONTACT_KINEMATIC_SPEED` や `CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE` で追従速度を抑えてはいますが、これは「ゆっくりめり込む」だけで、根本的には侵入を止められていません。
 
-しかし `setClawOpen01` は常に `.rotation.x` をハードコードしており、`CLAW_AXIS` を `"y"` や `"z"` に変えても反映されません：
+**2. 閉じ回転の制御が「角度ベース」で、めり込み深さを考慮していない**
 
-```js
-function setClawOpen01(open01) {
-  // ...
-  clawLPivot.rotation.x = l;  // ← 常にx軸固定
-  clawRPivot.rotation.x = r;  // ← 同上
-}
-```
+`setClawOpen01` 内の閉じ制御は角度の変化量（`softenClosingDelta`, `blockClosingRotationOnContact` 等）で制限していますが、接触法線方向の侵入量（penetration depth）を一切参照していません。箱が押されて移動した場合や、物理ステップ間で箱の位置が変わった場合、角度が同じでも侵入が深くなることがあります。
 
-加えて `CLAW_SIGN` も未使用なので、回転方向の反転も効きません。さらに、`clawLPivot` / `clawRPivot` が初期化前に呼ばれた場合のnullガードもありません。
+**3. 降下ステップ（Step 2）のロック機構が不十分**
 
-## 修正
+`STEP2_LOCK_ON_BOX_PRESS` で箱接触後のY位置をロックしていますが、`step2BoxPressFrames` のカウントが接触の瞬断で0にリセットされます（`boxPressing` が false になると即 `step2BoxPressFrames = 0`）。瞬断後に再度降下が進み、箱へさらに押し込む可能性があります。一方、爪側の `clawBoxPressFramesL/R` は減衰方式（1ずつ減少）で瞬断耐性がありますが、Step 2 のアーム降下制御にはこの方式が適用されていません。
 
-`setClawOpen01` を以下のように書き換えてください：
+**4. Step 4（上昇中）の圧迫時微小開き処理が逆効果になりうる**
 
-```js
-function setClawOpen01(open01) {
-  if (!clawLPivot || !clawRPivot) return;           // null ガード
+上昇中に `STEP4_PRESS_RELEASE_OPEN_SPEED` で爪を微小に開いて食い込みを逃がす処理がありますが、開いた直後にすぐ `clawOpen01 - (dt / CLAW_CLOSE_TIME)` で閉じ直すため、開閉の振動が起き、箱との接触点が不安定になります。この振動が物理ソルバーの接触応答を混乱させ、結果として箱が爪の内側に引き込まれるケースがあります。
 
-  const l = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, open01) * CLAW_SIGN;
-  const r = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, open01) * CLAW_SIGN;
+**5. 物理ステップと見た目同期の順序問題**
 
-  // CLAW_AXIS に従って正しい軸に回転を適用
-  clawLPivot.rotation.set(0, 0, 0);
-  clawRPivot.rotation.set(0, 0, 0);
-  clawLPivot.rotation[CLAW_AXIS] = l;
-  clawRPivot.rotation[CLAW_AXIS] = r;
-}
-```
+`animate` 関数内の処理順序は「見た目更新 → armBody同期 → followClawBodies → world.step」です。しかし `setClawOpen01` で爪ピボットの回転を変更した後、`followClawBodies` で爪Bodyをメッシュ位置へ追従させる際、メッシュのワールド座標はその回転が反映済みですが、物理エンジン側ではまだ前フレームの接触情報に基づいて判定しています。この1フレームのズレが、特に閉じ動作中に爪が箱表面を「すり抜ける」原因になり得ます。
 
-これにより、冒頭の `CLAW_AXIS` を `"x"` / `"y"` / `"z"` に、`CLAW_SIGN` を `1` / `-1` に変えるだけで、回転軸と方向を正しく切り替えられるようになります。モデルに合う軸と符号の組み合わせを試してみてください。
+**6. 摩擦・接触パラメータが極端に低い**
+
+`CLAW_BOX_FRICTION = 0.03` は非常に低く、爪が箱表面で滑りやすい設定です。滑った結果、爪の先端が箱の角を超えて内側に入り込むと、そこから押し戻す力が発生しにくくなります。また `contactEquationRelaxation = 10` は高めで、接触拘束の解決が緩やかになるため、侵入状態が長く残ります。
+
+---
+
+以上が主な問題点です。修正方針についてご指示いただければ、具体的なコード変更を提案いたします。

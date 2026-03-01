@@ -1852,7 +1852,7 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPres
 
   const desiredPos = threeVecToCannon(desiredPos3);
 
-  const inCloseContact = isContact && autoStarted && autoStep === 3;
+  const inCloseContact = isContact && autoStarted && (autoStep === 3 || autoStep === 4);
   const isPressing = inCloseContact && boxPressFrames >= PRESSING_KINEMATIC_MIN_FRAMES;
   const posFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE : 1.0;
   const angleFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE : 1.0;
@@ -2078,8 +2078,11 @@ if (autoStarted) {
       (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
     // 上昇中は「無理に戻す（開いて逃がす）」動作を行わない。
     // 圧迫がなくなった瞬間だけ、時間ベースで追い閉じする。
-    if (!liftingBoxPressing && clawOpen01 > 0) {
-      setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
+    // コマンド値(clawOpen01)は既に0でも、実開度(clawOpen01L/R)は圧迫で開いたままのことがある。
+    // そのため、圧迫解除後の追い閉じは「実開度」を基準に閉じる。
+    const remainingOpen01 = Math.max(clawOpen01L, clawOpen01R);
+    if (!liftingBoxPressing && remainingOpen01 > CLAW_FULLY_CLOSED_EPS) {
+      setClawOpen01(Math.max(0, remainingOpen01 - (dt / CLAW_CLOSE_TIME)), dt);
     }
 
     // 上昇は常に実行する。掴み判定に依存すると

@@ -38,3 +38,4 @@ with sync_playwright() as p:
 - 開かなすぎるなら `-0.05` ずつ下げる
 
 のように微調整するのがおすすめです。
+https://supertky.github.io/crane-game-test/

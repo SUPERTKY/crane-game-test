@@ -275,7 +275,9 @@ const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1.0;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（見た目上の閉じ切り目安）
-const CLAW_CLOSE_WAIT_MAX_SEC = 3.0; // 閉じ工程の最短待機秒（この秒数未満では上昇へ移行しない）
+// ステップ3（閉じ工程）は、この秒数が経過したら次ステップへ進む。
+// 以前は別の待機秒数があり、閉じ時間を変更しても遷移秒数に反映されない状態だったため統一する。
+const CLAW_CLOSE_STEP_SEC = CLAW_CLOSE_TIME;
 const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
@@ -284,7 +286,6 @@ const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が�
 const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
-const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -2053,9 +2054,9 @@ if (autoStarted) {
     const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
     setClawOpen01(closeCmdOpen01, dt);
 
-    // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
+    // 閉じ工程は秒数ベースで遷移する。
     // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
-    if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
+    if (autoT >= CLAW_CLOSE_STEP_SEC) {
       autoStep = 4;
       autoT = 0;
       step4LiftAssistNoContactT = 0;
@@ -2075,10 +2076,9 @@ if (autoStarted) {
     const liftingBoxPressing =
       (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
       (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
-    if (liftingBoxPressing) {
-      // 刺さり状態で上昇を止めないため、圧迫中は一旦わずかに開いて食い込みを逃がす。
-      setClawOpen01(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, dt);
-    } else if (clawOpen01 > 0) {
+    // 上昇中は「無理に戻す（開いて逃がす）」動作を行わない。
+    // 圧迫がなくなった瞬間だけ、時間ベースで追い閉じする。
+    if (!liftingBoxPressing && clawOpen01 > 0) {
       setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
     }
 
@@ -2093,11 +2093,7 @@ if (autoStarted) {
 
   } else if (autoStep === 5) {
     // ===== ステップ5: 完了 =====
-    // 完了時は爪を閉じ方向へ戻す（接触状態に依存せず確実に閉める）
-    if (clawOpen01 > 0) {
-      const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
-      setClawOpen01(nextOpen01, dt);
-    }
+    // 完了後の強制クローズは行わない。
   }
 }
 

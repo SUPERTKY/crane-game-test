@@ -286,7 +286,6 @@ const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が�
 const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
-const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -2077,10 +2076,9 @@ if (autoStarted) {
     const liftingBoxPressing =
       (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
       (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
-    if (liftingBoxPressing) {
-      // 刺さり状態で上昇を止めないため、圧迫中は一旦わずかに開いて食い込みを逃がす。
-      setClawOpen01(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, dt);
-    } else if (clawOpen01 > 0) {
+    // 上昇中は「無理に戻す（開いて逃がす）」動作を行わない。
+    // 圧迫がなくなった瞬間だけ、時間ベースで追い閉じする。
+    if (!liftingBoxPressing && clawOpen01 > 0) {
       setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
     }
 
@@ -2095,11 +2093,7 @@ if (autoStarted) {
 
   } else if (autoStep === 5) {
     // ===== ステップ5: 完了 =====
-    // 完了時は爪を閉じ方向へ戻す（接触状態に依存せず確実に閉める）
-    if (clawOpen01 > 0) {
-      const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
-      setClawOpen01(nextOpen01, dt);
-    }
+    // 完了後の強制クローズは行わない。
   }
 }
 

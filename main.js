@@ -152,6 +152,9 @@ function computeClawBoxes(meshRoot, {
 
   return shapes;
 }
+let step4PressureReleasedT = 0;
+// ★ 修正追加: Step4で保持する実効開度（Step3終了時の実際のピボット角度から算出）
+let step4HoldOpen01 = 0;
 function makeStickCylinderParamsFixedX(stickMesh, radiusScale = 0.5) {
   stickMesh.updateWorldMatrix(true, true);
   const s = getBoxSize(stickMesh);
@@ -2170,7 +2173,7 @@ if (autoStarted) {
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
     // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
-    if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
+ if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
       autoStep = 4;
       autoT = 0;
       step4LiftAssistNoContactT = 0;
@@ -2180,12 +2183,16 @@ if (autoStarted) {
       // Fix 4: Step4 開始時にラッチ状態をリセット
       step4PressureLatched = false;
       step4PressureReleasedT = 0;
+      // ★ 修正: Step3終了時の「実際の」開度を記録する。
+      // clawOpen01（コマンド値=0）ではなく、接触ブロック後の実ピボット角度を使う。
+      step4HoldOpen01 = Math.max(clawOpen01L, clawOpen01R, 0.01);
     }
 
 
-  } else if (autoStep === 4) {
+} else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
-    // Fix 4: ラッチ方式で圧迫時の開閉振動を防止
+    // Step3終了時の実効開度(step4HoldOpen01)を基準に維持し、閉じ駆動は一切行わない。
+    // 圧迫検出時のみ微小に開いて逃がす。
     autoT += dt;
     const targetY = dropStartY;
 
@@ -2194,27 +2201,16 @@ if (autoStarted) {
       (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
 
     if (liftingBoxPressing) {
-      // 圧迫検出 → ラッチを立てて開き方向へ微小に動かす（上限付き）
-      if (!step4PressureLatched) {
-        step4PressureLatched = true;
-      }
-      step4PressureReleasedT = 0; // 圧迫中はリリースタイマーをリセット
-      const openTarget = Math.min(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, STEP4_PRESSURE_OPEN_MAX);
-      setClawOpen01(openTarget, dt);
-    } else {
-      if (step4PressureLatched) {
-        // 圧迫が解消された → 一定時間待ってからラッチ解除
-        step4PressureReleasedT += dt;
-        if (step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
-          step4PressureLatched = false;
-          step4PressureReleasedT = 0;
-        }
-      }
-      // ラッチ解除後も閉じ駆動はしない。Step3終了時の角度をそのまま維持して持ち上げる。
+      // 圧迫検出 → 保持開度を少し開く（上限付き）
+      step4HoldOpen01 = Math.min(step4HoldOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, STEP4_PRESSURE_OPEN_MAX);
     }
 
-    // 上昇は常に実行する。掴み判定に依存すると
-    // 条件が揃わないケースでステップ4が停止してしまうため。
+    // 常にstep4HoldOpen01で爪角度を維持する。
+    // これによりclawOpen01が実際のピボット角度と一致し、
+    // isClosing誤判定による急スナップを防ぐ。
+    setClawOpen01(step4HoldOpen01, dt);
+
+    // 上昇は常に実行する。
     armGroup.position.y = Math.min(targetY, armGroup.position.y + ARM_RISE_SPEED * dt);
 
     if (armGroup.position.y >= targetY - 1e-6) {

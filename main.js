@@ -331,9 +331,10 @@ const STEP4_LIFT_ASSIST_SEC = 0.6;
 const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 
 // ===== Fix 1 & 2: 侵入検出定数 =====
-const KINEMATIC_PENETRATION_PUSHBACK = 0.5;
-const KINEMATIC_PENETRATION_THRESHOLD = 0.001;
-const CLAW_CLOSE_PENETRATION_THRESHOLD = 0.003;
+// [変更] 方針B-1: 押し戻し係数を大幅引き上げ（0.5→2.0）し、侵入検出を早期化
+const KINEMATIC_PENETRATION_PUSHBACK = 2.0;
+const KINEMATIC_PENETRATION_THRESHOLD = 0.0005;
+const CLAW_CLOSE_PENETRATION_THRESHOLD = 0.001;
 const CLAW_CLOSE_PENETRATION_BLOCK = true;
 
 // ===== Fix 4: Step4 圧迫ラッチ定数 =====
@@ -1930,6 +1931,8 @@ function isClawPressingBox() {
 }
 
 // ===== Fix 1: 侵入方向を除外した kinematic 追従 =====
+// [変更] 方針A: 非接触時はテレポート同期（ラグゼロ）
+// [変更] 方針B-2: 接触侵入時は回転追従も凍結
 function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPressFrames = 0) {
   if (!body || !mesh) return;
 
@@ -1941,11 +1944,19 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPres
 
   const desiredPos = threeVecToCannon(desiredPos3);
 
-  const inCloseContact = isContact && autoStarted && autoStep === 3;
+  // ★ 方針A: 非接触時はテレポート同期（位置・回転とも即座に一致させる）
+  if (!isContact) {
+    body.position.copy(desiredPos);
+    body.quaternion.copy(threeQuatToCannon(desiredQuat3));
+    return;
+  }
+
+  // ========== 以下は接触時のみ ==========
+  const inCloseContact = autoStarted && autoStep === 3;
   const isPressing = inCloseContact && boxPressFrames >= PRESSING_KINEMATIC_MIN_FRAMES;
   const posFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE : 1.0;
   const angleFollowScale = inCloseContact ? CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE : 1.0;
-  const maxMove = Math.max((isContact ? CONTACT_KINEMATIC_SPEED : MAX_KINEMATIC_SPEED) * posFollowScale * dt, 0);
+  const maxMove = Math.max(CONTACT_KINEMATIC_SPEED * posFollowScale * dt, 0);
   const dx = desiredPos.x - prevPos.x;
   const dy = desiredPos.y - prevPos.y;
   const dz = desiredPos.z - prevPos.z;
@@ -1956,31 +1967,38 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPres
   let finalY = prevPos.y + dy * moveScale;
   let finalZ = prevPos.z + dz * moveScale;
 
-  // Fix 1: 箱との接触侵入時に、侵入方向への移動を除外し、侵入分だけ押し戻す
-  if (isContact) {
-    const contactInfo = computeContactNormalAgainstBox(body);
-    if (contactInfo && contactInfo.penetration > KINEMATIC_PENETRATION_THRESHOLD) {
-      // 移動ベクトルのうち箱方向への成分を除去
-      const moveDx = finalX - prevPos.x;
-      const moveDy = finalY - prevPos.y;
-      const moveDz = finalZ - prevPos.z;
-      const dotIntoBox = moveDx * contactInfo.nx + moveDy * contactInfo.ny + moveDz * contactInfo.nz;
+  // Fix 1 + B-1: 箱との接触侵入時に、侵入方向への移動を除外し、侵入分を強く押し戻す
+  const contactInfo = computeContactNormalAgainstBox(body);
+  const isPenetrating = contactInfo && contactInfo.penetration > KINEMATIC_PENETRATION_THRESHOLD;
 
-      if (dotIntoBox > 0) {
-        finalX -= contactInfo.nx * dotIntoBox;
-        finalY -= contactInfo.ny * dotIntoBox;
-        finalZ -= contactInfo.nz * dotIntoBox;
-      }
+  if (isPenetrating) {
+    // 移動ベクトルのうち箱方向への成分を除去
+    const moveDx = finalX - prevPos.x;
+    const moveDy = finalY - prevPos.y;
+    const moveDz = finalZ - prevPos.z;
+    const dotIntoBox = moveDx * contactInfo.nx + moveDy * contactInfo.ny + moveDz * contactInfo.nz;
 
-      // 侵入量に比例して押し戻す
-      const pushback = contactInfo.penetration * KINEMATIC_PENETRATION_PUSHBACK;
-      finalX -= contactInfo.nx * pushback;
-      finalY -= contactInfo.ny * pushback;
-      finalZ -= contactInfo.nz * pushback;
+    if (dotIntoBox > 0) {
+      finalX -= contactInfo.nx * dotIntoBox;
+      finalY -= contactInfo.ny * dotIntoBox;
+      finalZ -= contactInfo.nz * dotIntoBox;
     }
+
+    // 侵入量に比例して押し戻す（係数強化済み: 2.0）
+    const pushback = contactInfo.penetration * KINEMATIC_PENETRATION_PUSHBACK;
+    finalX -= contactInfo.nx * pushback;
+    finalY -= contactInfo.ny * pushback;
+    finalZ -= contactInfo.nz * pushback;
   }
 
   body.position.set(finalX, finalY, finalZ);
+
+  // ★ 方針B-2: 侵入中は回転追従を完全凍結して、回転由来のめり込み拡大を防ぐ
+  if (isPenetrating) {
+    // 侵入中は現在の回転を維持（回転しない）
+    // body.quaternion は変更しない
+    return;
+  }
 
   // 接触中は回転追従量も制限して、めり込み起点の過大トルクを抑える
   const currentQ3 = cannonQuatToThree(body.quaternion);
@@ -1988,7 +2006,7 @@ function moveKinematicBodyTowardMesh(body, mesh, prevPos, dt, isContact, boxPres
   const angle = 2 * Math.acos(dot);
   const maxAngleBase = isPressing
     ? PRESSING_KINEMATIC_MAX_ANGLE_STEP
-    : (isContact ? CONTACT_KINEMATIC_MAX_ANGLE_STEP : FREE_KINEMATIC_MAX_ANGLE_STEP);
+    : CONTACT_KINEMATIC_MAX_ANGLE_STEP;
   const maxAngle = maxAngleBase * angleFollowScale;
   const t = angle > 1e-6 ? Math.min(1, maxAngle / angle) : 1;
   currentQ3.slerp(desiredQuat3, t);
@@ -2069,6 +2087,58 @@ function syncKinematicBodiesToVisualNow() {
     clawRBody.velocity.set(0, 0, 0);
     clawRBody.angularVelocity.set(0, 0, 0);
   }
+}
+
+// ===== [追加] 方針C: 物理ステップ後に見た目を物理結果へ引き戻す =====
+// 物理ボディが接触により見た目に追従できなかった場合、
+// 見た目のピボット角度を物理ボディの実位置に合わせて補正する。
+// これにより「見た目は閉じているが物理は開いている」ズレを解消する。
+const VISUAL_PHYSICS_SYNC_THRESHOLD = 0.003; // 3mm以上ズレたら補正開始
+const VISUAL_PHYSICS_SYNC_STRENGTH  = 0.7;   // 補正の強さ（0〜1, 大きいほど即座に追従）
+
+function syncClawVisualToPhysicsOnContact() {
+  // 閉じ/上昇ステップかつ箱接触中のみ有効
+  if (!autoStarted || autoStep < 3 || autoStep > 4) return;
+  if (!armGroup) return;
+
+  const syncOne = (mesh, body, pivot, boxContactHold, closedAngle, openAngle) => {
+    if (!mesh || !body || !pivot) return;
+    if (boxContactHold <= 0) return;
+
+    // 見た目と物理のワールド位置の差を計算
+    armGroup.updateMatrixWorld(true);
+    const visWorldPos = new THREE.Vector3();
+    mesh.getWorldPosition(visWorldPos);
+    const bodyWorldPos = new THREE.Vector3(body.position.x, body.position.y, body.position.z);
+
+    const dist = visWorldPos.distanceTo(bodyWorldPos);
+    if (dist < VISUAL_PHYSICS_SYNC_THRESHOLD) return;
+
+    // 見た目が物理より先に進んでいる → ピボット角度を開き方向へ戻す
+    const currentAngle = getClawPivotAngle(pivot, closedAngle);
+    const openDir = Math.sign(openAngle - closedAngle) || 1;
+
+    // 距離に比例して補正（開き方向へ）
+    const correction = dist * VISUAL_PHYSICS_SYNC_STRENGTH * openDir;
+    let correctedAngle = currentAngle + correction;
+
+    // 有効範囲にクランプ
+    const minA = Math.min(closedAngle, openAngle);
+    const maxA = Math.max(closedAngle, openAngle);
+    correctedAngle = THREE.MathUtils.clamp(correctedAngle, minA, maxA);
+
+    setClawPivotAngle(pivot, correctedAngle);
+
+    // open01 トラッキング変数も更新して次フレームの同期を正確にする
+    const newOpen01 = angleToOpen01(correctedAngle, closedAngle, openAngle);
+    return newOpen01;
+  };
+
+  const newL = syncOne(clawLMesh, clawLBody, clawLPivot, clawBoxContactHoldL, CLAW_L_CLOSED, CLAW_L_OPEN);
+  const newR = syncOne(clawRMesh, clawRBody, clawRPivot, clawBoxContactHoldR, CLAW_R_CLOSED, CLAW_R_OPEN);
+
+  if (newL !== undefined) clawOpen01L = newL;
+  if (newR !== undefined) clawOpen01R = newR;
 }
 
 function animate(t) {
@@ -2295,6 +2365,10 @@ const MAX_SUB = 8;
 
 world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
   stabilizePrizeBody(boxBody);
+
+  // ★ [追加] 方針C: 物理ステップ後に見た目を物理結果に合わせて補正
+  syncClawVisualToPhysicsOnContact();
+
   updateBodyDebugMeshes();
   updateContactDebugMarkers();
   updateBoxCenterOfMassDebug();

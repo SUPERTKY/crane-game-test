@@ -2209,13 +2209,8 @@ if (autoStarted) {
           step4PressureLatched = false;
           step4PressureReleasedT = 0;
         }
-        // 待機中は現在角度を維持（閉じも開きもしない）
-      } else {
-        // ラッチ解除済み → 通常の閉じ駆動
-        if (clawOpen01 > 0) {
-          setClawOpen01(clawOpen01 - (dt / CLAW_CLOSE_TIME), dt);
-        }
       }
+      // ラッチ解除後も閉じ駆動はしない。Step3終了時の角度をそのまま維持して持ち上げる。
     }
 
     // 上昇は常に実行する。掴み判定に依存すると

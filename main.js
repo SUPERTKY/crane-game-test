@@ -284,6 +284,7 @@ const CLAW_AUTORETURN_TO_CLOSED = true;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
+const STEP4_PRESSURE_RECLOSE_SPEED = 0.45; // 圧迫解消後に持ち上げ中ゆっくり閉じ戻す速度（open01/秒）
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -344,6 +345,8 @@ let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げ�
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
+let step3CloseStopOpen01 = null; // Step3中に過圧迫を検出したら、その時点の開度で閉じ目標を固定
+let step4BaseOpen01 = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -770,6 +773,21 @@ function setClawOpen01(open01, dt = 1 / 60) {
     if (penR > CLAW_CLOSE_PENETRATION_THRESHOLD) {
       nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
     }
+  }
+
+  // 閉じ工程で強い圧迫（刺さり）を検出したら、そのフレームは回転を停止する。
+  // 見た目だけ先に閉じ込むのを防ぎ、物理とのズレを抑える。
+  const overPressingDuringStep3Close =
+    isClosing &&
+    autoStarted &&
+    autoStep === 3 &&
+    (isClawPressingSomething() ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD);
+
+  if (overPressingDuringStep3Close) {
+    nextL = currentL;
+    nextR = currentR;
   }
 
   const boxHoldL = levelL === 2 || clawBoxContactHoldL > 0;
@@ -2126,6 +2144,7 @@ if (autoStarted) {
       autoT = 0;
       step3WaitT = 0;
       step3StartOpen01 = clawOpen01;
+      step3CloseStopOpen01 = null;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -2162,14 +2181,21 @@ if (autoStarted) {
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪を閉じる =====
     autoT += dt;
-    // 閉じコマンドは elapsed time から直接計算する。
-    // これにより接触状態や前フレーム値に引きずられず、常に時間制で進行する。
+    // 閉じ動作は維持しつつ、過圧迫が起きたら「その時点の開度」を下限として閉じ目標を固定する。
+    const step3OverPressing =
+      isClawPressingSomething() ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
+    if (step3OverPressing && step3CloseStopOpen01 == null) {
+      step3CloseStopOpen01 = Math.max(clawOpen01L, clawOpen01R);
+    }
+
     const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
-    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
+    const closeTargetOpen01 = step3CloseStopOpen01 ?? 0;
+    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, closeTargetOpen01, closeT);
     setClawOpen01(closeCmdOpen01, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
-    // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
     if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
       autoStep = 4;
       autoT = 0;
@@ -2177,6 +2203,8 @@ if (autoStarted) {
       step4LiftLatched = false;
       step4GripLostT = 0;
       step4ReleasePulseUsed = false;
+      // Step4開始時点の開度を保持（圧迫解消後の自然な閉じ戻しの下限）
+      step4BaseOpen01 = Math.max(clawOpen01L, clawOpen01R);
       // Fix 4: Step4 開始時にラッチ状態をリセット
       step4PressureLatched = false;
       step4PressureReleasedT = 0;
@@ -2203,14 +2231,21 @@ if (autoStarted) {
       setClawOpen01(openTarget, dt);
     } else {
       if (step4PressureLatched) {
-        // 圧迫が解消された → 一定時間待ってからラッチ解除
+        // 圧迫が解消されたら、すぐには閉めず少し待ってから自然に閉じ戻す。
         step4PressureReleasedT += dt;
-        if (step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
-          step4PressureLatched = false;
-          step4PressureReleasedT = 0;
-        }
       }
-      // ラッチ解除後も閉じ駆動はしない。Step3終了時の角度をそのまま維持して持ち上げる。
+
+      if (clawOpen01 > step4BaseOpen01 && step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
+        // 圧迫で開いた分だけ、持ち上げ中にゆっくり閉じ戻す（下限はStep4開始時の開度）
+        const recloseTarget = Math.max(step4BaseOpen01, clawOpen01 - STEP4_PRESSURE_RECLOSE_SPEED * dt);
+        setClawOpen01(recloseTarget, dt);
+      }
+
+      if (step4PressureLatched && clawOpen01 <= step4BaseOpen01 + 1e-4) {
+        // 開き戻し分を消化し終えたらラッチを落としてタイマーをリセット
+        step4PressureLatched = false;
+        step4PressureReleasedT = 0;
+      }
     }
 
     // 上昇は常に実行する。掴み判定に依存すると
@@ -2224,11 +2259,7 @@ if (autoStarted) {
 
   } else if (autoStep === 5) {
     // ===== ステップ5: 完了 =====
-    // 完了時は爪を閉じ方向へ戻す（接触状態に依存せず確実に閉める）
-    if (clawOpen01 > 0) {
-      const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
-      setClawOpen01(nextOpen01, dt);
-    }
+    // ここで急に閉めず、通常のオートリターンに任せて自然に戻す。
   }
 }
 

@@ -275,6 +275,7 @@ const ARM_DROP_DIST  = 1.0;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（見た目上の閉じ切り目安）
 const CLAW_CLOSE_WAIT_MAX_SEC = 3.0; // 閉じ工程の最短待機秒（この秒数未満では上昇へ移行しない）
+const STEP3_CLOSE_TARGET_OPEN01 = 0.12; // 掴み→持ち上げ遷移で「完全クローズ」を狙わないための下限開度
 const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
@@ -2162,7 +2163,7 @@ if (autoStarted) {
     }
 
   } else if (autoStep === 3) {
-    // ===== ステップ3: 爪を閉じる =====
+    // ===== ステップ3: 爪開度を維持 =====
     autoT += dt;
     // 閉じ動作は維持しつつ、接触時は setClawOpen01 側の制御で無理な閉じ込みを抑える。
     const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);

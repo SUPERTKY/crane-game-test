@@ -2194,11 +2194,9 @@ if (autoStarted) {
       step4GripLostT = 0;
       step4ReleasePulseUsed = false;
       // Step4開始時点の開度を保持（圧迫解消後の自然な閉じ戻しの下限）
-<<<<<<< codex/remove-unnecessary-closing-action-during-lift-phase-s5tka0
+
       step4BaseOpen01 = Math.max(clawOpen01L, clawOpen01R);
-=======
-      step4BaseOpen01 = clawOpen01;
->>>>>>> main
+
       // Fix 4: Step4 開始時にラッチ状態をリセット
       step4PressureLatched = false;
       step4PressureReleasedT = 0;

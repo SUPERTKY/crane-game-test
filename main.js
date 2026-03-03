@@ -346,6 +346,7 @@ let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げ�
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
+let step3CloseStopOpen01 = null; // Step3中に過圧迫を検出したら、その時点の開度で閉じ目標を固定
 let step4BaseOpen01 = 0;
 let dropStartY = 0;
 let autoStarted = false;
@@ -2144,6 +2145,7 @@ if (autoStarted) {
       autoT = 0;
       step3WaitT = 0;
       step3StartOpen01 = clawOpen01;
+      step3CloseStopOpen01 = null;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -2180,9 +2182,18 @@ if (autoStarted) {
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪開度を維持 =====
     autoT += dt;
-    // 閉じ動作は維持しつつ、接触時は setClawOpen01 側の制御で無理な閉じ込みを抑える。
+    // 閉じ動作は維持しつつ、過圧迫が起きたら「その時点の開度」を下限として閉じ目標を固定する。
+    const step3OverPressing =
+      isClawPressingSomething() ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
+    if (step3OverPressing && step3CloseStopOpen01 == null) {
+      step3CloseStopOpen01 = Math.max(clawOpen01L, clawOpen01R);
+    }
+
     const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
-    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
+    const closeTargetOpen01 = step3CloseStopOpen01 ?? 0;
+    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, closeTargetOpen01, closeT);
     setClawOpen01(closeCmdOpen01, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
@@ -2194,9 +2205,7 @@ if (autoStarted) {
       step4GripLostT = 0;
       step4ReleasePulseUsed = false;
       // Step4開始時点の開度を保持（圧迫解消後の自然な閉じ戻しの下限）
-
       step4BaseOpen01 = Math.max(clawOpen01L, clawOpen01R);
-
       // Fix 4: Step4 開始時にラッチ状態をリセット
       step4PressureLatched = false;
       step4PressureReleasedT = 0;

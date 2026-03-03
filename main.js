@@ -2161,16 +2161,14 @@ if (autoStarted) {
     }
 
   } else if (autoStep === 3) {
-    // ===== ステップ3: 爪を閉じる =====
+    // ===== ステップ3: 爪開度を維持 =====
     autoT += dt;
-    // 閉じコマンドは elapsed time から直接計算する。
-    // これにより接触状態や前フレーム値に引きずられず、常に時間制で進行する。
-    const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
-    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, STEP3_CLOSE_TARGET_OPEN01, closeT);
-    setClawOpen01(closeCmdOpen01, dt);
+    // 掴み→持ち上げ遷移では爪開度を変えず、そのままの状態を維持する。
+    // （フェーズ遷移時に再度「閉めに行く」挙動を防ぐ）
+    setClawOpen01(step3StartOpen01, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
-    // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。
+    // ステップ4へは現在の爪開度を維持したまま遷移する。
     if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
       autoStep = 4;
       autoT = 0;

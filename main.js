@@ -346,6 +346,7 @@ let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げ�
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
+let step4BaseOpen01 = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -2164,12 +2165,12 @@ if (autoStarted) {
   } else if (autoStep === 3) {
     // ===== ステップ3: 爪開度を維持 =====
     autoT += dt;
-    // 掴み→持ち上げ遷移では爪開度を変えず、そのままの状態を維持する。
-    // （フェーズ遷移時に再度「閉めに行く」挙動を防ぐ）
-    setClawOpen01(step3StartOpen01, dt);
+    // 閉じ動作は維持しつつ、接触時は setClawOpen01 側の制御で無理な閉じ込みを抑える。
+    const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
+    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
+    setClawOpen01(closeCmdOpen01, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
-    // ステップ4へは現在の爪開度を維持したまま遷移する。
     if (autoT >= CLAW_CLOSE_WAIT_MAX_SEC) {
       autoStep = 4;
       autoT = 0;
@@ -2177,6 +2178,8 @@ if (autoStarted) {
       step4LiftLatched = false;
       step4GripLostT = 0;
       step4ReleasePulseUsed = false;
+      // Step4開始時点の開度を保持（圧迫解消後の自然な閉じ戻しの下限）
+      step4BaseOpen01 = clawOpen01;
       // Fix 4: Step4 開始時にラッチ状態をリセット
       step4PressureLatched = false;
       step4PressureReleasedT = 0;
@@ -2207,13 +2210,13 @@ if (autoStarted) {
         step4PressureReleasedT += dt;
       }
 
-      if (clawOpen01 > step3StartOpen01 && step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
-        // 圧迫で開いた分だけ、持ち上げ中にゆっくり閉じ戻す（下限はStep3開始時の開度）
-        const recloseTarget = Math.max(step3StartOpen01, clawOpen01 - STEP4_PRESSURE_RECLOSE_SPEED * dt);
+      if (clawOpen01 > step4BaseOpen01 && step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
+        // 圧迫で開いた分だけ、持ち上げ中にゆっくり閉じ戻す（下限はStep4開始時の開度）
+        const recloseTarget = Math.max(step4BaseOpen01, clawOpen01 - STEP4_PRESSURE_RECLOSE_SPEED * dt);
         setClawOpen01(recloseTarget, dt);
       }
 
-      if (step4PressureLatched && clawOpen01 <= step3StartOpen01 + 1e-4) {
+      if (step4PressureLatched && clawOpen01 <= step4BaseOpen01 + 1e-4) {
         // 開き戻し分を消化し終えたらラッチを落としてタイマーをリセット
         step4PressureLatched = false;
         step4PressureReleasedT = 0;

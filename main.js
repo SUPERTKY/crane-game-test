@@ -775,6 +775,21 @@ function setClawOpen01(open01, dt = 1 / 60) {
     }
   }
 
+  // 閉じ工程で強い圧迫（刺さり）を検出したら、そのフレームは回転を停止する。
+  // 見た目だけ先に閉じ込むのを防ぎ、物理とのズレを抑える。
+  const overPressingDuringStep3Close =
+    isClosing &&
+    autoStarted &&
+    autoStep === 3 &&
+    (isClawPressingSomething() ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD);
+
+  if (overPressingDuringStep3Close) {
+    nextL = currentL;
+    nextR = currentR;
+  }
+
   const boxHoldL = levelL === 2 || clawBoxContactHoldL > 0;
   const boxHoldR = levelR === 2 || clawBoxContactHoldR > 0;
   const visualScaleL = (boxHoldL && autoStarted && autoStep === 3) ? CLOSE_STEP_CONTACT_VISUAL_SCALE : 1.0;
@@ -2179,7 +2194,11 @@ if (autoStarted) {
       step4GripLostT = 0;
       step4ReleasePulseUsed = false;
       // Step4開始時点の開度を保持（圧迫解消後の自然な閉じ戻しの下限）
+<<<<<<< codex/remove-unnecessary-closing-action-during-lift-phase-s5tka0
+      step4BaseOpen01 = Math.max(clawOpen01L, clawOpen01R);
+=======
       step4BaseOpen01 = clawOpen01;
+>>>>>>> main
       // Fix 4: Step4 開始時にラッチ状態をリセット
       step4PressureLatched = false;
       step4PressureReleasedT = 0;

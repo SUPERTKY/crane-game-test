@@ -280,7 +280,7 @@ const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかな�
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
 const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
-const CLAW_AUTORETURN_TO_CLOSED = true;
+const CLAW_AUTORETURN_TO_CLOSED = false;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
@@ -295,11 +295,14 @@ const CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT = true;
 // 圧力で開きにくくしたい時の全体つまみ（大きいほど開きにくい）
 // 目安: 0.85=開きやすい / 1.0=標準 / 1.15=少し開きにくい / 1.3=かなり開きにくい
 const CLAW_PRESSURE_OPEN_HARDNESS = 1.15;
-const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 1.9 / CLAW_PRESSURE_OPEN_HARDNESS;
+const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.6 / CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
 const CLAW_PASSIVE_OPEN_RESISTANCE = 1.6 * CLAW_PRESSURE_OPEN_HARDNESS;
-const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
-const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
+const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.95;
+const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 1;
+const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
+const CLAW_LOAD_RETURN_STIFFNESS = 36.0; // 圧力が抜けた時に指令角へ戻る強さ
+const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.8; // 箱圧迫時の受動開き増幅
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.022;
@@ -344,6 +347,7 @@ let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げ�
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
+let step3CloseStopOpen01 = null;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -627,31 +631,35 @@ let clawContactHoldR = 0;
 let clawBoxContactHoldL = 0;
 let clawBoxContactHoldR = 0;
 
-function applyPassiveOpenByBoxWeight(currentAngle, level, closedAngle, openAngle, currentVel, dt, boxPressFrames) {
-  const passiveActive =
-    CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT &&
-    autoStarted &&
-    autoStep === 3 &&
+function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, dt, boxPressFrames) {
+  if (!CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT) {
+    return { nextAngle: currentAngle, nextVel: 0 };
+  }
+
+  const openDir = Math.sign(openAngle - closedAngle) || 1;
+  const hasBoxPressure =
     boxBody &&
     level === 2 &&
     boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
 
-  if (!passiveActive) {
-    const dampedVel = currentVel * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-    return {
-      nextAngle: currentAngle,
-      nextVel: Math.abs(dampedVel) < 1e-4 ? 0 : dampedVel,
-    };
+  // 接触圧がある時だけ受動開き（重力単独では回さない）
+  let openAccel = 0;
+  if (hasBoxPressure) {
+    openAccel =
+      (boxBody.mass * CLAW_PASSIVE_OPEN_ACCEL_PER_KG / CLAW_PASSIVE_OPEN_RESISTANCE) *
+      CLAW_LOAD_OPEN_CONTACT_BOOST;
   }
 
-  const openDir = Math.sign(openAngle - closedAngle) || 1;
-  const accel = (boxBody.mass * CLAW_PASSIVE_OPEN_ACCEL_PER_KG / CLAW_PASSIVE_OPEN_RESISTANCE) * openDir;
-  let nextVel = (currentVel + accel * dt) * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
+  // 圧力が抜けたら目標角へ戻る（閉じ戻る）
+  const returnAccel = hasBoxPressure ? 0 : (targetAngle - currentAngle) * CLAW_LOAD_RETURN_STIFFNESS;
+
+  let nextVel = currentVel + (openAccel * openDir + returnAccel + CLAW_LOAD_OPEN_GRAVITY_ACCEL * openDir) * dt;
+  nextVel *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
   nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_PASSIVE_OPEN_MAX_SPEED, CLAW_PASSIVE_OPEN_MAX_SPEED);
 
   return {
     nextAngle: currentAngle + nextVel * dt,
-    nextVel,
+    nextVel: Math.abs(nextVel) < 1e-4 ? 0 : nextVel,
   };
 }
 
@@ -738,15 +746,15 @@ function setClawOpen01(open01, dt = 1 / 60) {
   }
   }
 
+  const passiveL = applyPassiveOpenByBoxWeight(nextL, targetL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt, clawBoxPressFramesL);
+  nextL = passiveL.nextAngle;
+  clawPassiveOpenVelL = passiveL.nextVel;
+
+  const passiveR = applyPassiveOpenByBoxWeight(nextR, targetR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt, clawBoxPressFramesR);
+  nextR = passiveR.nextAngle;
+  clawPassiveOpenVelR = passiveR.nextVel;
+
   if (isClosing) {
-    const passiveL = applyPassiveOpenByBoxWeight(nextL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt, clawBoxPressFramesL);
-    nextL = passiveL.nextAngle;
-    clawPassiveOpenVelL = passiveL.nextVel;
-
-    const passiveR = applyPassiveOpenByBoxWeight(nextR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt, clawBoxPressFramesR);
-    nextR = passiveR.nextAngle;
-    clawPassiveOpenVelR = passiveR.nextVel;
-
     // 受動開き等の後段処理で値が再計算されても、接触中の閉じ込みは最終的に禁止する
     if (clawBoxContactHoldL > 0 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
       nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
@@ -754,9 +762,6 @@ function setClawOpen01(open01, dt = 1 / 60) {
     if (clawBoxContactHoldR > 0 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
       nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
     }
-  } else {
-    clawPassiveOpenVelL *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-    clawPassiveOpenVelR *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
   }
 
   // ===== Fix 2: 侵入深度が閾値を超えたら閉じ方向の角度変化をブロック =====
@@ -2126,6 +2131,7 @@ if (autoStarted) {
       autoT = 0;
       step3WaitT = 0;
       step3StartOpen01 = clawOpen01;
+      step3CloseStopOpen01 = null;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -2165,7 +2171,24 @@ if (autoStarted) {
     // 閉じコマンドは elapsed time から直接計算する。
     // これにより接触状態や前フレーム値に引きずられず、常に時間制で進行する。
     const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
-    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
+    const closeCmdOpen01Raw = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
+
+    // 原因対策: 終盤まで閉じコマンドを送り続けると、接触の瞬断時に再び押し込みが発生して
+    // 最後までめり込むことがある。一定圧以上を検出したら「その時点の開き量」で閉じを停止する。
+    const closeOverPressure =
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
+
+    if (closeOverPressure && step3CloseStopOpen01 == null) {
+      step3CloseStopOpen01 = clawOpen01;
+    }
+
+    const closeCmdOpen01 = step3CloseStopOpen01 == null
+      ? closeCmdOpen01Raw
+      : Math.max(step3CloseStopOpen01, closeCmdOpen01Raw);
+
     setClawOpen01(closeCmdOpen01, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
@@ -2189,29 +2212,10 @@ if (autoStarted) {
     autoT += dt;
     const targetY = dropStartY;
 
-    const liftingBoxPressing =
-      (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
-      (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
-
-    if (liftingBoxPressing) {
-      // 圧迫検出 → ラッチを立てて開き方向へ微小に動かす（上限付き）
-      if (!step4PressureLatched) {
-        step4PressureLatched = true;
-      }
-      step4PressureReleasedT = 0; // 圧迫中はリリースタイマーをリセット
-      const openTarget = Math.min(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, STEP4_PRESSURE_OPEN_MAX);
-      setClawOpen01(openTarget, dt);
-    } else {
-      if (step4PressureLatched) {
-        // 圧迫が解消された → 一定時間待ってからラッチ解除
-        step4PressureReleasedT += dt;
-        if (step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
-          step4PressureLatched = false;
-          step4PressureReleasedT = 0;
-        }
-      }
-      // ラッチ解除後も閉じ駆動はしない。Step3終了時の角度をそのまま維持して持ち上げる。
-    }
+    // 持ち上げ中の圧迫による自動開きは無効化。
+    // Step3終了時点の角度をそのまま保持して持ち上げる。
+    step4PressureLatched = false;
+    step4PressureReleasedT = 0;
 
     // 上昇は常に実行する。掴み判定に依存すると
     // 条件が揃わないケースでステップ4が停止してしまうため。
@@ -2224,11 +2228,7 @@ if (autoStarted) {
 
   } else if (autoStep === 5) {
     // ===== ステップ5: 完了 =====
-    // 完了時は爪を閉じ方向へ戻す（接触状態に依存せず確実に閉める）
-    if (clawOpen01 > 0) {
-      const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
-      setClawOpen01(nextOpen01, dt);
-    }
+    // 完全に掴むための強制閉じは行わず、Step3/Step4で決まった角度を維持する。
   }
 }
 

@@ -36,8 +36,9 @@ const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
 // 左右それぞれ別の角度（ラジアン）
-const CLAW_L_CLOSED = 0.4;
-const CLAW_L_OPEN   = -0.3;
+// 開閉の回転量を抑えて、重力干渉時の動きをより滑らかにする
+const CLAW_L_CLOSED = 0.32;
+const CLAW_L_OPEN   = -0.12;
 
 
 
@@ -267,8 +268,8 @@ function quatFromEuler(x, y, z) {
   return q;
 }
 
-const CLAW_R_CLOSED = -0.6;
-const CLAW_R_OPEN   = 0.2;
+const CLAW_R_CLOSED = -0.45;
+const CLAW_R_OPEN   = 0.05;
 // ===== 自動シーケンス設定 =====
 const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1.0;  // 下げる距離（Y方向）
@@ -298,11 +299,19 @@ const CLAW_PRESSURE_OPEN_HARDNESS = 1.15;
 const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.6 / CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
 const CLAW_PASSIVE_OPEN_RESISTANCE = 1.6 * CLAW_PRESSURE_OPEN_HARDNESS;
+<<<<<<< codex/update-claw-mechanism-operation-c0cyr7
 const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.95;
 const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 1;
 const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
 const CLAW_LOAD_RETURN_STIFFNESS = 36.0; // 圧力が抜けた時に指令角へ戻る強さ
 const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.8; // 箱圧迫時の受動開き増幅
+=======
+const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
+const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
+const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
+const CLAW_LOAD_RETURN_STIFFNESS = 22.0; // 圧力が抜けた時に指令角へ戻る強さ
+const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.0; // 箱圧迫時の受動開き増幅
+>>>>>>> main
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.022;
@@ -311,8 +320,8 @@ const PRESSING_KINEMATIC_MAX_ANGLE_STEP = 0.008; // 箱を押し続けている�
 const PRESSING_KINEMATIC_MIN_FRAMES = 4;
 const CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中の位置追従は弱めて押し込みを抑える
 const CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE = 0.55; // 閉じ工程で箱接触中は回転追従を弱め、急回転での押し込みを防ぐ
-const CONTACT_VISUAL_MAX_ANGLE_STEP = 0.018; // 接触中の見た目回転の1フレーム上限（rad）
-const FREE_VISUAL_MAX_ANGLE_STEP = 0.045; // 非接触時も見た目の急回転を抑え、当たり判定とのズレを防ぐ
+const CONTACT_VISUAL_MAX_ANGLE_STEP = 0.012; // 接触中の見た目回転の1フレーム上限（rad）
+const FREE_VISUAL_MAX_ANGLE_STEP = 0.03; // 非接触時も見た目の急回転を抑え、当たり判定とのズレを防ぐ
 const CLOSE_STEP_CONTACT_VISUAL_SCALE = 0.7; // 閉じ工程の接触時はさらに見た目回転を抑える
 const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;

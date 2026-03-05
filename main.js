@@ -345,6 +345,7 @@ let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げ�
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
+let step3CloseStopOpen01 = null;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -2127,6 +2128,7 @@ if (autoStarted) {
       autoT = 0;
       step3WaitT = 0;
       step3StartOpen01 = clawOpen01;
+      step3CloseStopOpen01 = null;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -2166,7 +2168,24 @@ if (autoStarted) {
     // 閉じコマンドは elapsed time から直接計算する。
     // これにより接触状態や前フレーム値に引きずられず、常に時間制で進行する。
     const closeT = THREE.MathUtils.clamp(autoT / CLAW_CLOSE_TIME, 0, 1);
-    const closeCmdOpen01 = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
+    const closeCmdOpen01Raw = THREE.MathUtils.lerp(step3StartOpen01, 0, closeT);
+
+    // 原因対策: 終盤まで閉じコマンドを送り続けると、接触の瞬断時に再び押し込みが発生して
+    // 最後までめり込むことがある。一定圧以上を検出したら「その時点の開き量」で閉じを停止する。
+    const closeOverPressure =
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
+
+    if (closeOverPressure && step3CloseStopOpen01 == null) {
+      step3CloseStopOpen01 = clawOpen01;
+    }
+
+    const closeCmdOpen01 = step3CloseStopOpen01 == null
+      ? closeCmdOpen01Raw
+      : Math.max(step3CloseStopOpen01, closeCmdOpen01Raw);
+
     setClawOpen01(closeCmdOpen01, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。

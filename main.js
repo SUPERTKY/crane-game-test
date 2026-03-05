@@ -36,8 +36,9 @@ const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
 // 左右それぞれ別の角度（ラジアン）
-const CLAW_L_CLOSED = 0.4;
-const CLAW_L_OPEN   = -0.3;
+// 開閉の回転量を抑えて、重力干渉時の動きをより滑らかにする
+const CLAW_L_CLOSED = 0.32;
+const CLAW_L_OPEN   = -0.12;
 
 
 
@@ -267,8 +268,8 @@ function quatFromEuler(x, y, z) {
   return q;
 }
 
-const CLAW_R_CLOSED = -0.6;
-const CLAW_R_OPEN   = 0.2;
+const CLAW_R_CLOSED = -0.45;
+const CLAW_R_OPEN   = 0.05;
 // ===== 自動シーケンス設定 =====
 const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1.0;  // 下げる距離（Y方向）
@@ -280,7 +281,7 @@ const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかな�
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
 const CLAW_CLOSE_DAMP_OTHER = 0.22; // 箱以外接触は少しだけ閉じを許可
 const CLAW_DROP_PENETRATION_ABORT_SEC = 0.2; // 降下中に刺さり状態が続いたら降下を打ち切って掴みに移る
-const CLAW_AUTORETURN_TO_CLOSED = true;
+const CLAW_AUTORETURN_TO_CLOSED = false;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
@@ -308,8 +309,8 @@ const PRESSING_KINEMATIC_MAX_ANGLE_STEP = 0.008; // 箱を押し続けている�
 const PRESSING_KINEMATIC_MIN_FRAMES = 4;
 const CLOSE_STEP_CONTACT_POS_FOLLOW_SCALE = 0.35; // 閉じ工程かつ箱接触中の位置追従は弱めて押し込みを抑える
 const CLOSE_STEP_CONTACT_ANGLE_FOLLOW_SCALE = 0.55; // 閉じ工程で箱接触中は回転追従を弱め、急回転での押し込みを防ぐ
-const CONTACT_VISUAL_MAX_ANGLE_STEP = 0.018; // 接触中の見た目回転の1フレーム上限（rad）
-const FREE_VISUAL_MAX_ANGLE_STEP = 0.045; // 非接触時も見た目の急回転を抑え、当たり判定とのズレを防ぐ
+const CONTACT_VISUAL_MAX_ANGLE_STEP = 0.012; // 接触中の見た目回転の1フレーム上限（rad）
+const FREE_VISUAL_MAX_ANGLE_STEP = 0.03; // 非接触時も見た目の急回転を抑え、当たり判定とのズレを防ぐ
 const CLOSE_STEP_CONTACT_VISUAL_SCALE = 0.7; // 閉じ工程の接触時はさらに見た目回転を抑える
 const BOX_BASE_LINEAR_DAMPING = 0.08;
 const BOX_BASE_ANGULAR_DAMPING = 0.12;
@@ -2189,29 +2190,10 @@ if (autoStarted) {
     autoT += dt;
     const targetY = dropStartY;
 
-    const liftingBoxPressing =
-      (getClawContactLevel(clawLBody) === 2 && clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES) ||
-      (getClawContactLevel(clawRBody) === 2 && clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES);
-
-    if (liftingBoxPressing) {
-      // 圧迫検出 → ラッチを立てて開き方向へ微小に動かす（上限付き）
-      if (!step4PressureLatched) {
-        step4PressureLatched = true;
-      }
-      step4PressureReleasedT = 0; // 圧迫中はリリースタイマーをリセット
-      const openTarget = Math.min(clawOpen01 + STEP4_PRESS_RELEASE_OPEN_SPEED * dt, STEP4_PRESSURE_OPEN_MAX);
-      setClawOpen01(openTarget, dt);
-    } else {
-      if (step4PressureLatched) {
-        // 圧迫が解消された → 一定時間待ってからラッチ解除
-        step4PressureReleasedT += dt;
-        if (step4PressureReleasedT >= STEP4_PRESSURE_RECLOSE_DELAY) {
-          step4PressureLatched = false;
-          step4PressureReleasedT = 0;
-        }
-      }
-      // ラッチ解除後も閉じ駆動はしない。Step3終了時の角度をそのまま維持して持ち上げる。
-    }
+    // 持ち上げ中の圧迫による自動開きは無効化。
+    // Step3終了時点の角度をそのまま保持して持ち上げる。
+    step4PressureLatched = false;
+    step4PressureReleasedT = 0;
 
     // 上昇は常に実行する。掴み判定に依存すると
     // 条件が揃わないケースでステップ4が停止してしまうため。
@@ -2224,11 +2206,7 @@ if (autoStarted) {
 
   } else if (autoStep === 5) {
     // ===== ステップ5: 完了 =====
-    // 完了時は爪を閉じ方向へ戻す（接触状態に依存せず確実に閉める）
-    if (clawOpen01 > 0) {
-      const nextOpen01 = Math.max(0, clawOpen01 - CLAW_RETURN_SPEED_OPEN01 * dt);
-      setClawOpen01(nextOpen01, dt);
-    }
+    // 完全に掴むための強制閉じは行わず、Step3/Step4で決まった角度を維持する。
   }
 }
 

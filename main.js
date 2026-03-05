@@ -301,6 +301,9 @@ const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
 const CLAW_PASSIVE_OPEN_RESISTANCE = 1.6 * CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
 const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
+const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
+const CLAW_LOAD_RETURN_STIFFNESS = 22.0; // 圧力が抜けた時に指令角へ戻る強さ
+const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.0; // 箱圧迫時の受動開き増幅
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.022;
@@ -629,31 +632,35 @@ let clawContactHoldR = 0;
 let clawBoxContactHoldL = 0;
 let clawBoxContactHoldR = 0;
 
-function applyPassiveOpenByBoxWeight(currentAngle, level, closedAngle, openAngle, currentVel, dt, boxPressFrames) {
-  const passiveActive =
-    CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT &&
-    autoStarted &&
-    autoStep === 3 &&
+function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, dt, boxPressFrames) {
+  if (!CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT) {
+    return { nextAngle: currentAngle, nextVel: 0 };
+  }
+
+  const openDir = Math.sign(openAngle - closedAngle) || 1;
+  const hasBoxPressure =
     boxBody &&
     level === 2 &&
     boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
 
-  if (!passiveActive) {
-    const dampedVel = currentVel * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-    return {
-      nextAngle: currentAngle,
-      nextVel: Math.abs(dampedVel) < 1e-4 ? 0 : dampedVel,
-    };
+  // 接触圧がある時だけ受動開き（重力単独では回さない）
+  let openAccel = 0;
+  if (hasBoxPressure) {
+    openAccel =
+      (boxBody.mass * CLAW_PASSIVE_OPEN_ACCEL_PER_KG / CLAW_PASSIVE_OPEN_RESISTANCE) *
+      CLAW_LOAD_OPEN_CONTACT_BOOST;
   }
 
-  const openDir = Math.sign(openAngle - closedAngle) || 1;
-  const accel = (boxBody.mass * CLAW_PASSIVE_OPEN_ACCEL_PER_KG / CLAW_PASSIVE_OPEN_RESISTANCE) * openDir;
-  let nextVel = (currentVel + accel * dt) * Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
+  // 圧力が抜けたら目標角へ戻る（閉じ戻る）
+  const returnAccel = hasBoxPressure ? 0 : (targetAngle - currentAngle) * CLAW_LOAD_RETURN_STIFFNESS;
+
+  let nextVel = currentVel + (openAccel * openDir + returnAccel + CLAW_LOAD_OPEN_GRAVITY_ACCEL * openDir) * dt;
+  nextVel *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
   nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_PASSIVE_OPEN_MAX_SPEED, CLAW_PASSIVE_OPEN_MAX_SPEED);
 
   return {
     nextAngle: currentAngle + nextVel * dt,
-    nextVel,
+    nextVel: Math.abs(nextVel) < 1e-4 ? 0 : nextVel,
   };
 }
 
@@ -740,15 +747,15 @@ function setClawOpen01(open01, dt = 1 / 60) {
   }
   }
 
+  const passiveL = applyPassiveOpenByBoxWeight(nextL, targetL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt, clawBoxPressFramesL);
+  nextL = passiveL.nextAngle;
+  clawPassiveOpenVelL = passiveL.nextVel;
+
+  const passiveR = applyPassiveOpenByBoxWeight(nextR, targetR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt, clawBoxPressFramesR);
+  nextR = passiveR.nextAngle;
+  clawPassiveOpenVelR = passiveR.nextVel;
+
   if (isClosing) {
-    const passiveL = applyPassiveOpenByBoxWeight(nextL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt, clawBoxPressFramesL);
-    nextL = passiveL.nextAngle;
-    clawPassiveOpenVelL = passiveL.nextVel;
-
-    const passiveR = applyPassiveOpenByBoxWeight(nextR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt, clawBoxPressFramesR);
-    nextR = passiveR.nextAngle;
-    clawPassiveOpenVelR = passiveR.nextVel;
-
     // 受動開き等の後段処理で値が再計算されても、接触中の閉じ込みは最終的に禁止する
     if (clawBoxContactHoldL > 0 && clawBoxPressFramesL >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
       nextL = blockClosingRotationOnContact(currentL, nextL, CLAW_L_CLOSED, CLAW_L_OPEN);
@@ -756,9 +763,6 @@ function setClawOpen01(open01, dt = 1 / 60) {
     if (clawBoxContactHoldR > 0 && clawBoxPressFramesR >= CLAW_CLOSE_CONTACT_BLOCK_FRAMES) {
       nextR = blockClosingRotationOnContact(currentR, nextR, CLAW_R_CLOSED, CLAW_R_OPEN);
     }
-  } else {
-    clawPassiveOpenVelL *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-    clawPassiveOpenVelR *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
   }
 
   // ===== Fix 2: 侵入深度が閾値を超えたら閉じ方向の角度変化をブロック =====

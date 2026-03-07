@@ -300,19 +300,29 @@ const CLAW_PRESSURE_OPEN_HARDNESS = 1.15;
 const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.6 / CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
 const CLAW_PASSIVE_OPEN_RESISTANCE = 1.6 * CLAW_PRESSURE_OPEN_HARDNESS;
-<<<<<<< codex/update-claw-mechanism-operation-c0cyr7
-const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.95;
+const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.65;
 const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 1;
+
+// 実機っぽい「荷重で受動開き + 荷重抜け後に遅れて戻る」調整つまみ
+const CLAW_LOAD_OPEN_GAIN = 0.22; // ユーザー要望: 掴み時に開きが見えるよう受動開きを強める
+const CLAW_LOAD_OPEN_MAX = 0.17; // 開き上限を少し拡張（常時全開にならない範囲）
+const CLAW_LOAD_OPEN_PENETRATION_GAIN = 18.0;
+const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.55;
+const CLAW_LOAD_OPEN_LIFT_BOOST = 0.9;
+const CLAW_LOAD_OPEN_DEADZONE = 0.08;
+const CLAW_LOAD_OPEN_MAX_CONTACTS = 4;
+const CLAW_LOAD_OPEN_VEL_LIMIT = 0.85;
+const CLAW_LOAD_RETURN_GAIN = 22.0;
+const CLAW_LOAD_RETURN_DAMPING = 8.5;
+const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.3; // 荷重中は戻りを弱め、開きを維持しやすくする
+const CLAW_LOAD_RETURN_LAG = 0.08;
+const CLAW_LOAD_BACKSWING_GAIN = 0.26;
+const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
+const CLAW_LOAD_DROP_DEADZONE = 0.08;
 const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
-const CLAW_LOAD_RETURN_STIFFNESS = 36.0; // 圧力が抜けた時に指令角へ戻る強さ
-const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.8; // 箱圧迫時の受動開き増幅
-=======
-const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
-const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
-const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
-const CLAW_LOAD_RETURN_STIFFNESS = 22.0; // 圧力が抜けた時に指令角へ戻る強さ
-const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.0; // 箱圧迫時の受動開き増幅
->>>>>>> main
+const CLAW_LOAD_RETURN_STIFFNESS = 22.0; // 既存互換: 旧定数を維持（新モデルでは補助用途）
+const ENABLE_CLAW_LOAD_DEBUG_LOG = false;
+const CLAW_LOAD_DEBUG_LOG_INTERVAL_FRAMES = 20;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.022;
@@ -379,6 +389,13 @@ let clawReleasePulseCooldownL = 0;
 let clawReleasePulseCooldownR = 0;
 let clawPassiveOpenVelL = 0;
 let clawPassiveOpenVelR = 0;
+let clawPassiveOpenOffsetL = 0;
+let clawPassiveOpenOffsetR = 0;
+let clawPassiveLoadL = 0;
+let clawPassiveLoadR = 0;
+let clawPassiveLoadLagTL = 0;
+let clawPassiveLoadLagTR = 0;
+let clawLoadDebugCounter = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
 let step2LockY = 0;
@@ -641,35 +658,97 @@ let clawContactHoldR = 0;
 let clawBoxContactHoldL = 0;
 let clawBoxContactHoldR = 0;
 
-function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, dt, boxPressFrames) {
+function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
+  if (!clawBody || !boxBody || level !== 2 || boxPressFrames < CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES) {
+    return { load: 0, penetration: 0, support: 0, contactCount: 0, liftBoost: 0 };
+  }
+
+  let support = 0;
+  let contactCount = 0;
+
+  for (const c of world.contacts) {
+    const isPair =
+      (c.bi === clawBody && c.bj === boxBody) ||
+      (c.bj === clawBody && c.bi === boxBody);
+    if (!isPair) continue;
+
+    // 箱へ向かう法線のYをそろえて、上向き支持（吊り荷重）を推定する。
+    const normalTowardBoxY = c.bj === boxBody ? c.ni.y : -c.ni.y;
+    // 吊り上げ中は法線Yが小さくても荷重が爪に乗るため、わずかにオフセットして拾う。
+    support += Math.max(0, normalTowardBoxY + 0.22);
+    contactCount += 1;
+  }
+
+  const penetration = getMaxPenetrationDepth(clawBody, boxBody);
+  const normalizedContacts = THREE.MathUtils.clamp(contactCount / CLAW_LOAD_OPEN_MAX_CONTACTS, 0, 1);
+  const pressFactor = THREE.MathUtils.clamp(boxPressFrames / CLAW_BOX_PRESS_HOLD_FRAMES, 0, 1);
+
+  // Step4(上昇)で箱が接触している間は、ぶら下がり荷重ぶんだけ開きやすくする。
+  const lifting = autoStarted && autoStep === 4;
+  const liftBoost = lifting ? THREE.MathUtils.clamp(Math.max(0, boxBody.velocity.y + 0.08) * 2.4, 0, 1) : 0;
+
+  const load =
+    boxBody.mass * (0.35 + 0.65 * normalizedContacts) * (0.5 + 0.5 * pressFactor) +
+    support * (0.6 + CLAW_LOAD_OPEN_LIFT_BOOST * liftBoost) +
+    penetration * CLAW_LOAD_OPEN_PENETRATION_GAIN;
+
+  return { load, penetration, support, contactCount, liftBoost };
+}
+
+function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, currentOffset, prevLoad, loadLagT, dt, boxPressFrames, clawBody) {
   if (!CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT) {
-    return { nextAngle: currentAngle, nextVel: 0 };
+    return { nextAngle: currentAngle, nextVel: 0, nextOffset: 0, nextLoad: 0, nextLoadLagT: 0, debug: null };
   }
 
   const openDir = Math.sign(openAngle - closedAngle) || 1;
-  const hasBoxPressure =
-    boxBody &&
-    level === 2 &&
-    boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
+  const hasBoxPressure = boxBody && level === 2 && boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
+  const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
 
-  // 接触圧がある時だけ受動開き（重力単独では回さない）
-  let openAccel = 0;
-  if (hasBoxPressure) {
-    openAccel =
-      (boxBody.mass * CLAW_PASSIVE_OPEN_ACCEL_PER_KG / CLAW_PASSIVE_OPEN_RESISTANCE) *
-      CLAW_LOAD_OPEN_CONTACT_BOOST;
+  const effectiveLoad = Math.max(0, loadInfo.load - CLAW_LOAD_OPEN_DEADZONE);
+  const desiredOpen = THREE.MathUtils.clamp(effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST, 0, CLAW_LOAD_OPEN_MAX);
+
+  // 荷重が抜けた直後に即閉じしないよう、短い遅延を入れて実機っぽい粘りを作る。
+  let nextLoadLagT = Math.max(0, loadLagT - dt);
+  const loadDrop = Math.max(0, prevLoad - loadInfo.load);
+  if (!hasBoxPressure && currentOffset > 1e-3 && loadDrop > CLAW_LOAD_DROP_DEADZONE) {
+    nextLoadLagT = Math.max(nextLoadLagT, CLAW_LOAD_RETURN_LAG);
   }
 
-  // 圧力が抜けたら目標角へ戻る（閉じ戻る）
-  const returnAccel = hasBoxPressure ? 0 : (targetAngle - currentAngle) * CLAW_LOAD_RETURN_STIFFNESS;
+  const returnScale = hasBoxPressure ? CLAW_LOAD_RETURN_WHILE_CONTACT : (nextLoadLagT > 0 ? 0.15 : 1.0);
+  const returnGain = CLAW_LOAD_RETURN_GAIN * returnScale;
+  let nextVel = currentVel;
+  let nextOffset = currentOffset;
 
-  let nextVel = currentVel + (openAccel * openDir + returnAccel + CLAW_LOAD_OPEN_GRAVITY_ACCEL * openDir) * dt;
-  nextVel *= Math.exp(-CLAW_PASSIVE_OPEN_DAMPING * dt);
-  nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_PASSIVE_OPEN_MAX_SPEED, CLAW_PASSIVE_OPEN_MAX_SPEED);
+  const accel = (desiredOpen - currentOffset) * returnGain;
+  nextVel += (accel + CLAW_LOAD_OPEN_GRAVITY_ACCEL) * dt;
+
+  // 荷重が抜ける瞬間だけ小さな閉じ戻りインパルスを入れ、揺り戻し感を作る（過大化は抑える）。
+  if (loadDrop > CLAW_LOAD_DROP_DEADZONE) {
+    nextVel -= loadDrop * CLAW_LOAD_BACKSWING_GAIN;
+  }
+
+  const damping = CLAW_LOAD_RETURN_DAMPING + CLAW_LOAD_BACKSWING_DAMPING;
+  nextVel *= Math.exp(-damping * dt);
+  nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_LOAD_OPEN_VEL_LIMIT, CLAW_LOAD_OPEN_VEL_LIMIT);
+
+  nextOffset = THREE.MathUtils.clamp(currentOffset + nextVel * dt, 0, CLAW_LOAD_OPEN_MAX);
+  const nextAngle = currentAngle + nextOffset * openDir;
 
   return {
-    nextAngle: currentAngle + nextVel * dt,
+    nextAngle,
     nextVel: Math.abs(nextVel) < 1e-4 ? 0 : nextVel,
+    nextOffset,
+    nextLoad: loadInfo.load,
+    nextLoadLagT,
+    debug: {
+      load: loadInfo.load,
+      desiredOpen,
+      returnScale,
+      passiveOffset: nextOffset,
+      support: loadInfo.support,
+      penetration: loadInfo.penetration,
+      finalAngle: nextAngle,
+    },
   };
 }
 
@@ -756,13 +835,59 @@ function setClawOpen01(open01, dt = 1 / 60) {
   }
   }
 
-  const passiveL = applyPassiveOpenByBoxWeight(nextL, targetL, levelL, CLAW_L_CLOSED, CLAW_L_OPEN, clawPassiveOpenVelL, dt, clawBoxPressFramesL);
+  const passiveL = applyPassiveOpenByBoxWeight(
+    nextL,
+    targetL,
+    levelL,
+    CLAW_L_CLOSED,
+    CLAW_L_OPEN,
+    clawPassiveOpenVelL,
+    clawPassiveOpenOffsetL,
+    clawPassiveLoadL,
+    clawPassiveLoadLagTL,
+    dt,
+    clawBoxPressFramesL,
+    clawLBody,
+  );
   nextL = passiveL.nextAngle;
   clawPassiveOpenVelL = passiveL.nextVel;
+  clawPassiveOpenOffsetL = passiveL.nextOffset;
+  clawPassiveLoadL = passiveL.nextLoad;
+  clawPassiveLoadLagTL = passiveL.nextLoadLagT;
 
-  const passiveR = applyPassiveOpenByBoxWeight(nextR, targetR, levelR, CLAW_R_CLOSED, CLAW_R_OPEN, clawPassiveOpenVelR, dt, clawBoxPressFramesR);
+  const passiveR = applyPassiveOpenByBoxWeight(
+    nextR,
+    targetR,
+    levelR,
+    CLAW_R_CLOSED,
+    CLAW_R_OPEN,
+    clawPassiveOpenVelR,
+    clawPassiveOpenOffsetR,
+    clawPassiveLoadR,
+    clawPassiveLoadLagTR,
+    dt,
+    clawBoxPressFramesR,
+    clawRBody,
+  );
   nextR = passiveR.nextAngle;
   clawPassiveOpenVelR = passiveR.nextVel;
+  clawPassiveOpenOffsetR = passiveR.nextOffset;
+  clawPassiveLoadR = passiveR.nextLoad;
+  clawPassiveLoadLagTR = passiveR.nextLoadLagT;
+
+  if (ENABLE_CLAW_LOAD_DEBUG_LOG) {
+    clawLoadDebugCounter += 1;
+    if (clawLoadDebugCounter % CLAW_LOAD_DEBUG_LOG_INTERVAL_FRAMES === 0) {
+      const dbgL = passiveL.debug;
+      const dbgR = passiveR.debug;
+      if (dbgL && dbgR) {
+        console.log(
+          `[ClawLoad] L(load=${dbgL.load.toFixed(3)}, open=${dbgL.passiveOffset.toFixed(3)}, return=${dbgL.returnScale.toFixed(2)}, angle=${dbgL.finalAngle.toFixed(3)}) ` +
+          `R(load=${dbgR.load.toFixed(3)}, open=${dbgR.passiveOffset.toFixed(3)}, return=${dbgR.returnScale.toFixed(2)}, angle=${dbgR.finalAngle.toFixed(3)})`
+        );
+      }
+    }
+  }
 
   if (isClosing) {
     // 受動開き等の後段処理で値が再計算されても、接触中の閉じ込みは最終的に禁止する
@@ -1018,6 +1143,16 @@ function startAutoSequence() {
   gripRightFrames = 0;
   gripInvalidHoldT = 0;
   gripReleasePulseT = 0;
+
+  // 荷重由来の受動開き状態も毎回リセットして、前ゲームの戻りが残らないようにする。
+  clawPassiveOpenVelL = 0;
+  clawPassiveOpenVelR = 0;
+  clawPassiveOpenOffsetL = 0;
+  clawPassiveOpenOffsetR = 0;
+  clawPassiveLoadL = 0;
+  clawPassiveLoadR = 0;
+  clawPassiveLoadLagTL = 0;
+  clawPassiveLoadLagTR = 0;
 
   step2BoxPressFrames = 0;
   step2LockYActive = false;

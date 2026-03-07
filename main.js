@@ -309,6 +309,8 @@ const CLAW_LOAD_OPEN_MAX = 0.17; // 開き上限を少し拡張（常時全開�
 const CLAW_LOAD_OPEN_PENETRATION_GAIN = 18.0;
 const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.55;
 const CLAW_LOAD_OPEN_LIFT_BOOST = 0.9;
+const CLAW_LOAD_OPEN_DOWNWARD_PRESS_GAIN = 0.65; // 実機寄せ: 下向き圧でも爪が受動的に開く寄与を持たせる
+const CLAW_LOAD_OPEN_NORMAL_ABS_BIAS = 0.14; // 法線Yが小さい接触でも圧を拾う
 const CLAW_LOAD_OPEN_DEADZONE = 0.08;
 const CLAW_LOAD_OPEN_MAX_CONTACTS = 4;
 const CLAW_LOAD_OPEN_VEL_LIMIT = 0.85;
@@ -660,10 +662,11 @@ let clawBoxContactHoldR = 0;
 
 function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
   if (!clawBody || !boxBody || level !== 2 || boxPressFrames < CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES) {
-    return { load: 0, penetration: 0, support: 0, contactCount: 0, liftBoost: 0 };
+    return { load: 0, penetration: 0, support: 0, downwardPress: 0, contactCount: 0, liftBoost: 0 };
   }
 
   let support = 0;
+  let downwardPress = 0;
   let contactCount = 0;
 
   for (const c of world.contacts) {
@@ -675,7 +678,9 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
     // 箱へ向かう法線のYをそろえて、上向き支持（吊り荷重）を推定する。
     const normalTowardBoxY = c.bj === boxBody ? c.ni.y : -c.ni.y;
     // 吊り上げ中は法線Yが小さくても荷重が爪に乗るため、わずかにオフセットして拾う。
-    support += Math.max(0, normalTowardBoxY + 0.22);
+    support += Math.max(0, normalTowardBoxY + CLAW_LOAD_OPEN_NORMAL_ABS_BIAS);
+    // 追加: 下向き圧(負のY)でも、実機のように受動開きを誘発する寄与を与える。
+    downwardPress += Math.max(0, -normalTowardBoxY + CLAW_LOAD_OPEN_NORMAL_ABS_BIAS * 0.5);
     contactCount += 1;
   }
 
@@ -690,9 +695,10 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
   const load =
     boxBody.mass * (0.35 + 0.65 * normalizedContacts) * (0.5 + 0.5 * pressFactor) +
     support * (0.6 + CLAW_LOAD_OPEN_LIFT_BOOST * liftBoost) +
+    downwardPress * CLAW_LOAD_OPEN_DOWNWARD_PRESS_GAIN +
     penetration * CLAW_LOAD_OPEN_PENETRATION_GAIN;
 
-  return { load, penetration, support, contactCount, liftBoost };
+  return { load, penetration, support, downwardPress, contactCount, liftBoost };
 }
 
 function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, currentOffset, prevLoad, loadLagT, dt, boxPressFrames, clawBody) {
@@ -747,6 +753,7 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
       passiveOffset: nextOffset,
       support: loadInfo.support,
       penetration: loadInfo.penetration,
+      downwardPress: loadInfo.downwardPress || 0,
       finalAngle: nextAngle,
     },
   };

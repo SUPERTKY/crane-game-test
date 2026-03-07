@@ -299,19 +299,13 @@ const CLAW_PRESSURE_OPEN_HARDNESS = 1.15;
 const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.6 / CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_DAMPING = 8.0;
 const CLAW_PASSIVE_OPEN_RESISTANCE = 1.6 * CLAW_PRESSURE_OPEN_HARDNESS;
-<<<<<<< codex/update-claw-mechanism-operation-c0cyr7
-const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.95;
-const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 1;
-const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
-const CLAW_LOAD_RETURN_STIFFNESS = 36.0; // 圧力が抜けた時に指令角へ戻る強さ
-const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.8; // 箱圧迫時の受動開き増幅
-=======
+
 const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.55;
 const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 2;
 const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
 const CLAW_LOAD_RETURN_STIFFNESS = 22.0; // 圧力が抜けた時に指令角へ戻る強さ
 const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.0; // 箱圧迫時の受動開き増幅
->>>>>>> main
+
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.022;

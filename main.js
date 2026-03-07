@@ -304,17 +304,17 @@ const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.65;
 const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 1;
 
 // 実機っぽい「荷重で受動開き + 荷重抜け後に遅れて戻る」調整つまみ
-const CLAW_LOAD_OPEN_GAIN = 0.11;
-const CLAW_LOAD_OPEN_MAX = 0.11;
+const CLAW_LOAD_OPEN_GAIN = 0.22; // ユーザー要望: 掴み時に開きが見えるよう受動開きを強める
+const CLAW_LOAD_OPEN_MAX = 0.17; // 開き上限を少し拡張（常時全開にならない範囲）
 const CLAW_LOAD_OPEN_PENETRATION_GAIN = 18.0;
-const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.2;
-const CLAW_LOAD_OPEN_LIFT_BOOST = 0.55;
-const CLAW_LOAD_OPEN_DEADZONE = 0.18;
+const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.55;
+const CLAW_LOAD_OPEN_LIFT_BOOST = 0.9;
+const CLAW_LOAD_OPEN_DEADZONE = 0.08;
 const CLAW_LOAD_OPEN_MAX_CONTACTS = 4;
 const CLAW_LOAD_OPEN_VEL_LIMIT = 0.85;
 const CLAW_LOAD_RETURN_GAIN = 22.0;
 const CLAW_LOAD_RETURN_DAMPING = 8.5;
-const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.45;
+const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.3; // 荷重中は戻りを弱め、開きを維持しやすくする
 const CLAW_LOAD_RETURN_LAG = 0.08;
 const CLAW_LOAD_BACKSWING_GAIN = 0.26;
 const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
@@ -674,7 +674,8 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
 
     // 箱へ向かう法線のYをそろえて、上向き支持（吊り荷重）を推定する。
     const normalTowardBoxY = c.bj === boxBody ? c.ni.y : -c.ni.y;
-    support += Math.max(0, normalTowardBoxY);
+    // 吊り上げ中は法線Yが小さくても荷重が爪に乗るため、わずかにオフセットして拾う。
+    support += Math.max(0, normalTowardBoxY + 0.22);
     contactCount += 1;
   }
 

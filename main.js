@@ -313,6 +313,7 @@ const CLAW_LOAD_OPEN_DOWNWARD_PRESS_GAIN = 0.65; // 実機寄せ: 下向き圧�
 const CLAW_LOAD_OPEN_NORMAL_ABS_BIAS = 0.14; // 法線Yが小さい接触でも圧を拾う
 const CLAW_LOAD_OPEN_DEADZONE = 0.08;
 const CLAW_LOAD_OPEN_MAX_CONTACTS = 4;
+const CLAW_LOAD_OPEN_PENETRATION_CONTACT_GAIN = 22.0; // 法線Yが出にくい横押しでも、めり込み量から受動開きを発生させる
 const CLAW_LOAD_OPEN_VEL_LIMIT = 0.85;
 const CLAW_LOAD_RETURN_GAIN = 22.0;
 const CLAW_LOAD_RETURN_DAMPING = 8.5;
@@ -662,12 +663,13 @@ let clawBoxContactHoldR = 0;
 
 function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
   if (!clawBody || !boxBody || level !== 2 || boxPressFrames < CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES) {
-    return { load: 0, penetration: 0, support: 0, downwardPress: 0, contactCount: 0, liftBoost: 0 };
+    return { load: 0, penetration: 0, support: 0, downwardPress: 0, contactCount: 0, liftBoost: 0, contactPenetration: 0 };
   }
 
   let support = 0;
   let downwardPress = 0;
   let contactCount = 0;
+  let contactPenetration = 0;
 
   for (const c of world.contacts) {
     const isPair =
@@ -681,6 +683,13 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
     support += Math.max(0, normalTowardBoxY + CLAW_LOAD_OPEN_NORMAL_ABS_BIAS);
     // 追加: 下向き圧(負のY)でも、実機のように受動開きを誘発する寄与を与える。
     downwardPress += Math.max(0, -normalTowardBoxY + CLAW_LOAD_OPEN_NORMAL_ABS_BIAS * 0.5);
+
+    // c.ni と接触点から侵入量(gap<0)を推定し、横方向の押し込み圧も拾う。
+    const piWorld = c.bi.position.vadd(c.ri);
+    const pjWorld = c.bj.position.vadd(c.rj);
+    const gap = piWorld.vsub(pjWorld).dot(c.ni);
+    contactPenetration += Math.max(0, -gap);
+
     contactCount += 1;
   }
 
@@ -696,9 +705,10 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
     boxBody.mass * (0.35 + 0.65 * normalizedContacts) * (0.5 + 0.5 * pressFactor) +
     support * (0.6 + CLAW_LOAD_OPEN_LIFT_BOOST * liftBoost) +
     downwardPress * CLAW_LOAD_OPEN_DOWNWARD_PRESS_GAIN +
+    contactPenetration * CLAW_LOAD_OPEN_PENETRATION_CONTACT_GAIN +
     penetration * CLAW_LOAD_OPEN_PENETRATION_GAIN;
 
-  return { load, penetration, support, downwardPress, contactCount, liftBoost };
+  return { load, penetration, support, downwardPress, contactCount, liftBoost, contactPenetration };
 }
 
 function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, currentOffset, prevLoad, loadLagT, dt, boxPressFrames, clawBody) {
@@ -753,6 +763,7 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
       passiveOffset: nextOffset,
       support: loadInfo.support,
       penetration: loadInfo.penetration,
+      contactPenetration: loadInfo.contactPenetration || 0,
       downwardPress: loadInfo.downwardPress || 0,
       finalAngle: nextAngle,
     },
@@ -890,7 +901,8 @@ function setClawOpen01(open01, dt = 1 / 60) {
       if (dbgL && dbgR) {
         console.log(
           `[ClawLoad] L(load=${dbgL.load.toFixed(3)}, open=${dbgL.passiveOffset.toFixed(3)}, return=${dbgL.returnScale.toFixed(2)}, angle=${dbgL.finalAngle.toFixed(3)}) ` +
-          `R(load=${dbgR.load.toFixed(3)}, open=${dbgR.passiveOffset.toFixed(3)}, return=${dbgR.returnScale.toFixed(2)}, angle=${dbgR.finalAngle.toFixed(3)})`
+          `R(load=${dbgR.load.toFixed(3)}, open=${dbgR.passiveOffset.toFixed(3)}, return=${dbgR.returnScale.toFixed(2)}, angle=${dbgR.finalAngle.toFixed(3)}) ` +
+          `pen(L=${dbgL.contactPenetration.toFixed(4)},R=${dbgR.contactPenetration.toFixed(4)})`
         );
       }
     }

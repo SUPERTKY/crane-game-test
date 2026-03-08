@@ -1783,7 +1783,7 @@ addDebugDotLocal(clawPivot, hingeR_local, 0.03);
 
 // ★爪の原点がヒンジに無い場合の補正（要調整）
 clawLMesh.position.set(0, -1.95, -0.2);
-clawRMesh.position.set(0, -2.5, -0.2);
+clawRMesh.position.set(0, -1, -0.2);
 
 // Web起動直後の見た目を必ず「閉じ」に固定する。
 // （GLBの初期ポーズが開き気味でも、最初の1フレームで閉じ状態を維持する）

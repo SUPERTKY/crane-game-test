@@ -2347,7 +2347,7 @@ if (autoStarted) {
       getMaxPenetrationDepth(clawLBody, boxBody) > STEP3_CLOSE_STOP_PENETRATION_THRESHOLD ||
       getMaxPenetrationDepth(clawRBody, boxBody) > STEP3_CLOSE_STOP_PENETRATION_THRESHOLD;
 
-    if (closeOverPressure && step3CloseStopOpen01 == null) {
+    if (STEP3_CLOSE_STOP_ON_PRESSURE && closeOverPressure && step3CloseStopOpen01 == null) {
       step3CloseStopOpen01 = clawOpen01;
     }
 

@@ -2372,14 +2372,13 @@ if (autoStarted) {
 
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
-    // Fix 4: ラッチ方式で圧迫時の開閉振動を防止
     autoT += dt;
     const targetY = dropStartY;
 
-    // 持ち上げ中の圧迫による自動開きは無効化。
-    // Step3終了時点の角度をそのまま保持して持ち上げる。
-    step4PressureLatched = false;
-    step4PressureReleasedT = 0;
+    // 持ち上げ中も毎フレーム setClawOpen01 を通し、
+    // 箱質量+接触荷重に応じた受動開きが反映されるようにする。
+    // （コマンド値は固定。開く量は applyPassiveOpenByBoxWeight が決める）
+    setClawOpen01(clawOpen01, dt);
 
     // 上昇は常に実行する。掴み判定に依存すると
     // 条件が揃わないケースでステップ4が停止してしまうため。

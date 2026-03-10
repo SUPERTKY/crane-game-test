@@ -372,7 +372,8 @@ let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げ�
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
-let step3CloseStopOpen01 = null;
+let step3CloseStopOpen01L = null;
+let step3CloseStopOpen01R = null;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -782,8 +783,21 @@ function setClawOpen01(open01, dt = 1 / 60) {
   const prevOpen01 = clawOpen01;
   const isClosing = nextOpen01 < prevOpen01;
 
-  const targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
-  const targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
+  let targetL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, nextOpen01);
+  let targetR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, nextOpen01);
+
+  // Step3では「過圧が出た側の爪だけ」閉じを停止する。
+  // 反対側は通常どおり閉じ続ける。
+  if (autoStarted && autoStep === 3) {
+    if (step3CloseStopOpen01L != null) {
+      const stopAngleL = THREE.MathUtils.lerp(CLAW_L_CLOSED, CLAW_L_OPEN, step3CloseStopOpen01L);
+      targetL = blockClosingRotationOnContact(stopAngleL, targetL, CLAW_L_CLOSED, CLAW_L_OPEN);
+    }
+    if (step3CloseStopOpen01R != null) {
+      const stopAngleR = THREE.MathUtils.lerp(CLAW_R_CLOSED, CLAW_R_OPEN, step3CloseStopOpen01R);
+      targetR = blockClosingRotationOnContact(stopAngleR, targetR, CLAW_R_CLOSED, CLAW_R_OPEN);
+    }
+  }
 
   const currentL = getClawPivotAngle(clawLPivot, targetL);
   const currentR = getClawPivotAngle(clawRPivot, targetR);
@@ -2309,7 +2323,8 @@ if (autoStarted) {
       autoT = 0;
       step3WaitT = 0;
       step3StartOpen01 = clawOpen01;
-      step3CloseStopOpen01 = null;
+      step3CloseStopOpen01L = null;
+      step3CloseStopOpen01R = null;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -2353,21 +2368,17 @@ if (autoStarted) {
 
     // 原因対策: 終盤まで閉じコマンドを送り続けると、接触の瞬断時に再び押し込みが発生して
     // 最後までめり込むことがある。一定圧以上を検出したら「その時点の開き量」で閉じを停止する。
-    const closeOverPressure =
+    const overPressureL =
       clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
+    const overPressureR =
       clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES ||
-      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
       getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
 
-    if (closeOverPressure && step3CloseStopOpen01 == null) {
-      step3CloseStopOpen01 = clawOpen01;
-    }
+    if (overPressureL && step3CloseStopOpen01L == null) step3CloseStopOpen01L = clawOpen01;
+    if (overPressureR && step3CloseStopOpen01R == null) step3CloseStopOpen01R = clawOpen01;
 
-    const closeCmdOpen01 = step3CloseStopOpen01 == null
-      ? closeCmdOpen01Raw
-      : Math.max(step3CloseStopOpen01, closeCmdOpen01Raw);
-
-    setClawOpen01(closeCmdOpen01, dt);
+    setClawOpen01(closeCmdOpen01Raw, dt);
 
     // ステップ3は最低でも CLAW_CLOSE_WAIT_MAX_SEC 秒は維持する。
     // 圧迫解除後の追い閉じはステップ4（上昇中）で継続する。

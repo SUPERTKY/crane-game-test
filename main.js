@@ -269,7 +269,7 @@ function quatFromEuler(x, y, z) {
   return q;
 }
 
-const CLAW_R_CLOSED = -0.06;
+const CLAW_R_CLOSED = -0.2;
 const CLAW_R_OPEN   = 0.05;
 // ===== 自動シーケンス設定 =====
 const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒

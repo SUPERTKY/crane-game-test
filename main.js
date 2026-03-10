@@ -39,7 +39,7 @@ const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
 // 左右それぞれ別の角度（ラジアン）
 // 開閉の回転量を抑えて、重力干渉時の動きをより滑らかにする
 const CLAW_L_CLOSED = 0.32;
-const CLAW_L_OPEN   = -0.07;
+const CLAW_L_OPEN   = -0.01;
 
 
 

@@ -287,7 +287,7 @@ const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
 
-const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
+const CLAW_BOX_PRESS_HOLD_FRAMES = 9; // 判定を少し緩め、短時間の押し込みでは閉じ停止しにくくする
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
@@ -359,7 +359,7 @@ const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 // ===== Fix 1 & 2: 侵入検出定数 =====
 const KINEMATIC_PENETRATION_PUSHBACK = 0.5;
 const KINEMATIC_PENETRATION_THRESHOLD = 0.001;
-const CLAW_CLOSE_PENETRATION_THRESHOLD = 0.003;
+const CLAW_CLOSE_PENETRATION_THRESHOLD = 0.005; // めり込み許容を少し増やし、過敏な過圧停止を減らす
 const CLAW_CLOSE_PENETRATION_BLOCK = true;
 
 // ===== Fix 4: Step4 圧迫ラッチ定数 =====

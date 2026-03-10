@@ -365,8 +365,6 @@ const CLAW_CLOSE_PENETRATION_BLOCK = true;
 // ===== Fix 4: Step4 圧迫ラッチ定数 =====
 const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
 const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
-const STEP3_CLOSE_STOP_PRESS_HOLD_FRAMES = 12; // 回転停止発動までの接触保持を緩くする（長めにする）
-const STEP3_CLOSE_STOP_PENETRATION_THRESHOLD = 0.008; // 回転停止発動までのめり込み許容量を緩くする
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -2342,12 +2340,12 @@ if (autoStarted) {
     // 原因対策: 終盤まで閉じコマンドを送り続けると、接触の瞬断時に再び押し込みが発生して
     // 最後までめり込むことがある。一定圧以上を検出したら「その時点の開き量」で閉じを停止する。
     const closeOverPressure =
-      clawBoxPressFramesL >= STEP3_CLOSE_STOP_PRESS_HOLD_FRAMES ||
-      clawBoxPressFramesR >= STEP3_CLOSE_STOP_PRESS_HOLD_FRAMES ||
-      getMaxPenetrationDepth(clawLBody, boxBody) > STEP3_CLOSE_STOP_PENETRATION_THRESHOLD ||
-      getMaxPenetrationDepth(clawRBody, boxBody) > STEP3_CLOSE_STOP_PENETRATION_THRESHOLD;
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
 
-    if (STEP3_CLOSE_STOP_ON_PRESSURE && closeOverPressure && step3CloseStopOpen01 == null) {
+    if (closeOverPressure && step3CloseStopOpen01 == null) {
       step3CloseStopOpen01 = clawOpen01;
     }
 

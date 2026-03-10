@@ -719,11 +719,12 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   }
 
   const openDir = Math.sign(openAngle - closedAngle) || 1;
-  const hasBoxPressure = boxBody && level === 2 && boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
+  const lifting = autoStarted && autoStep === 4;
+  const minPressFrames = lifting ? 0 : CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
+  const hasBoxPressure = boxBody && level === 2 && boxPressFrames >= minPressFrames;
   const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
 
   const effectiveLoad = Math.max(0, loadInfo.load - CLAW_LOAD_OPEN_DEADZONE);
-  const lifting = autoStarted && autoStep === 4;
   const openGain = CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST * (lifting ? CLAW_LOAD_OPEN_LIFT_GAIN_MULT : 1.0);
   const openMax = lifting ? CLAW_LOAD_OPEN_MAX_LIFT : CLAW_LOAD_OPEN_MAX;
   const desiredOpen = THREE.MathUtils.clamp(effectiveLoad * openGain, 0, openMax);
@@ -752,7 +753,7 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   nextVel *= Math.exp(-damping * dt);
   nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_LOAD_OPEN_VEL_LIMIT, CLAW_LOAD_OPEN_VEL_LIMIT);
 
-  nextOffset = THREE.MathUtils.clamp(currentOffset + nextVel * dt, 0, CLAW_LOAD_OPEN_MAX);
+  nextOffset = THREE.MathUtils.clamp(currentOffset + nextVel * dt, 0, openMax);
   const nextAngle = currentAngle + nextOffset * openDir;
 
   return {
@@ -859,6 +860,9 @@ function setClawOpen01(open01, dt = 1 / 60) {
   }
 
   const passiveLevelL = (autoStarted && autoStep === 4 && clawBoxContactHoldL > 0) ? 2 : levelL;
+  const passiveBoxPressFramesL = (autoStarted && autoStep === 4 && clawBoxContactHoldL > 0)
+    ? Math.max(clawBoxPressFramesL, CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES)
+    : clawBoxPressFramesL;
   const passiveL = applyPassiveOpenByBoxWeight(
     nextL,
     targetL,
@@ -870,7 +874,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveLoadL,
     clawPassiveLoadLagTL,
     dt,
-    clawBoxPressFramesL,
+    passiveBoxPressFramesL,
     clawLBody,
   );
   nextL = passiveL.nextAngle;
@@ -880,6 +884,9 @@ function setClawOpen01(open01, dt = 1 / 60) {
   clawPassiveLoadLagTL = passiveL.nextLoadLagT;
 
   const passiveLevelR = (autoStarted && autoStep === 4 && clawBoxContactHoldR > 0) ? 2 : levelR;
+  const passiveBoxPressFramesR = (autoStarted && autoStep === 4 && clawBoxContactHoldR > 0)
+    ? Math.max(clawBoxPressFramesR, CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES)
+    : clawBoxPressFramesR;
   const passiveR = applyPassiveOpenByBoxWeight(
     nextR,
     targetR,
@@ -891,7 +898,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveLoadR,
     clawPassiveLoadLagTR,
     dt,
-    clawBoxPressFramesR,
+    passiveBoxPressFramesR,
     clawRBody,
   );
   nextR = passiveR.nextAngle;

@@ -306,6 +306,8 @@ const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 1;
 // 実機っぽい「荷重で受動開き + 荷重抜け後に遅れて戻る」調整つまみ
 const CLAW_LOAD_OPEN_GAIN = 0.22; // ユーザー要望: 掴み時に開きが見えるよう受動開きを強める
 const CLAW_LOAD_OPEN_MAX = 0.17; // 開き上限を少し拡張（常時全開にならない範囲）
+const CLAW_LOAD_OPEN_LIFT_GAIN_MULT = 1.6; // 持ち上げ中は荷重に対する開き感度を上げる
+const CLAW_LOAD_OPEN_MAX_LIFT = 0.24; // 持ち上げ中のみ開き上限を拡張し、見た目で分かる変化を出す
 const CLAW_LOAD_OPEN_PENETRATION_GAIN = 18.0;
 const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.55;
 const CLAW_LOAD_OPEN_LIFT_BOOST = 0.9;
@@ -721,7 +723,10 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
 
   const effectiveLoad = Math.max(0, loadInfo.load - CLAW_LOAD_OPEN_DEADZONE);
-  const desiredOpen = THREE.MathUtils.clamp(effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST, 0, CLAW_LOAD_OPEN_MAX);
+  const lifting = autoStarted && autoStep === 4;
+  const openGain = CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST * (lifting ? CLAW_LOAD_OPEN_LIFT_GAIN_MULT : 1.0);
+  const openMax = lifting ? CLAW_LOAD_OPEN_MAX_LIFT : CLAW_LOAD_OPEN_MAX;
+  const desiredOpen = THREE.MathUtils.clamp(effectiveLoad * openGain, 0, openMax);
 
   // 荷重が抜けた直後に即閉じしないよう、短い遅延を入れて実機っぽい粘りを作る。
   let nextLoadLagT = Math.max(0, loadLagT - dt);
@@ -853,10 +858,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
   }
   }
 
+  const passiveLevelL = (autoStarted && autoStep === 4 && clawBoxContactHoldL > 0) ? 2 : levelL;
   const passiveL = applyPassiveOpenByBoxWeight(
     nextL,
     targetL,
-    levelL,
+    passiveLevelL,
     CLAW_L_CLOSED,
     CLAW_L_OPEN,
     clawPassiveOpenVelL,
@@ -873,10 +879,11 @@ function setClawOpen01(open01, dt = 1 / 60) {
   clawPassiveLoadL = passiveL.nextLoad;
   clawPassiveLoadLagTL = passiveL.nextLoadLagT;
 
+  const passiveLevelR = (autoStarted && autoStep === 4 && clawBoxContactHoldR > 0) ? 2 : levelR;
   const passiveR = applyPassiveOpenByBoxWeight(
     nextR,
     targetR,
-    levelR,
+    passiveLevelR,
     CLAW_R_CLOSED,
     CLAW_R_OPEN,
     clawPassiveOpenVelR,

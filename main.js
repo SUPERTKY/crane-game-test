@@ -1752,7 +1752,7 @@ clawPivot.add(clawRPivot);
 
 // ★ヒンジ位置（要調整）
 clawLPivot.position.set(0, -1.95,0.2);
-clawRPivot.position.set(0, -2.1, -1.4);
+clawRPivot.position.set(0, -2.1, -1.1);
 
 // ===== 爪メッシュは「ピボットの子」 =====
 clawLPivot.add(clawLMesh);

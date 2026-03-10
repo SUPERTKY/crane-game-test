@@ -287,7 +287,7 @@ const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
 
-const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
+const CLAW_BOX_PRESS_HOLD_FRAMES = 9; // 判定を少し緩め、短時間の押し込みでは閉じ停止しにくくする
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
 const CLAW_CLOSE_RELEASE_PULSE = 0.03;
 const CLAW_CLOSE_RELEASE_COOLDOWN_FRAMES = 8;
@@ -359,7 +359,7 @@ const STEP4_GRIP_LOST_GRACE_SEC = 0.25;
 // ===== Fix 1 & 2: 侵入検出定数 =====
 const KINEMATIC_PENETRATION_PUSHBACK = 0.5;
 const KINEMATIC_PENETRATION_THRESHOLD = 0.001;
-const CLAW_CLOSE_PENETRATION_THRESHOLD = 0.003;
+const CLAW_CLOSE_PENETRATION_THRESHOLD = 0.005; // めり込み許容を少し増やし、過敏な過圧停止を減らす
 const CLAW_CLOSE_PENETRATION_BLOCK = true;
 
 // ===== Fix 4: Step4 圧迫ラッチ定数 =====
@@ -2372,14 +2372,13 @@ if (autoStarted) {
 
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
-    // Fix 4: ラッチ方式で圧迫時の開閉振動を防止
     autoT += dt;
     const targetY = dropStartY;
 
-    // 持ち上げ中の圧迫による自動開きは無効化。
-    // Step3終了時点の角度をそのまま保持して持ち上げる。
-    step4PressureLatched = false;
-    step4PressureReleasedT = 0;
+    // 持ち上げ中も毎フレーム setClawOpen01 を通し、
+    // 箱質量+接触荷重に応じた受動開きが反映されるようにする。
+    // （コマンド値は固定。開く量は applyPassiveOpenByBoxWeight が決める）
+    setClawOpen01(clawOpen01, dt);
 
     // 上昇は常に実行する。掴み判定に依存すると
     // 条件が揃わないケースでステップ4が停止してしまうため。

@@ -365,6 +365,7 @@ const CLAW_CLOSE_PENETRATION_BLOCK = true;
 // ===== Fix 4: Step4 圧迫ラッチ定数 =====
 const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
 const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
+const STEP3_CLOSE_STOP_ON_PRESSURE = false; // 要望対応: 閉じ工程での圧力起因の回転停止を一時的に無効化（ロジック自体は残す）
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
 let autoT = 0;
@@ -2345,7 +2346,7 @@ if (autoStarted) {
       getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
       getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
 
-    if (closeOverPressure && step3CloseStopOpen01 == null) {
+    if (STEP3_CLOSE_STOP_ON_PRESSURE && closeOverPressure && step3CloseStopOpen01 == null) {
       step3CloseStopOpen01 = clawOpen01;
     }
 

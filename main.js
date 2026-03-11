@@ -2372,14 +2372,12 @@ if (autoStarted) {
 
   } else if (autoStep === 4) {
     // ===== ステップ4: アームを元の高さまで上げる =====
-    // Fix 4: ラッチ方式で圧迫時の開閉振動を防止
+    // 持ち上げ中も setClawOpen01 を毎フレーム呼び、接触荷重に応じた受動開きを有効化する。
+    // これにより「上昇中は開かない」状態を防ぎ、荷重が抜けた後は自然に戻る。
     autoT += dt;
     const targetY = dropStartY;
 
-    // 持ち上げ中の圧迫による自動開きは無効化。
-    // Step3終了時点の角度をそのまま保持して持ち上げる。
-    step4PressureLatched = false;
-    step4PressureReleasedT = 0;
+    setClawOpen01(clawOpen01, dt);
 
     // 上昇は常に実行する。掴み判定に依存すると
     // 条件が揃わないケースでステップ4が停止してしまうため。

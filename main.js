@@ -304,20 +304,21 @@ const CLAW_PASSIVE_OPEN_MAX_SPEED = 0.65;
 const CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES = 1;
 
 // 実機っぽい「荷重で受動開き + 荷重抜け後に遅れて戻る」調整つまみ
-const CLAW_LOAD_OPEN_GAIN = 0.22; // ユーザー要望: 掴み時に開きが見えるよう受動開きを強める
-const CLAW_LOAD_OPEN_MAX = 0.17; // 開き上限を少し拡張（常時全開にならない範囲）
+const CLAW_LOAD_OPEN_GAIN = 0.5; // 受動開きが視認できるよう荷重ゲインを強化
+const CLAW_LOAD_OPEN_MAX = 0.3; // 持ち上げ中にも目視できる開き量を確保
 const CLAW_LOAD_OPEN_PENETRATION_GAIN = 18.0;
-const CLAW_LOAD_OPEN_CONTACT_BOOST = 1.55;
-const CLAW_LOAD_OPEN_LIFT_BOOST = 0.9;
+const CLAW_LOAD_OPEN_CONTACT_BOOST = 2.2;
+const CLAW_LOAD_OPEN_LIFT_BOOST = 1.4;
 const CLAW_LOAD_OPEN_DOWNWARD_PRESS_GAIN = 0.65; // 実機寄せ: 下向き圧でも爪が受動的に開く寄与を持たせる
 const CLAW_LOAD_OPEN_NORMAL_ABS_BIAS = 0.14; // 法線Yが小さい接触でも圧を拾う
 const CLAW_LOAD_OPEN_DEADZONE = 0.08;
 const CLAW_LOAD_OPEN_MAX_CONTACTS = 4;
 const CLAW_LOAD_OPEN_PENETRATION_CONTACT_GAIN = 22.0; // 法線Yが出にくい横押しでも、めり込み量から受動開きを発生させる
+const CLAW_LOAD_OPEN_LIFT_WEIGHT_GAIN = 0.55; // 上昇中は箱の質量ぶん開きやすくする
 const CLAW_LOAD_OPEN_VEL_LIMIT = 0.85;
 const CLAW_LOAD_RETURN_GAIN = 22.0;
 const CLAW_LOAD_RETURN_DAMPING = 8.5;
-const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.3; // 荷重中は戻りを弱め、開きを維持しやすくする
+const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.1; // 荷重中は戻りをさらに弱め、開きを維持する
 const CLAW_LOAD_RETURN_LAG = 0.08;
 const CLAW_LOAD_BACKSWING_GAIN = 0.26;
 const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
@@ -662,7 +663,13 @@ let clawBoxContactHoldL = 0;
 let clawBoxContactHoldR = 0;
 
 function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
-  if (!clawBody || !boxBody || level !== 2 || boxPressFrames < CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES) {
+  const lifting = autoStarted && autoStep === 4;
+  const hasResidualLiftPressure =
+    lifting &&
+    boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES &&
+    boxPressFrames > 0;
+
+  if (!clawBody || !boxBody || (level !== 2 && !hasResidualLiftPressure) || boxPressFrames < CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES) {
     return { load: 0, penetration: 0, support: 0, downwardPress: 0, contactCount: 0, liftBoost: 0, contactPenetration: 0 };
   }
 
@@ -698,11 +705,18 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
   const pressFactor = THREE.MathUtils.clamp(boxPressFrames / CLAW_BOX_PRESS_HOLD_FRAMES, 0, 1);
 
   // Step4(上昇)で箱が接触している間は、ぶら下がり荷重ぶんだけ開きやすくする。
-  const lifting = autoStarted && autoStep === 4;
   const liftBoost = lifting ? THREE.MathUtils.clamp(Math.max(0, boxBody.velocity.y + 0.08) * 2.4, 0, 1) : 0;
+  const residualLiftLoad = (hasResidualLiftPressure && contactCount === 0)
+    ? boxBody.mass * THREE.MathUtils.clamp(boxPressFrames / CLAW_BOX_PRESS_HOLD_FRAMES, 0, 1) * 0.45
+    : 0;
+  const liftWeightLoad = lifting
+    ? boxBody.mass * pressFactor * CLAW_LOAD_OPEN_LIFT_WEIGHT_GAIN
+    : 0;
 
   const load =
     boxBody.mass * (0.35 + 0.65 * normalizedContacts) * (0.5 + 0.5 * pressFactor) +
+    residualLiftLoad +
+    liftWeightLoad +
     support * (0.6 + CLAW_LOAD_OPEN_LIFT_BOOST * liftBoost) +
     downwardPress * CLAW_LOAD_OPEN_DOWNWARD_PRESS_GAIN +
     contactPenetration * CLAW_LOAD_OPEN_PENETRATION_CONTACT_GAIN +
@@ -717,7 +731,11 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   }
 
   const openDir = Math.sign(openAngle - closedAngle) || 1;
-  const hasBoxPressure = boxBody && level === 2 && boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
+  const lifting = autoStarted && autoStep === 4;
+  const hasBoxPressure =
+    boxBody &&
+    boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES &&
+    (level === 2 || (lifting && boxPressFrames > 0));
   const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
 
   const effectiveLoad = Math.max(0, loadInfo.load - CLAW_LOAD_OPEN_DEADZONE);

@@ -662,7 +662,13 @@ let clawBoxContactHoldL = 0;
 let clawBoxContactHoldR = 0;
 
 function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
-  if (!clawBody || !boxBody || level !== 2 || boxPressFrames < CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES) {
+  const lifting = autoStarted && autoStep === 4;
+  const hasResidualLiftPressure =
+    lifting &&
+    boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES &&
+    boxPressFrames > 0;
+
+  if (!clawBody || !boxBody || (level !== 2 && !hasResidualLiftPressure) || boxPressFrames < CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES) {
     return { load: 0, penetration: 0, support: 0, downwardPress: 0, contactCount: 0, liftBoost: 0, contactPenetration: 0 };
   }
 
@@ -698,11 +704,14 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
   const pressFactor = THREE.MathUtils.clamp(boxPressFrames / CLAW_BOX_PRESS_HOLD_FRAMES, 0, 1);
 
   // Step4(上昇)で箱が接触している間は、ぶら下がり荷重ぶんだけ開きやすくする。
-  const lifting = autoStarted && autoStep === 4;
   const liftBoost = lifting ? THREE.MathUtils.clamp(Math.max(0, boxBody.velocity.y + 0.08) * 2.4, 0, 1) : 0;
+  const residualLiftLoad = (hasResidualLiftPressure && contactCount === 0)
+    ? boxBody.mass * THREE.MathUtils.clamp(boxPressFrames / CLAW_BOX_PRESS_HOLD_FRAMES, 0, 1) * 0.45
+    : 0;
 
   const load =
     boxBody.mass * (0.35 + 0.65 * normalizedContacts) * (0.5 + 0.5 * pressFactor) +
+    residualLiftLoad +
     support * (0.6 + CLAW_LOAD_OPEN_LIFT_BOOST * liftBoost) +
     downwardPress * CLAW_LOAD_OPEN_DOWNWARD_PRESS_GAIN +
     contactPenetration * CLAW_LOAD_OPEN_PENETRATION_CONTACT_GAIN +
@@ -717,7 +726,11 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   }
 
   const openDir = Math.sign(openAngle - closedAngle) || 1;
-  const hasBoxPressure = boxBody && level === 2 && boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES;
+  const lifting = autoStarted && autoStep === 4;
+  const hasBoxPressure =
+    boxBody &&
+    boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES &&
+    (level === 2 || (lifting && boxPressFrames > 0));
   const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
 
   const effectiveLoad = Math.max(0, loadInfo.load - CLAW_LOAD_OPEN_DEADZONE);

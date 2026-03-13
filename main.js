@@ -326,6 +326,9 @@ const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
 const CLAW_LOAD_DROP_DEADZONE = 0.08;
 const CLAW_LOAD_FILTER_RISE = 20.0; // 荷重立ち上がりは速く追従
 const CLAW_LOAD_FILTER_FALL = 6.5; // 荷重抜けは緩やかに減衰（単発開きにしない）
+const CLAW_LOAD_NATURAL_CLOSE_GAIN = 7.5; // 荷重が抜けた後の自然閉じ（大きいほど早く閉じる）
+const CLAW_LOAD_NATURAL_CLOSE_MAX_SPEED = 0.24; // 自然閉じの最大速度（急閉じ防止）
+const CLAW_LOAD_NATURAL_CLOSE_MIN_LOAD = 0.05; // この荷重未満を「ほぼ無圧」とみなす
 const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
 const CLAW_LOAD_RETURN_STIFFNESS = 22.0; // 既存互換: 旧定数を維持（新モデルでは補助用途）
 const ENABLE_CLAW_LOAD_DEBUG_LOG = false;
@@ -785,6 +788,19 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_LOAD_OPEN_VEL_LIMIT, CLAW_LOAD_OPEN_VEL_LIMIT);
 
   nextOffset = THREE.MathUtils.clamp(currentOffset + nextVel * dt, 0, CLAW_LOAD_OPEN_MAX);
+
+  // 圧力が抜けた後は、実機らしく「ゆっくり自然に」閉じる。
+  // ただし最大閉じ速度を制限し、急なスナップ閉じは防ぐ。
+  const pressureReleased = !hasBoxPressure && filteredLoad <= CLAW_LOAD_NATURAL_CLOSE_MIN_LOAD;
+  if (pressureReleased && nextLoadLagT <= 0 && nextOffset > 1e-4) {
+    const closeAlpha = 1 - Math.exp(-CLAW_LOAD_NATURAL_CLOSE_GAIN * dt);
+    const desiredCloseDelta = nextOffset * closeAlpha;
+    const limitedCloseDelta = Math.min(desiredCloseDelta, CLAW_LOAD_NATURAL_CLOSE_MAX_SPEED * dt, nextOffset);
+    nextOffset = Math.max(0, nextOffset - limitedCloseDelta);
+    // 自然閉じ中は開き方向速度の残留を弱めて振動を抑える。
+    if (nextVel > 0) nextVel *= 0.65;
+  }
+
   const nextAngle = currentAngle + nextOffset * openDir;
 
   return {

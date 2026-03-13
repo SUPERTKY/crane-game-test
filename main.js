@@ -827,6 +827,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
 
   let nextL = targetL;
   let nextR = targetR;
+  const passiveOpenEnabled = CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT && autoStarted && autoStep === 4;
 
   if (isClosing && clawContactHoldL > 0) {
     const dampL = levelL === 2 ? CLAW_CLOSE_DAMP_BOX : CLAW_CLOSE_DAMP_OTHER;
@@ -879,53 +880,66 @@ function setClawOpen01(open01, dt = 1 / 60) {
   }
   }
 
-  const passiveL = applyPassiveOpenByBoxWeight(
-    nextL,
-    targetL,
-    levelL,
-    CLAW_L_CLOSED,
-    CLAW_L_OPEN,
-    clawPassiveOpenVelL,
-    clawPassiveOpenOffsetL,
-    clawPassiveLoadL,
-    clawPassiveLoadLagTL,
-    dt,
-    clawBoxPressFramesL,
-    clawBoxContactHoldL,
-    clawLBody,
-  );
-  nextL = passiveL.nextAngle;
-  clawPassiveOpenVelL = passiveL.nextVel;
-  clawPassiveOpenOffsetL = passiveL.nextOffset;
-  clawPassiveLoadL = passiveL.nextLoad;
-  clawPassiveLoadLagTL = passiveL.nextLoadLagT;
+  let passiveL = null;
+  let passiveR = null;
+  if (passiveOpenEnabled) {
+    passiveL = applyPassiveOpenByBoxWeight(
+      nextL,
+      targetL,
+      levelL,
+      CLAW_L_CLOSED,
+      CLAW_L_OPEN,
+      clawPassiveOpenVelL,
+      clawPassiveOpenOffsetL,
+      clawPassiveLoadL,
+      clawPassiveLoadLagTL,
+      dt,
+      clawBoxPressFramesL,
+      clawBoxContactHoldL,
+      clawLBody,
+    );
+    nextL = passiveL.nextAngle;
+    clawPassiveOpenVelL = passiveL.nextVel;
+    clawPassiveOpenOffsetL = passiveL.nextOffset;
+    clawPassiveLoadL = passiveL.nextLoad;
+    clawPassiveLoadLagTL = passiveL.nextLoadLagT;
 
-  const passiveR = applyPassiveOpenByBoxWeight(
-    nextR,
-    targetR,
-    levelR,
-    CLAW_R_CLOSED,
-    CLAW_R_OPEN,
-    clawPassiveOpenVelR,
-    clawPassiveOpenOffsetR,
-    clawPassiveLoadR,
-    clawPassiveLoadLagTR,
-    dt,
-    clawBoxPressFramesR,
-    clawBoxContactHoldR,
-    clawRBody,
-  );
-  nextR = passiveR.nextAngle;
-  clawPassiveOpenVelR = passiveR.nextVel;
-  clawPassiveOpenOffsetR = passiveR.nextOffset;
-  clawPassiveLoadR = passiveR.nextLoad;
-  clawPassiveLoadLagTR = passiveR.nextLoadLagT;
+    passiveR = applyPassiveOpenByBoxWeight(
+      nextR,
+      targetR,
+      levelR,
+      CLAW_R_CLOSED,
+      CLAW_R_OPEN,
+      clawPassiveOpenVelR,
+      clawPassiveOpenOffsetR,
+      clawPassiveLoadR,
+      clawPassiveLoadLagTR,
+      dt,
+      clawBoxPressFramesR,
+      clawBoxContactHoldR,
+      clawRBody,
+    );
+    nextR = passiveR.nextAngle;
+    clawPassiveOpenVelR = passiveR.nextVel;
+    clawPassiveOpenOffsetR = passiveR.nextOffset;
+    clawPassiveLoadR = passiveR.nextLoad;
+    clawPassiveLoadLagTR = passiveR.nextLoadLagT;
+  } else {
+    clawPassiveOpenVelL = 0;
+    clawPassiveOpenVelR = 0;
+    clawPassiveOpenOffsetL = 0;
+    clawPassiveOpenOffsetR = 0;
+    clawPassiveLoadL = 0;
+    clawPassiveLoadR = 0;
+    clawPassiveLoadLagTL = 0;
+    clawPassiveLoadLagTR = 0;
+  }
 
   if (ENABLE_CLAW_LOAD_DEBUG_LOG) {
     clawLoadDebugCounter += 1;
     if (clawLoadDebugCounter % CLAW_LOAD_DEBUG_LOG_INTERVAL_FRAMES === 0) {
-      const dbgL = passiveL.debug;
-      const dbgR = passiveR.debug;
+      const dbgL = passiveL?.debug;
+      const dbgR = passiveR?.debug;
       if (dbgL && dbgR) {
         console.log(
           `[ClawLoad] L(load=${dbgL.load.toFixed(3)}, open=${dbgL.passiveOffset.toFixed(3)}, return=${dbgL.returnScale.toFixed(2)}, angle=${dbgL.finalAngle.toFixed(3)}) ` +

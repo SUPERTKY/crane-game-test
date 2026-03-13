@@ -287,6 +287,7 @@ const CLAW_AUTORETURN_TO_CLOSED = false;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
+const STEP4_RECLOSE_SPEED_OPEN01 = 0.35; // Step3で回転停止しても、上昇中はゆっくり閉じ目標へ戻す
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -2433,7 +2434,9 @@ if (autoStarted) {
     autoT += dt;
     const targetY = dropStartY;
 
-    setClawOpen01(clawOpen01, dt);
+    // Step3で圧迫停止していても、上昇フェーズでは閉じ方向の目標を継続する。
+    const step4CloseCmdOpen01 = Math.max(0, clawOpen01 - STEP4_RECLOSE_SPEED_OPEN01 * dt);
+    setClawOpen01(step4CloseCmdOpen01, dt);
 
     // 上昇は常に実行する。掴み判定に依存すると
     // 条件が揃わないケースでステップ4が停止してしまうため。

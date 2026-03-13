@@ -378,17 +378,20 @@ const CLAW_CLOSE_PENETRATION_BLOCK = true;
 // ===== Fix 4: Step4 圧迫ラッチ定数 =====
 const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
 const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
-const POST_LIFT_OPEN_HOLD_SEC = 0.35;
-const POST_LIFT_CLOSE_TIME = 0.85;
-const POST_LIFT_CLOSE_WAIT_MAX_SEC = 1.1;
+const POST_LIFT_REOPEN_TARGET_OPEN01 = 0.72;
+const POST_LIFT_REOPEN_TIME = 0.26;
+const POST_LIFT_OPEN_HOLD_SEC = 0.24;
+const POST_LIFT_CLOSE_TIME = 0.95;
+const POST_LIFT_CLOSE_WAIT_MAX_SEC = 1.2;
 const ARM_RETURN_HOME_SPEED = 1.35;
 const RETURN_READY_DELAY_SEC = 0.45;
 
-let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=持ち上げ後オープン維持, 6=持ち上げ後クローズ, 7=初期位置へ戻る, 8=再開待機
+let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=持ち上げ後に指定開度まで再オープン, 6=持ち上げ後クローズ, 7=初期位置へ戻る, 8=再開待機
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
 let step3CloseStopOpen01 = null;
+let step5StartOpen01 = 0;
 let step6StartOpen01 = 0;
 let step6CloseStopOpen01 = null;
 let dropStartY = 0;
@@ -1295,6 +1298,7 @@ function startAutoSequence() {
   // Fix 4: ラッチ状態リセット
   step4PressureLatched = false;
   step4PressureReleasedT = 0;
+  step5StartOpen01 = 0;
   step6StartOpen01 = 0;
   step6CloseStopOpen01 = null;
 }
@@ -2538,15 +2542,19 @@ if (autoStarted) {
       armGroup.position.y = targetY;
       autoStep = 5;
       autoT = 0;
+      step5StartOpen01 = clawOpen01;
       clawPassiveRuntimeEnabled = false;
     }
 
   } else if (autoStep === 5) {
-    // ===== ステップ5: 持ち上げ後、現在の開き位置を少し維持 =====
+    // ===== ステップ5: 持ち上げ後に指定開度まで開く =====
     autoT += dt;
-    setClawOpen01(clawOpen01, dt);
+    const reopenT = THREE.MathUtils.clamp(autoT / POST_LIFT_REOPEN_TIME, 0, 1);
+    const reopenTargetOpen01 = Math.max(step5StartOpen01, POST_LIFT_REOPEN_TARGET_OPEN01);
+    const reopenCmdOpen01 = THREE.MathUtils.lerp(step5StartOpen01, reopenTargetOpen01, reopenT);
+    setClawOpen01(reopenCmdOpen01, dt);
 
-    if (autoT >= POST_LIFT_OPEN_HOLD_SEC) {
+    if (autoT >= POST_LIFT_REOPEN_TIME + POST_LIFT_OPEN_HOLD_SEC) {
       autoStep = 6;
       autoT = 0;
       step6StartOpen01 = clawOpen01;

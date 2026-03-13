@@ -278,6 +278,8 @@ const ARM_DROP_DIST  = 1.0;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（見た目上の閉じ切り目安）
 const CLAW_CLOSE_WAIT_MAX_SEC = 3.0; // 閉じ工程の最短待機秒（この秒数未満では上昇へ移行しない）
+const STEP3_STALL_RECLOSE_SPEED_OPEN01 = 0.18; // 回転停止で閉じが止まっても、圧抜け後に再び閉じを進める速度(open01/sec)
+const STEP3_STALL_RECLOSE_RELEASE_FRAMES = 5; // 圧が抜けた判定を安定化するフレーム数
 const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
@@ -379,6 +381,7 @@ let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
 let step3CloseStopOpen01 = null;
+let step3PressureReleaseFrames = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -2352,6 +2355,7 @@ if (autoStarted) {
       step3WaitT = 0;
       step3StartOpen01 = clawOpen01;
       step3CloseStopOpen01 = null;
+      step3PressureReleaseFrames = 0;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -2401,8 +2405,22 @@ if (autoStarted) {
       getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
       getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
 
-    if (closeOverPressure && step3CloseStopOpen01 == null) {
-      step3CloseStopOpen01 = clawOpen01;
+    if (closeOverPressure) {
+      step3PressureReleaseFrames = 0;
+      if (step3CloseStopOpen01 == null) {
+        step3CloseStopOpen01 = clawOpen01;
+      }
+    } else if (step3CloseStopOpen01 != null) {
+      step3PressureReleaseFrames += 1;
+      if (step3PressureReleaseFrames >= STEP3_STALL_RECLOSE_RELEASE_FRAMES) {
+        step3CloseStopOpen01 = Math.max(
+          closeCmdOpen01Raw,
+          step3CloseStopOpen01 - STEP3_STALL_RECLOSE_SPEED_OPEN01 * dt,
+        );
+        if (step3CloseStopOpen01 <= closeCmdOpen01Raw + 1e-4) {
+          step3CloseStopOpen01 = null;
+        }
+      }
     }
 
     const closeCmdOpen01 = step3CloseStopOpen01 == null

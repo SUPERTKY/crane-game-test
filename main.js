@@ -321,6 +321,10 @@ const CLAW_LOAD_RETURN_GAIN = 22.0;
 const CLAW_LOAD_RETURN_DAMPING = 8.5;
 const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.1; // 荷重中は戻りをさらに弱め、開きを維持する
 const CLAW_LOAD_RETURN_LAG = 0.08;
+const CLAW_NO_PRESS_CLOSE_GAIN = 30.0; // 圧抜け後、爪バネで自然に閉じる戻り強さ
+const CLAW_NO_PRESS_CLOSE_DAMPING = 5.2; // 圧抜け後の戻りで暴れないよう減衰
+const CLAW_NO_PRESS_CLOSE_MIN_ACCEL = 0.18; // 微小開きでも閉じ始める最低加速度
+const CLAW_NO_PRESS_CLOSE_DEADZONE = 0.003; // ほぼ閉じ切りなら微振動を抑える
 const CLAW_LOAD_BACKSWING_GAIN = 0.26;
 const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
 const CLAW_LOAD_DROP_DEADZONE = 0.08;
@@ -774,6 +778,13 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
 
   const accel = (desiredOpen - currentOffset) * returnGain;
   nextVel += (accel + CLAW_LOAD_OPEN_GRAVITY_ACCEL) * dt;
+
+  // 箱の圧が抜けたら、実機のバネ復帰っぽく自然に閉じへ戻す。
+  if (!hasBoxPressure && currentOffset > CLAW_NO_PRESS_CLOSE_DEADZONE) {
+    const springCloseAccel = currentOffset * CLAW_NO_PRESS_CLOSE_GAIN + CLAW_NO_PRESS_CLOSE_MIN_ACCEL;
+    nextVel -= springCloseAccel * dt;
+    nextVel *= Math.exp(-CLAW_NO_PRESS_CLOSE_DAMPING * dt);
+  }
 
   // 荷重が抜ける瞬間だけ小さな閉じ戻りインパルスを入れ、揺り戻し感を作る（過大化は抑える）。
   if (loadDrop > CLAW_LOAD_DROP_DEADZONE) {

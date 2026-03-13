@@ -316,18 +316,11 @@ const CLAW_LOAD_OPEN_MAX_CONTACTS = 4;
 const CLAW_LOAD_OPEN_PENETRATION_CONTACT_GAIN = 24.0; // 法線Yが出にくい横押しでも、めり込み量から受動開きを発生させる
 const CLAW_LOAD_OPEN_LIFT_WEIGHT_GAIN = 0.75; // 上昇中は箱の質量ぶん開きやすくする
 const CLAW_LOAD_OPEN_VEL_LIMIT = 1.05;
-
-const CLAW_LOAD_RETURN_GAIN = 14.0;
-const CLAW_LOAD_RETURN_DAMPING = 6.2;
-const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.02; // 荷重中は戻りをさらに弱め、開きを維持する
-const CLAW_LOAD_RETURN_LAG = 0.32;
-const CLAW_LOAD_MEMORY_DECAY = 2.4; // 接触瞬断時でも荷重を少し保持して急閉じを防ぐ
-const CLAW_LOAD_MIN_VISIBLE_OPEN = 0.035; // 荷重がある間は最低限見える開き量を確保
-const CLAW_LOAD_BACKSWING_GAIN = 0.26;
-const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
-const CLAW_LOAD_DROP_DEADZONE = 0.08;
-const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
-
+const CLAW_LOAD_FILTER_RISE = 18.0; // 圧力上昇に素早く追従
+const CLAW_LOAD_FILTER_FALL = 7.0; // 圧力低下はゆっくり追従（急閉じ防止）
+const CLAW_OPEN_FOLLOW_ATTACK = 16.0; // 開き方向の追従速度
+const CLAW_OPEN_FOLLOW_RELEASE = 6.0; // 閉じ戻りの追従速度
+const CLAW_LOAD_MIN_VISIBLE_OPEN = 0.03; // 荷重がある間は最低限見える開き量を確保
 const CLAW_LOAD_OPEN_ANGULAR_SPEED_GAIN = 0.09; // 箱の回転慣性によるこじり荷重
 const CLAW_LOAD_OPEN_LIFT_ACCEL_GAIN = 0.28; // 上昇加速中の見かけ荷重
 const CLAW_LOAD_OPEN_SIDE_SHEAR_GAIN = 0.2; // 横ずれ時のせん断荷重
@@ -757,18 +750,15 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   const filterAlpha = 1 - Math.exp(-filterRate * dt);
   const filteredLoad = THREE.MathUtils.lerp(prevLoad, loadInfo.load, filterAlpha);
 
+  const effectiveLoad = Math.max(0, filteredLoad - CLAW_LOAD_OPEN_DEADZONE);
+  let desiredOpen = THREE.MathUtils.clamp(
+    effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST,
+    0,
+    CLAW_LOAD_OPEN_MAX,
+  );
 
-  const heldLoad = Math.max(loadInfo.load, prevLoad * Math.exp(-CLAW_LOAD_MEMORY_DECAY * dt));
-  const effectiveLoad = Math.max(0, heldLoad - CLAW_LOAD_OPEN_DEADZONE);
-  let desiredOpen = THREE.MathUtils.clamp(effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST, 0, CLAW_LOAD_OPEN_MAX);
-  if (hasBoxPressure && desiredOpen > 0) desiredOpen = Math.max(desiredOpen, CLAW_LOAD_MIN_VISIBLE_OPEN);
-
-  // 荷重が抜けた直後に即閉じしないよう、短い遅延を入れて実機っぽい粘りを作る。
-  let nextLoadLagT = Math.max(0, loadLagT - dt);
-  const loadDrop = Math.max(0, prevLoad - heldLoad);
-  if (!hasBoxPressure && currentOffset > 1e-3 && loadDrop > CLAW_LOAD_DROP_DEADZONE * 0.25) {
-    nextLoadLagT = Math.max(nextLoadLagT, CLAW_LOAD_RETURN_LAG);
-
+  if (hasBoxPressure && desiredOpen > 0) {
+    desiredOpen = Math.max(desiredOpen, CLAW_LOAD_MIN_VISIBLE_OPEN);
   }
   if (!hasBoxPressure) {
     desiredOpen = 0;
@@ -790,10 +780,8 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
     nextAngle,
     nextVel: (nextOffset - currentOffset) / Math.max(dt, 1 / 240),
     nextOffset,
-
-    nextLoad: heldLoad,
-    nextLoadLagT,
-
+    nextLoad: filteredLoad,
+    nextLoadLagT: Math.max(0, loadLagT - dt),
     debug: {
       load: loadInfo.load,
       desiredOpen,

@@ -271,8 +271,6 @@ function quatFromEuler(x, y, z) {
 
 const CLAW_R_CLOSED = -0.2;
 const CLAW_R_OPEN   = 0.3;
-const CENTER_GLOW_DISTANCE = 7.5;
-const CENTER_GLOW_DECAY = 2.0;
 // ===== 自動シーケンス設定 =====
 const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒
 const ARM_DROP_DIST  = 1.0;  // 下げる距離（Y方向）
@@ -298,7 +296,7 @@ const CLAW_CLOSE_CONTACT_BLOCK_FRAMES = 1; // 箱接触直後から閉じ込み�
 const CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT = true;
 // 圧力で開きにくくしたい時の全体つまみ（大きいほど開きにくい）
 // 目安: 0.85=開きやすい / 1.0=標準 / 1.15=少し開きにくい / 1.3=かなり開きにくい
-const CLAW_PRESSURE_OPEN_HARDNESS = 1.7;
+const CLAW_PRESSURE_OPEN_HARDNESS = 10000;
 const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.8 / CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_DAMPING = 6.2;
 const CLAW_PASSIVE_OPEN_RESISTANCE = 1.9 * CLAW_PRESSURE_OPEN_HARDNESS;
@@ -754,16 +752,14 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   const filteredLoad = THREE.MathUtils.lerp(prevLoad, loadInfo.load, filterAlpha);
 
   const effectiveLoad = Math.max(0, filteredLoad - CLAW_LOAD_OPEN_DEADZONE);
-  const hardness = Math.max(0.05, CLAW_PRESSURE_OPEN_HARDNESS);
   let desiredOpen = THREE.MathUtils.clamp(
-    (effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST) / hardness,
+    effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST,
     0,
     CLAW_LOAD_OPEN_MAX,
   );
 
   if (hasBoxPressure && desiredOpen > 0) {
-    const minVisibleOpen = CLAW_LOAD_MIN_VISIBLE_OPEN / Math.sqrt(hardness);
-    desiredOpen = Math.max(desiredOpen, minVisibleOpen);
+    desiredOpen = Math.max(desiredOpen, CLAW_LOAD_MIN_VISIBLE_OPEN);
   }
   if (!hasBoxPressure) {
     desiredOpen = 0;
@@ -1030,7 +1026,6 @@ camBtn.addEventListener("click", () => {
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.physicallyCorrectLights = true;
 document.body.style.margin = "0";
 document.body.style.overflow = "hidden";
 document.body.appendChild(renderer.domElement);
@@ -1040,7 +1035,7 @@ const dir = new THREE.DirectionalLight(0xaab8ff, 0.45);
 dir.position.set(2, 3, 2);
 scene.add(dir);
 
-const centerGlow = new THREE.PointLight(0x9fc0ff, 1.1, CENTER_GLOW_DISTANCE, CENTER_GLOW_DECAY);
+const centerGlow = new THREE.PointLight(0x9fc0ff, 1.1, 10000, 2);
 centerGlow.position.set(0, 2, 0);
 scene.add(centerGlow);
 

@@ -317,13 +317,15 @@ const CLAW_LOAD_OPEN_MAX_CONTACTS = 4;
 const CLAW_LOAD_OPEN_PENETRATION_CONTACT_GAIN = 22.0; // 法線Yが出にくい横押しでも、めり込み量から受動開きを発生させる
 const CLAW_LOAD_OPEN_LIFT_WEIGHT_GAIN = 0.55; // 上昇中は箱の質量ぶん開きやすくする
 const CLAW_LOAD_OPEN_VEL_LIMIT = 0.85;
-const CLAW_LOAD_RETURN_GAIN = 22.0;
-const CLAW_LOAD_RETURN_DAMPING = 8.5;
+const CLAW_LOAD_RETURN_GAIN = 4.2; // 圧が抜けた後は「モーター戻り」ではなく弱い復元寄り
+const CLAW_LOAD_RETURN_DAMPING = 6.8;
 const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.1; // 荷重中は戻りをさらに弱め、開きを維持する
 const CLAW_LOAD_RETURN_LAG = 0.08;
 const CLAW_LOAD_BACKSWING_GAIN = 0.26;
 const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
 const CLAW_LOAD_DROP_DEADZONE = 0.08;
+const CLAW_LOAD_GRAVITY_CLOSE_ACCEL = 0.22; // 荷重抜け後に重力でじわっと閉じる擬似加速度
+const CLAW_LOAD_GRAVITY_CLOSE_MAX_SPEED = 0.18; // 受動開きより遅い閉じ速度上限
 const CLAW_LOAD_FILTER_RISE = 20.0; // 荷重立ち上がりは速く追従
 const CLAW_LOAD_FILTER_FALL = 6.5; // 荷重抜けは緩やかに減衰（単発開きにしない）
 const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
@@ -775,6 +777,12 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   const accel = (desiredOpen - currentOffset) * returnGain;
   nextVel += (accel + CLAW_LOAD_OPEN_GRAVITY_ACCEL) * dt;
 
+  // 荷重抜け後はモーター駆動のように戻さず、重力に引かれる弱い閉じを優先する。
+  const gravityCloseActive = !hasBoxPressure && nextLoadLagT <= 0 && currentOffset > 1e-4;
+  if (gravityCloseActive) {
+    nextVel -= CLAW_LOAD_GRAVITY_CLOSE_ACCEL * dt;
+  }
+
   // 荷重が抜ける瞬間だけ小さな閉じ戻りインパルスを入れ、揺り戻し感を作る（過大化は抑える）。
   if (loadDrop > CLAW_LOAD_DROP_DEADZONE) {
     nextVel -= loadDrop * CLAW_LOAD_BACKSWING_GAIN;
@@ -782,7 +790,10 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
 
   const damping = CLAW_LOAD_RETURN_DAMPING + CLAW_LOAD_BACKSWING_DAMPING;
   nextVel *= Math.exp(-damping * dt);
-  nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_LOAD_OPEN_VEL_LIMIT, CLAW_LOAD_OPEN_VEL_LIMIT);
+  const maxCloseSpeed = gravityCloseActive
+    ? CLAW_LOAD_GRAVITY_CLOSE_MAX_SPEED
+    : CLAW_LOAD_OPEN_VEL_LIMIT;
+  nextVel = THREE.MathUtils.clamp(nextVel, -maxCloseSpeed, CLAW_LOAD_OPEN_VEL_LIMIT);
 
   nextOffset = THREE.MathUtils.clamp(currentOffset + nextVel * dt, 0, CLAW_LOAD_OPEN_MAX);
   const nextAngle = currentAngle + nextOffset * openDir;

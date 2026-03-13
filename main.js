@@ -271,7 +271,7 @@ function quatFromEuler(x, y, z) {
 
 const CLAW_R_CLOSED = -0.2;
 const CLAW_R_OPEN   = 0.3;
-const CENTER_GLOW_DISTANCE = 7.5;
+const CENTER_GLOW_DISTANCE = 30;
 const CENTER_GLOW_DECAY = 2.0;
 // ===== 自動シーケンス設定 =====
 const CLAW_OPEN_TIME = 0.6;   // 開くのにかける秒

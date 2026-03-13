@@ -324,6 +324,8 @@ const CLAW_LOAD_RETURN_LAG = 0.08;
 const CLAW_LOAD_BACKSWING_GAIN = 0.26;
 const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
 const CLAW_LOAD_DROP_DEADZONE = 0.08;
+const CLAW_LOAD_FILTER_RISE = 20.0; // 荷重立ち上がりは速く追従
+const CLAW_LOAD_FILTER_FALL = 6.5; // 荷重抜けは緩やかに減衰（単発開きにしない）
 const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
 const CLAW_LOAD_RETURN_STIFFNESS = 22.0; // 既存互換: 旧定数を維持（新モデルでは補助用途）
 const ENABLE_CLAW_LOAD_DEBUG_LOG = false;
@@ -398,6 +400,8 @@ let clawPassiveOpenOffsetL = 0;
 let clawPassiveOpenOffsetR = 0;
 let clawPassiveLoadL = 0;
 let clawPassiveLoadR = 0;
+let clawPassiveFilteredLoadL = 0;
+let clawPassiveFilteredLoadR = 0;
 let clawPassiveLoadLagTL = 0;
 let clawPassiveLoadLagTR = 0;
 let clawLoadDebugCounter = 0;
@@ -726,9 +730,17 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
   return { load, penetration, support, downwardPress, contactCount, liftBoost, contactPenetration };
 }
 
-function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, currentOffset, prevLoad, loadLagT, dt, boxPressFrames, clawBody) {
+function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, currentOffset, prevLoad, currentFilteredLoad, loadLagT, dt, boxPressFrames, clawBody) {
   if (!CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT) {
-    return { nextAngle: currentAngle, nextVel: 0, nextOffset: 0, nextLoad: 0, nextLoadLagT: 0, debug: null };
+    return {
+      nextAngle: currentAngle,
+      nextVel: 0,
+      nextOffset: 0,
+      nextLoad: 0,
+      nextFilteredLoad: 0,
+      nextLoadLagT: 0,
+      debug: null,
+    };
   }
 
   const openDir = Math.sign(openAngle - closedAngle) || 1;
@@ -739,12 +751,18 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
     (level === 2 || (lifting && boxPressFrames > 0));
   const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
 
-  const effectiveLoad = Math.max(0, loadInfo.load - CLAW_LOAD_OPEN_DEADZONE);
+  const loadFilterGain = loadInfo.load >= currentFilteredLoad
+    ? CLAW_LOAD_FILTER_RISE
+    : CLAW_LOAD_FILTER_FALL;
+  const loadFilterAlpha = 1 - Math.exp(-loadFilterGain * dt);
+  const filteredLoad = THREE.MathUtils.lerp(currentFilteredLoad, loadInfo.load, loadFilterAlpha);
+
+  const effectiveLoad = Math.max(0, filteredLoad - CLAW_LOAD_OPEN_DEADZONE);
   const desiredOpen = THREE.MathUtils.clamp(effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST, 0, CLAW_LOAD_OPEN_MAX);
 
   // 荷重が抜けた直後に即閉じしないよう、短い遅延を入れて実機っぽい粘りを作る。
   let nextLoadLagT = Math.max(0, loadLagT - dt);
-  const loadDrop = Math.max(0, prevLoad - loadInfo.load);
+  const loadDrop = Math.max(0, prevLoad - filteredLoad);
   if (!hasBoxPressure && currentOffset > 1e-3 && loadDrop > CLAW_LOAD_DROP_DEADZONE) {
     nextLoadLagT = Math.max(nextLoadLagT, CLAW_LOAD_RETURN_LAG);
   }
@@ -773,10 +791,12 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
     nextAngle,
     nextVel: Math.abs(nextVel) < 1e-4 ? 0 : nextVel,
     nextOffset,
-    nextLoad: loadInfo.load,
+    nextLoad: filteredLoad,
+    nextFilteredLoad: filteredLoad,
     nextLoadLagT,
     debug: {
       load: loadInfo.load,
+      filteredLoad,
       desiredOpen,
       returnScale,
       passiveOffset: nextOffset,
@@ -881,6 +901,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveOpenVelL,
     clawPassiveOpenOffsetL,
     clawPassiveLoadL,
+    clawPassiveFilteredLoadL,
     clawPassiveLoadLagTL,
     dt,
     clawBoxPressFramesL,
@@ -890,6 +911,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
   clawPassiveOpenVelL = passiveL.nextVel;
   clawPassiveOpenOffsetL = passiveL.nextOffset;
   clawPassiveLoadL = passiveL.nextLoad;
+  clawPassiveFilteredLoadL = passiveL.nextFilteredLoad;
   clawPassiveLoadLagTL = passiveL.nextLoadLagT;
 
   const passiveR = applyPassiveOpenByBoxWeight(
@@ -901,6 +923,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveOpenVelR,
     clawPassiveOpenOffsetR,
     clawPassiveLoadR,
+    clawPassiveFilteredLoadR,
     clawPassiveLoadLagTR,
     dt,
     clawBoxPressFramesR,
@@ -910,6 +933,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
   clawPassiveOpenVelR = passiveR.nextVel;
   clawPassiveOpenOffsetR = passiveR.nextOffset;
   clawPassiveLoadR = passiveR.nextLoad;
+  clawPassiveFilteredLoadR = passiveR.nextFilteredLoad;
   clawPassiveLoadLagTR = passiveR.nextLoadLagT;
 
   if (ENABLE_CLAW_LOAD_DEBUG_LOG) {
@@ -1189,6 +1213,8 @@ function startAutoSequence() {
   clawPassiveOpenOffsetR = 0;
   clawPassiveLoadL = 0;
   clawPassiveLoadR = 0;
+  clawPassiveFilteredLoadL = 0;
+  clawPassiveFilteredLoadR = 0;
   clawPassiveLoadLagTL = 0;
   clawPassiveLoadLagTR = 0;
 

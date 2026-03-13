@@ -1035,7 +1035,7 @@ const dir = new THREE.DirectionalLight(0xaab8ff, 0.45);
 dir.position.set(2, 3, 2);
 scene.add(dir);
 
-const centerGlow = new THREE.PointLight(0x9fc0ff, 1.1, 20, 2);
+const centerGlow = new THREE.PointLight(0x9fc0ff, 1.1, 100, 2);
 centerGlow.position.set(0, 2, 0);
 scene.add(centerGlow);
 

@@ -419,7 +419,8 @@ let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無�
 
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xeeeeee);
+scene.background = new THREE.Color(0x050505);
+scene.fog = new THREE.Fog(0x030303, 5, 20);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 100);
 camera.position.set(0, 2, 3.2);
@@ -1029,10 +1030,14 @@ document.body.style.margin = "0";
 document.body.style.overflow = "hidden";
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+scene.add(new THREE.AmbientLight(0x8899bb, 0.18));
+const dir = new THREE.DirectionalLight(0xaab8ff, 0.45);
 dir.position.set(2, 3, 2);
 scene.add(dir);
+
+const centerGlow = new THREE.PointLight(0x9fc0ff, 1.1, 8, 2);
+centerGlow.position.set(0, 1.2, 0);
+scene.add(centerGlow);
 
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;

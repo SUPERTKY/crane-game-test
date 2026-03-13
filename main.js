@@ -316,6 +316,13 @@ const CLAW_LOAD_OPEN_MAX_CONTACTS = 4;
 const CLAW_LOAD_OPEN_PENETRATION_CONTACT_GAIN = 24.0; // 法線Yが出にくい横押しでも、めり込み量から受動開きを発生させる
 const CLAW_LOAD_OPEN_LIFT_WEIGHT_GAIN = 0.75; // 上昇中は箱の質量ぶん開きやすくする
 const CLAW_LOAD_OPEN_VEL_LIMIT = 1.05;
+<<<<<<< codex-6o3257
+const CLAW_LOAD_FILTER_RISE = 18.0; // 圧力上昇に素早く追従
+const CLAW_LOAD_FILTER_FALL = 7.0; // 圧力低下はゆっくり追従（急閉じ防止）
+const CLAW_OPEN_FOLLOW_ATTACK = 16.0; // 開き方向の追従速度
+const CLAW_OPEN_FOLLOW_RELEASE = 6.0; // 閉じ戻りの追従速度
+const CLAW_LOAD_MIN_VISIBLE_OPEN = 0.03; // 荷重がある間は最低限見える開き量を確保
+=======
 const CLAW_LOAD_RETURN_GAIN = 14.0;
 const CLAW_LOAD_RETURN_DAMPING = 6.2;
 const CLAW_LOAD_RETURN_WHILE_CONTACT = 0.02; // 荷重中は戻りをさらに弱め、開きを維持する
@@ -326,6 +333,7 @@ const CLAW_LOAD_BACKSWING_GAIN = 0.26;
 const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
 const CLAW_LOAD_DROP_DEADZONE = 0.08;
 const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
+>>>>>>> main
 const CLAW_LOAD_OPEN_ANGULAR_SPEED_GAIN = 0.09; // 箱の回転慣性によるこじり荷重
 const CLAW_LOAD_OPEN_LIFT_ACCEL_GAIN = 0.28; // 上昇加速中の見かけ荷重
 const CLAW_LOAD_OPEN_SIDE_SHEAR_GAIN = 0.2; // 横ずれ時のせん断荷重
@@ -749,8 +757,26 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
     boxBody &&
     boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES &&
     (level === 2 || boxContactHoldFrames > 0 || (lifting && boxPressFrames > 0));
-  const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
+<<<<<<< codex-6o3257
 
+=======
+>>>>>>> main
+  const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
+  const filterRate = loadInfo.load >= prevLoad ? CLAW_LOAD_FILTER_RISE : CLAW_LOAD_FILTER_FALL;
+  const filterAlpha = 1 - Math.exp(-filterRate * dt);
+  const filteredLoad = THREE.MathUtils.lerp(prevLoad, loadInfo.load, filterAlpha);
+
+<<<<<<< codex-6o3257
+  const effectiveLoad = Math.max(0, filteredLoad - CLAW_LOAD_OPEN_DEADZONE);
+  let desiredOpen = THREE.MathUtils.clamp(
+    effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST,
+    0,
+    CLAW_LOAD_OPEN_MAX,
+  );
+
+  if (hasBoxPressure && desiredOpen > 0) {
+    desiredOpen = Math.max(desiredOpen, CLAW_LOAD_MIN_VISIBLE_OPEN);
+=======
   const heldLoad = Math.max(loadInfo.load, prevLoad * Math.exp(-CLAW_LOAD_MEMORY_DECAY * dt));
   const effectiveLoad = Math.max(0, heldLoad - CLAW_LOAD_OPEN_DEADZONE);
   let desiredOpen = THREE.MathUtils.clamp(effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST, 0, CLAW_LOAD_OPEN_MAX);
@@ -761,38 +787,39 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   const loadDrop = Math.max(0, prevLoad - heldLoad);
   if (!hasBoxPressure && currentOffset > 1e-3 && loadDrop > CLAW_LOAD_DROP_DEADZONE * 0.25) {
     nextLoadLagT = Math.max(nextLoadLagT, CLAW_LOAD_RETURN_LAG);
+>>>>>>> main
+  }
+  if (!hasBoxPressure) {
+    desiredOpen = 0;
   }
 
-  const returnScale = hasBoxPressure ? CLAW_LOAD_RETURN_WHILE_CONTACT : (nextLoadLagT > 0 ? 0.15 : 1.0);
-  const returnGain = CLAW_LOAD_RETURN_GAIN * returnScale;
-  let nextVel = currentVel;
-  let nextOffset = currentOffset;
+  const followRate = desiredOpen > currentOffset ? CLAW_OPEN_FOLLOW_ATTACK : CLAW_OPEN_FOLLOW_RELEASE;
+  const followAlpha = 1 - Math.exp(-followRate * dt);
+  const nextOffsetRaw = THREE.MathUtils.lerp(currentOffset, desiredOpen, followAlpha);
+  const maxStep = CLAW_LOAD_OPEN_VEL_LIMIT * dt;
+  const nextOffset = THREE.MathUtils.clamp(
+    nextOffsetRaw,
+    Math.max(0, currentOffset - maxStep),
+    Math.min(CLAW_LOAD_OPEN_MAX, currentOffset + maxStep),
+  );
 
-  const accel = (desiredOpen - currentOffset) * returnGain;
-  nextVel += (accel + CLAW_LOAD_OPEN_GRAVITY_ACCEL) * dt;
-
-  // 荷重が抜ける瞬間だけ小さな閉じ戻りインパルスを入れ、揺り戻し感を作る（過大化は抑える）。
-  if (loadDrop > CLAW_LOAD_DROP_DEADZONE) {
-    nextVel -= loadDrop * CLAW_LOAD_BACKSWING_GAIN;
-  }
-
-  const damping = CLAW_LOAD_RETURN_DAMPING + CLAW_LOAD_BACKSWING_DAMPING;
-  nextVel *= Math.exp(-damping * dt);
-  nextVel = THREE.MathUtils.clamp(nextVel, -CLAW_LOAD_OPEN_VEL_LIMIT, CLAW_LOAD_OPEN_VEL_LIMIT);
-
-  nextOffset = THREE.MathUtils.clamp(currentOffset + nextVel * dt, 0, CLAW_LOAD_OPEN_MAX);
   const nextAngle = currentAngle + nextOffset * openDir;
 
   return {
     nextAngle,
-    nextVel: Math.abs(nextVel) < 1e-4 ? 0 : nextVel,
+    nextVel: (nextOffset - currentOffset) / Math.max(dt, 1 / 240),
     nextOffset,
+<<<<<<< codex-6o3257
+    nextLoad: filteredLoad,
+    nextLoadLagT: Math.max(0, loadLagT - dt),
+=======
     nextLoad: heldLoad,
     nextLoadLagT,
+>>>>>>> main
     debug: {
       load: loadInfo.load,
       desiredOpen,
-      returnScale,
+      returnScale: followRate,
       passiveOffset: nextOffset,
       support: loadInfo.support,
       penetration: loadInfo.penetration,

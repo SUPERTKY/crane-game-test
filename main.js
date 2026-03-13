@@ -289,6 +289,9 @@ const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
 const STEP4_RECLOSE_SPEED_OPEN01 = 0.12; // Step3で回転停止しても、上昇中は弱く閉じ目標へ戻す
 const STEP4_RECLOSE_WHILE_BOX_PRESS_SCALE = 0.18; // 箱圧が残る間は追い閉じをさらに弱め、押し込み圧を抑える
+const STEP4_PRESSURE_RELEASE_STABLE_SEC = 0.20; // 圧力解除を確定する安定時間（誤検知ガタつき対策）
+const STEP4_RECLOSE_RELEASED_BOOST = 2.2; // 圧が抜けた後は閉じ切るため追い閉じを少し強める
+const STEP5_RECLOSE_SPEED_OPEN01 = 0.22; // 完了フェーズでも圧が無ければゆっくり閉じ切る
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -2436,13 +2439,36 @@ if (autoStarted) {
     const targetY = dropStartY;
 
     // Step3で圧迫停止していても、上昇フェーズでは閉じ方向の目標を継続する。
-    // ただし箱圧が残る間は追い閉じをさらに弱め、閉じ圧が強くなりすぎないようにする。
-    const step4HasBoxPress =
+    // 圧力判定はヒステリシスを持たせ、解除誤判定によるガタガタした押し込みを防ぐ。
+    const step4ContactingBox =
+      getClawContactLevel(clawLBody) === 2 ||
+      getClawContactLevel(clawRBody) === 2;
+    const step4DeepPenetration =
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD * 1.25 ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD * 1.25;
+    const step4RawPress =
+      step4ContactingBox ||
       clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES ||
       clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES ||
-      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
-      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
-    const step4RecloseSpeed = STEP4_RECLOSE_SPEED_OPEN01 * (step4HasBoxPress ? STEP4_RECLOSE_WHILE_BOX_PRESS_SCALE : 1.0);
+      step4DeepPenetration;
+
+    if (step4RawPress) {
+      step4PressureLatched = true;
+      step4PressureReleasedT = 0;
+    } else if (step4PressureLatched) {
+      step4PressureReleasedT += dt;
+      if (step4PressureReleasedT >= STEP4_PRESSURE_RELEASE_STABLE_SEC) {
+        step4PressureLatched = false;
+        step4PressureReleasedT = 0;
+      }
+    }
+
+    const step4HasBoxPress = step4PressureLatched;
+    const step4RecloseSpeed = STEP4_RECLOSE_SPEED_OPEN01 * (
+      step4HasBoxPress
+        ? STEP4_RECLOSE_WHILE_BOX_PRESS_SCALE
+        : STEP4_RECLOSE_RELEASED_BOOST
+    );
     const step4CloseCmdOpen01 = Math.max(0, clawOpen01 - step4RecloseSpeed * dt);
     setClawOpen01(step4CloseCmdOpen01, dt);
 
@@ -2457,7 +2483,25 @@ if (autoStarted) {
 
   } else if (autoStep === 5) {
     // ===== ステップ5: 完了 =====
-    // 完全に掴むための強制閉じは行わず、Step3/Step4で決まった角度を維持する。
+    // Step4終了直後の誤ラッチ残りをここでも解消し、圧力解除後はゆっくり閉じ切る。
+    const step5RawPress =
+      getClawContactLevel(clawLBody) === 2 ||
+      getClawContactLevel(clawRBody) === 2;
+    if (step5RawPress) {
+      step4PressureLatched = true;
+      step4PressureReleasedT = 0;
+    } else if (step4PressureLatched) {
+      step4PressureReleasedT += dt;
+      if (step4PressureReleasedT >= STEP4_PRESSURE_RELEASE_STABLE_SEC) {
+        step4PressureLatched = false;
+        step4PressureReleasedT = 0;
+      }
+    }
+
+    if (!step4PressureLatched) {
+      const step5CloseCmdOpen01 = Math.max(0, clawOpen01 - STEP5_RECLOSE_SPEED_OPEN01 * dt);
+      setClawOpen01(step5CloseCmdOpen01, dt);
+    }
   }
 }
 

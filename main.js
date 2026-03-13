@@ -292,6 +292,10 @@ const STEP4_RECLOSE_WHILE_BOX_PRESS_SCALE = 0.18; // 箱圧が残る間は追い
 const STEP4_PRESSURE_RELEASE_STABLE_SEC = 0.20; // 圧力解除を確定する安定時間（誤検知ガタつき対策）
 const STEP4_RECLOSE_RELEASED_BOOST = 2.2; // 圧が抜けた後は閉じ切るため追い閉じを少し強める
 const STEP5_RECLOSE_SPEED_OPEN01 = 0.22; // 完了フェーズでも圧が無ければゆっくり閉じ切る
+const STEP5_OPEN_HOLD_SEC = 0.22; // 持ち上げ完了直後、開いたまま保持する時間
+const STEP6_RECLOSE_TIME = 1.0; // 持ち上げ後に再度閉じる時間
+const ARM_RETURN_XZ_SPEED = 1.1; // 初期位置へ戻る横移動速度
+const AUTO_RESET_WAIT_SEC = 0.35; // 初期位置復帰後にUIを再有効化する待ち時間
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -379,11 +383,13 @@ const CLAW_CLOSE_PENETRATION_BLOCK = true;
 const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
 const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
 
-let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
+let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=開き保持, 6=再閉じ, 7=初期位置へ戻る, 8=UI復帰待ち
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
 let step3CloseStopOpen01 = null;
+let step6StartOpen01 = 0;
+let step6CloseStopOpen01 = null;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -430,6 +436,7 @@ const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっく�
 
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
+let startArmPos = null;
 
 
 
@@ -1231,9 +1238,15 @@ function startAutoSequence() {
   if (autoStarted || !armGroup) return;
   autoStarted = true;
 
+  if (!startArmPos) {
+    startArmPos = armGroup.position.clone();
+  }
+
   autoStep = 1;   // 開くから開始
   autoT = 0;
   dropStartY = armGroup.position.y;
+  step6StartOpen01 = 0;
+  step6CloseStopOpen01 = null;
   clawDropPenetrationT = 0;
   gripLeftFrames = 0;
   gripRightFrames = 0;
@@ -1879,6 +1892,7 @@ armGroup.add(armMesh);
 armGroup.position.set(-1.2, 1.6, 0.6);
 armGroup.rotation.y = Math.PI / 2;
 scene.add(armGroup);
+startArmPos = armGroup.position.clone();
 
 // ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
 // scene に追加した後でないとワールド座標が確定しないので、ここで計算する
@@ -2355,7 +2369,7 @@ function animate(t) {
   }
 
   // ===== 自動シーケンス（Three側）=====
-  // ステップ: 1=開く → 2=下げる → 3=閉じる → 4=上げる → 5=完了
+  // ステップ: 1=開く → 2=下げる → 3=閉じる → 4=上げる → 5=開き保持 → 6=再閉じ → 7=初期位置へ戻る → 8=UI復帰待ち
 if (autoStarted) {
   if (autoStep === 1) {
     // ===== ステップ1: 爪を開く =====
@@ -2499,28 +2513,78 @@ if (autoStarted) {
     if (armGroup.position.y >= targetY - 1e-6) {
       armGroup.position.y = targetY;
       autoStep = 5;
+      autoT = 0;
     }
 
   } else if (autoStep === 5) {
-    // ===== ステップ5: 完了 =====
-    // Step4終了直後の誤ラッチ残りをここでも解消し、圧力解除後はゆっくり閉じ切る。
-    const step5RawPress =
-      getClawContactLevel(clawLBody) === 2 ||
-      getClawContactLevel(clawRBody) === 2;
-    if (step5RawPress) {
-      step4PressureLatched = true;
-      step4PressureReleasedT = 0;
-    } else if (step4PressureLatched) {
-      step4PressureReleasedT += dt;
-      if (step4PressureReleasedT >= STEP4_PRESSURE_RELEASE_STABLE_SEC) {
-        step4PressureLatched = false;
-        step4PressureReleasedT = 0;
-      }
+    // ===== ステップ5: 持ち上げ直後の開き保持 =====
+    autoT += dt;
+    setClawOpen01(clawOpen01, dt);
+    if (autoT >= STEP5_OPEN_HOLD_SEC) {
+      autoStep = 6;
+      autoT = 0;
+      step6StartOpen01 = clawOpen01;
+      step6CloseStopOpen01 = null;
     }
 
-    if (!step4PressureLatched) {
-      const step5CloseCmdOpen01 = Math.max(0, clawOpen01 - STEP5_RECLOSE_SPEED_OPEN01 * dt);
-      setClawOpen01(step5CloseCmdOpen01, dt);
+  } else if (autoStep === 6) {
+    // ===== ステップ6: 持ち上げ後に再閉じ =====
+    // 下げ後の閉じ工程(ステップ3)と同様、過圧で閉じ回転を停止して押し込みを防ぐ。
+    autoT += dt;
+    const closeT = THREE.MathUtils.clamp(autoT / STEP6_RECLOSE_TIME, 0, 1);
+    const closeCmdOpen01Raw = THREE.MathUtils.lerp(step6StartOpen01, 0, closeT);
+    const closeOverPressure =
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
+
+    if (closeOverPressure && step6CloseStopOpen01 == null) {
+      step6CloseStopOpen01 = clawOpen01;
+    }
+
+    const closeCmdOpen01 = step6CloseStopOpen01 == null
+      ? closeCmdOpen01Raw
+      : Math.max(step6CloseStopOpen01, closeCmdOpen01Raw);
+    setClawOpen01(closeCmdOpen01, dt);
+
+    if (autoT >= STEP6_RECLOSE_TIME) {
+      autoStep = 7;
+      autoT = 0;
+    }
+
+  } else if (autoStep === 7) {
+    // ===== ステップ7: 初期位置へ戻る =====
+    if (!startArmPos) {
+      startArmPos = armGroup.position.clone();
+    }
+
+    const nextX = THREE.MathUtils.damp(armGroup.position.x, startArmPos.x, ARM_RETURN_XZ_SPEED, dt);
+    const nextZ = THREE.MathUtils.damp(armGroup.position.z, startArmPos.z, ARM_RETURN_XZ_SPEED, dt);
+    armGroup.position.x = nextX;
+    armGroup.position.z = nextZ;
+    armGroup.position.y = startArmPos.y;
+
+    const doneX = Math.abs(armGroup.position.x - startArmPos.x) <= 0.01;
+    const doneZ = Math.abs(armGroup.position.z - startArmPos.z) <= 0.01;
+    if (doneX && doneZ) {
+      armGroup.position.x = startArmPos.x;
+      armGroup.position.z = startArmPos.z;
+      autoStep = 8;
+      autoT = 0;
+    }
+
+  } else if (autoStep === 8) {
+    // ===== ステップ8: 少し待ってUIを初期状態に戻す =====
+    autoT += dt;
+    if (autoT >= AUTO_RESET_WAIT_SEC) {
+      autoStep = 0;
+      autoStarted = false;
+      phase = 0;
+      holdMove.x = 0;
+      holdMove.z = 0;
+      arrowBtn1.setEnabled(true);
+      arrowBtn2.setEnabled(false);
     }
   }
 }
@@ -2534,7 +2598,7 @@ if (autoStarted) {
     boxReleaseFrames += 1;
   }
 
-  const autoSequenceBusy = autoStarted && autoStep > 0 && autoStep < 5;
+  const autoSequenceBusy = autoStarted && autoStep > 0 && autoStep < 8;
   if (
     CLAW_AUTORETURN_TO_CLOSED &&
     !autoSequenceBusy &&

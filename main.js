@@ -287,7 +287,8 @@ const CLAW_AUTORETURN_TO_CLOSED = false;
 const CLAW_RELEASE_DEBOUNCE_FRAMES = 6;
 const CLAW_RETURN_SPEED_OPEN01 = 2.5;
 const STEP4_PRESS_RELEASE_OPEN_SPEED = 0.9; // 上昇中の強圧迫時に刺さりを逃がす微小な開き速度
-const STEP4_RECLOSE_SPEED_OPEN01 = 0.35; // Step3で回転停止しても、上昇中はゆっくり閉じ目標へ戻す
+const STEP4_RECLOSE_SPEED_OPEN01 = 0.12; // Step3で回転停止しても、上昇中は弱く閉じ目標へ戻す
+const STEP4_RECLOSE_WHILE_BOX_PRESS_SCALE = 0.18; // 箱圧が残る間は追い閉じをさらに弱め、押し込み圧を抑える
 
 const CLAW_BOX_PRESS_HOLD_FRAMES = 6;
 const CLAW_STOP_CLOSE_ON_BOX_PRESS = true;
@@ -2435,7 +2436,14 @@ if (autoStarted) {
     const targetY = dropStartY;
 
     // Step3で圧迫停止していても、上昇フェーズでは閉じ方向の目標を継続する。
-    const step4CloseCmdOpen01 = Math.max(0, clawOpen01 - STEP4_RECLOSE_SPEED_OPEN01 * dt);
+    // ただし箱圧が残る間は追い閉じをさらに弱め、閉じ圧が強くなりすぎないようにする。
+    const step4HasBoxPress =
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
+    const step4RecloseSpeed = STEP4_RECLOSE_SPEED_OPEN01 * (step4HasBoxPress ? STEP4_RECLOSE_WHILE_BOX_PRESS_SCALE : 1.0);
+    const step4CloseCmdOpen01 = Math.max(0, clawOpen01 - step4RecloseSpeed * dt);
     setClawOpen01(step4CloseCmdOpen01, dt);
 
     // 上昇は常に実行する。掴み判定に依存すると

@@ -378,12 +378,19 @@ const CLAW_CLOSE_PENETRATION_BLOCK = true;
 // ===== Fix 4: Step4 圧迫ラッチ定数 =====
 const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
 const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
+const POST_LIFT_OPEN_HOLD_SEC = 0.35;
+const POST_LIFT_CLOSE_TIME = 0.85;
+const POST_LIFT_CLOSE_WAIT_MAX_SEC = 1.1;
+const ARM_RETURN_HOME_SPEED = 1.35;
+const RETURN_READY_DELAY_SEC = 0.45;
 
-let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=完了
+let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=持ち上げ後オープン維持, 6=持ち上げ後クローズ, 7=初期位置へ戻る, 8=再開待機
 let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
 let step3CloseStopOpen01 = null;
+let step6StartOpen01 = 0;
+let step6CloseStopOpen01 = null;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -423,6 +430,8 @@ let step2LockY = 0;
 // Fix 4: Step4 圧迫ラッチ状態
 let step4PressureLatched = false;
 let step4PressureReleasedT = 0;
+let clawPassiveRuntimeEnabled = true;
+let armHomePosition = null;
 
 
 // ===== つかみ（Constraint）設定 =====
@@ -922,59 +931,76 @@ function setClawOpen01(open01, dt = 1 / 60) {
   }
   }
 
-  const passiveL = applyPassiveOpenByBoxWeight(
-    nextL,
-    targetL,
-    levelL,
-    CLAW_L_CLOSED,
-    CLAW_L_OPEN,
-    clawPassiveOpenVelL,
-    clawPassiveOpenOffsetL,
-    clawPassiveLoadL,
-    clawPassiveFilteredLoadL,
-    clawPassiveLoadLagTL,
-    clawPassiveHadPressL,
-    dt,
-    clawBoxPressFramesL,
-    clawLBody,
-  );
-  nextL = passiveL.nextAngle;
-  clawPassiveOpenVelL = passiveL.nextVel;
-  clawPassiveOpenOffsetL = passiveL.nextOffset;
-  clawPassiveLoadL = passiveL.nextLoad;
-  clawPassiveFilteredLoadL = passiveL.nextFilteredLoad;
-  clawPassiveLoadLagTL = passiveL.nextLoadLagT;
-  clawPassiveHadPressL = passiveL.nextHadBoxPressure;
+  let passiveL = null;
+  let passiveR = null;
+  if (clawPassiveRuntimeEnabled) {
+    passiveL = applyPassiveOpenByBoxWeight(
+      nextL,
+      targetL,
+      levelL,
+      CLAW_L_CLOSED,
+      CLAW_L_OPEN,
+      clawPassiveOpenVelL,
+      clawPassiveOpenOffsetL,
+      clawPassiveLoadL,
+      clawPassiveFilteredLoadL,
+      clawPassiveLoadLagTL,
+      clawPassiveHadPressL,
+      dt,
+      clawBoxPressFramesL,
+      clawLBody,
+    );
+    nextL = passiveL.nextAngle;
+    clawPassiveOpenVelL = passiveL.nextVel;
+    clawPassiveOpenOffsetL = passiveL.nextOffset;
+    clawPassiveLoadL = passiveL.nextLoad;
+    clawPassiveFilteredLoadL = passiveL.nextFilteredLoad;
+    clawPassiveLoadLagTL = passiveL.nextLoadLagT;
+    clawPassiveHadPressL = passiveL.nextHadBoxPressure;
 
-  const passiveR = applyPassiveOpenByBoxWeight(
-    nextR,
-    targetR,
-    levelR,
-    CLAW_R_CLOSED,
-    CLAW_R_OPEN,
-    clawPassiveOpenVelR,
-    clawPassiveOpenOffsetR,
-    clawPassiveLoadR,
-    clawPassiveFilteredLoadR,
-    clawPassiveLoadLagTR,
-    clawPassiveHadPressR,
-    dt,
-    clawBoxPressFramesR,
-    clawRBody,
-  );
-  nextR = passiveR.nextAngle;
-  clawPassiveOpenVelR = passiveR.nextVel;
-  clawPassiveOpenOffsetR = passiveR.nextOffset;
-  clawPassiveLoadR = passiveR.nextLoad;
-  clawPassiveFilteredLoadR = passiveR.nextFilteredLoad;
-  clawPassiveLoadLagTR = passiveR.nextLoadLagT;
-  clawPassiveHadPressR = passiveR.nextHadBoxPressure;
+    passiveR = applyPassiveOpenByBoxWeight(
+      nextR,
+      targetR,
+      levelR,
+      CLAW_R_CLOSED,
+      CLAW_R_OPEN,
+      clawPassiveOpenVelR,
+      clawPassiveOpenOffsetR,
+      clawPassiveLoadR,
+      clawPassiveFilteredLoadR,
+      clawPassiveLoadLagTR,
+      clawPassiveHadPressR,
+      dt,
+      clawBoxPressFramesR,
+      clawRBody,
+    );
+    nextR = passiveR.nextAngle;
+    clawPassiveOpenVelR = passiveR.nextVel;
+    clawPassiveOpenOffsetR = passiveR.nextOffset;
+    clawPassiveLoadR = passiveR.nextLoad;
+    clawPassiveFilteredLoadR = passiveR.nextFilteredLoad;
+    clawPassiveLoadLagTR = passiveR.nextLoadLagT;
+    clawPassiveHadPressR = passiveR.nextHadBoxPressure;
+  } else {
+    clawPassiveOpenVelL = 0;
+    clawPassiveOpenVelR = 0;
+    clawPassiveOpenOffsetL = 0;
+    clawPassiveOpenOffsetR = 0;
+    clawPassiveLoadL = 0;
+    clawPassiveLoadR = 0;
+    clawPassiveFilteredLoadL = 0;
+    clawPassiveFilteredLoadR = 0;
+    clawPassiveLoadLagTL = 0;
+    clawPassiveLoadLagTR = 0;
+    clawPassiveHadPressL = false;
+    clawPassiveHadPressR = false;
+  }
 
   if (ENABLE_CLAW_LOAD_DEBUG_LOG) {
     clawLoadDebugCounter += 1;
     if (clawLoadDebugCounter % CLAW_LOAD_DEBUG_LOG_INTERVAL_FRAMES === 0) {
-      const dbgL = passiveL.debug;
-      const dbgR = passiveR.debug;
+      const dbgL = passiveL?.debug;
+      const dbgR = passiveR?.debug;
       if (dbgL && dbgR) {
         console.log(
           `[ClawLoad] L(load=${dbgL.load.toFixed(3)}, open=${dbgL.passiveOffset.toFixed(3)}, return=${dbgL.returnScale.toFixed(2)}, angle=${dbgL.finalAngle.toFixed(3)}) ` +
@@ -1193,6 +1219,14 @@ arrowUI.appendChild(arrowBtn2);
 arrowBtn1.setEnabled(true);
 arrowBtn2.setEnabled(false);
 
+function resetControlArrowsForNextRound() {
+  holdMove.x = 0;
+  holdMove.z = 0;
+  phase = 0;
+  arrowBtn1.setEnabled(true);
+  arrowBtn2.setEnabled(false);
+}
+
 // 長押し開始/終了をまとめる関数
 function bindHoldMove(btn, onStart, onEnd) {
   const stop = () => {
@@ -1230,6 +1264,7 @@ function bindHoldMove(btn, onStart, onEnd) {
 function startAutoSequence() {
   if (autoStarted || !armGroup) return;
   autoStarted = true;
+  clawPassiveRuntimeEnabled = true;
 
   autoStep = 1;   // 開くから開始
   autoT = 0;
@@ -1260,6 +1295,8 @@ function startAutoSequence() {
   // Fix 4: ラッチ状態リセット
   step4PressureLatched = false;
   step4PressureReleasedT = 0;
+  step6StartOpen01 = 0;
+  step6CloseStopOpen01 = null;
 }
 
 
@@ -1878,6 +1915,7 @@ armGroup.add(armMesh);
 // 置き場所（左上）
 armGroup.position.set(-1.2, 1.6, 0.6);
 armGroup.rotation.y = Math.PI / 2;
+armHomePosition = armGroup.position.clone();
 scene.add(armGroup);
 
 // ★★★ 爪ヒットボックス（先端のみ）を生成 ★★★
@@ -2499,28 +2537,80 @@ if (autoStarted) {
     if (armGroup.position.y >= targetY - 1e-6) {
       armGroup.position.y = targetY;
       autoStep = 5;
+      autoT = 0;
+      clawPassiveRuntimeEnabled = false;
     }
 
   } else if (autoStep === 5) {
-    // ===== ステップ5: 完了 =====
-    // Step4終了直後の誤ラッチ残りをここでも解消し、圧力解除後はゆっくり閉じ切る。
-    const step5RawPress =
-      getClawContactLevel(clawLBody) === 2 ||
-      getClawContactLevel(clawRBody) === 2;
-    if (step5RawPress) {
-      step4PressureLatched = true;
-      step4PressureReleasedT = 0;
-    } else if (step4PressureLatched) {
-      step4PressureReleasedT += dt;
-      if (step4PressureReleasedT >= STEP4_PRESSURE_RELEASE_STABLE_SEC) {
-        step4PressureLatched = false;
-        step4PressureReleasedT = 0;
-      }
+    // ===== ステップ5: 持ち上げ後、現在の開き位置を少し維持 =====
+    autoT += dt;
+    setClawOpen01(clawOpen01, dt);
+
+    if (autoT >= POST_LIFT_OPEN_HOLD_SEC) {
+      autoStep = 6;
+      autoT = 0;
+      step6StartOpen01 = clawOpen01;
+      step6CloseStopOpen01 = null;
     }
 
-    if (!step4PressureLatched) {
-      const step5CloseCmdOpen01 = Math.max(0, clawOpen01 - STEP5_RECLOSE_SPEED_OPEN01 * dt);
-      setClawOpen01(step5CloseCmdOpen01, dt);
+  } else if (autoStep === 6) {
+    // ===== ステップ6: 持ち上げ後クローズ（Step3と同じ押し込み停止ロジック） =====
+    autoT += dt;
+    const closeT = THREE.MathUtils.clamp(autoT / POST_LIFT_CLOSE_TIME, 0, 1);
+    const closeCmdOpen01Raw = THREE.MathUtils.lerp(step6StartOpen01, 0, closeT);
+
+    const closeOverPressure =
+      clawBoxPressFramesL >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      clawBoxPressFramesR >= CLAW_BOX_PRESS_HOLD_FRAMES ||
+      getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD ||
+      getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
+
+    if (closeOverPressure && step6CloseStopOpen01 == null) {
+      step6CloseStopOpen01 = clawOpen01;
+    }
+
+    const closeCmdOpen01 = step6CloseStopOpen01 == null
+      ? closeCmdOpen01Raw
+      : Math.max(step6CloseStopOpen01, closeCmdOpen01Raw);
+    setClawOpen01(closeCmdOpen01, dt);
+
+    if (autoT >= POST_LIFT_CLOSE_WAIT_MAX_SEC) {
+      autoStep = 7;
+      autoT = 0;
+      clawPassiveRuntimeEnabled = true;
+      step4PressureLatched = false;
+      step4PressureReleasedT = 0;
+    }
+
+  } else if (autoStep === 7) {
+    // ===== ステップ7: 初期位置へ戻る =====
+    if (armHomePosition) {
+      const toHome = armHomePosition.clone().sub(armGroup.position);
+      const dist = toHome.length();
+      if (dist > 1e-6) {
+        const stepDist = Math.min(dist, ARM_RETURN_HOME_SPEED * dt);
+        toHome.normalize().multiplyScalar(stepDist);
+        armGroup.position.add(toHome);
+      }
+      if (dist <= 1e-4) {
+        armGroup.position.copy(armHomePosition);
+        autoStep = 8;
+        autoT = 0;
+      }
+    } else {
+      autoStep = 8;
+      autoT = 0;
+    }
+
+  } else if (autoStep === 8) {
+    // ===== ステップ8: 少し待って操作を再開 =====
+    autoT += dt;
+    setClawOpen01(0, dt);
+    if (autoT >= RETURN_READY_DELAY_SEC) {
+      autoStarted = false;
+      autoStep = 0;
+      autoT = 0;
+      resetControlArrowsForNextRound();
     }
   }
 }
@@ -2534,7 +2624,7 @@ if (autoStarted) {
     boxReleaseFrames += 1;
   }
 
-  const autoSequenceBusy = autoStarted && autoStep > 0 && autoStep < 5;
+  const autoSequenceBusy = autoStarted && autoStep > 0;
   if (
     CLAW_AUTORETURN_TO_CLOSED &&
     !autoSequenceBusy &&

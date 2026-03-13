@@ -331,6 +331,8 @@ const CLAW_LOAD_BACKSWING_DAMPING = 9.0;
 const CLAW_LOAD_DROP_DEADZONE = 0.08;
 const CLAW_LOAD_GRAVITY_CLOSE_ACCEL = 0.22; // 荷重抜け後に重力でじわっと閉じる擬似加速度
 const CLAW_LOAD_GRAVITY_CLOSE_MAX_SPEED = 0.18; // 受動開きより遅い閉じ速度上限
+const CLAW_PASSIVE_BALANCE_DEADZONE = 0.012; // 受動開き⇔重力閉じの境界で微振動しないための不感帯
+const CLAW_PASSIVE_SWITCH_VEL_DAMP = 0.35; // 圧状態の切替時に速度を減衰してガクつきを抑える
 const CLAW_LOAD_FILTER_RISE = 20.0; // 荷重立ち上がりは速く追従
 const CLAW_LOAD_FILTER_FALL = 6.5; // 荷重抜けは緩やかに減衰（単発開きにしない）
 const CLAW_LOAD_OPEN_GRAVITY_ACCEL = 0.0; // 重力単独では開かない（接触圧がある時のみ受動開き）
@@ -411,6 +413,8 @@ let clawPassiveFilteredLoadL = 0;
 let clawPassiveFilteredLoadR = 0;
 let clawPassiveLoadLagTL = 0;
 let clawPassiveLoadLagTR = 0;
+let clawPassiveHadPressL = false;
+let clawPassiveHadPressR = false;
 let clawLoadDebugCounter = 0;
 let step2BoxPressFrames = 0;
 let step2LockYActive = false;
@@ -737,7 +741,7 @@ function estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt) {
   return { load, penetration, support, downwardPress, contactCount, liftBoost, contactPenetration };
 }
 
-function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, currentOffset, prevLoad, currentFilteredLoad, loadLagT, dt, boxPressFrames, clawBody) {
+function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAngle, openAngle, currentVel, currentOffset, prevLoad, currentFilteredLoad, loadLagT, prevHadBoxPressure, dt, boxPressFrames, clawBody) {
   if (!CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT) {
     return {
       nextAngle: currentAngle,
@@ -746,6 +750,7 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
       nextLoad: 0,
       nextFilteredLoad: 0,
       nextLoadLagT: 0,
+      nextHadBoxPressure: false,
       debug: null,
     };
   }
@@ -779,11 +784,19 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   let nextVel = currentVel;
   let nextOffset = currentOffset;
 
-  const accel = (desiredOpen - currentOffset) * returnGain;
+  // 接触圧の有無が切り替わる瞬間は速度を一度落として、受動開き/閉じの反転ガタつきを抑える。
+  if (hasBoxPressure !== prevHadBoxPressure) {
+    nextVel *= CLAW_PASSIVE_SWITCH_VEL_DAMP;
+  }
+
+  const balanceError = desiredOpen - currentOffset;
+  const accel = balanceError * returnGain;
   nextVel += (accel + CLAW_LOAD_OPEN_GRAVITY_ACCEL) * dt;
 
   // 荷重抜け後はモーター駆動のように戻さず、重力に引かれる弱い閉じを優先する。
-  const gravityCloseActive = !hasBoxPressure && nextLoadLagT <= 0 && currentOffset > 1e-4;
+  // ただし境界付近は不感帯を設け、開閉の往復振動を避ける。
+  const nearPassiveBalance = Math.abs(balanceError) <= CLAW_PASSIVE_BALANCE_DEADZONE;
+  const gravityCloseActive = !hasBoxPressure && nextLoadLagT <= 0 && currentOffset > 1e-4 && !nearPassiveBalance;
   if (gravityCloseActive) {
     nextVel -= CLAW_LOAD_GRAVITY_CLOSE_ACCEL * dt;
   }
@@ -822,6 +835,7 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
       downwardPress: loadInfo.downwardPress || 0,
       finalAngle: nextAngle,
     },
+    nextHadBoxPressure: hasBoxPressure,
   };
 }
 
@@ -919,6 +933,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveLoadL,
     clawPassiveFilteredLoadL,
     clawPassiveLoadLagTL,
+    clawPassiveHadPressL,
     dt,
     clawBoxPressFramesL,
     clawLBody,
@@ -929,6 +944,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
   clawPassiveLoadL = passiveL.nextLoad;
   clawPassiveFilteredLoadL = passiveL.nextFilteredLoad;
   clawPassiveLoadLagTL = passiveL.nextLoadLagT;
+  clawPassiveHadPressL = passiveL.nextHadBoxPressure;
 
   const passiveR = applyPassiveOpenByBoxWeight(
     nextR,
@@ -941,6 +957,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
     clawPassiveLoadR,
     clawPassiveFilteredLoadR,
     clawPassiveLoadLagTR,
+    clawPassiveHadPressR,
     dt,
     clawBoxPressFramesR,
     clawRBody,
@@ -951,6 +968,7 @@ function setClawOpen01(open01, dt = 1 / 60) {
   clawPassiveLoadR = passiveR.nextLoad;
   clawPassiveFilteredLoadR = passiveR.nextFilteredLoad;
   clawPassiveLoadLagTR = passiveR.nextLoadLagT;
+  clawPassiveHadPressR = passiveR.nextHadBoxPressure;
 
   if (ENABLE_CLAW_LOAD_DEBUG_LOG) {
     clawLoadDebugCounter += 1;
@@ -1233,6 +1251,8 @@ function startAutoSequence() {
   clawPassiveFilteredLoadR = 0;
   clawPassiveLoadLagTL = 0;
   clawPassiveLoadLagTR = 0;
+  clawPassiveHadPressL = false;
+  clawPassiveHadPressR = false;
 
   step2BoxPressFrames = 0;
   step2LockYActive = false;

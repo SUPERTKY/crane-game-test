@@ -296,7 +296,7 @@ const CLAW_CLOSE_CONTACT_BLOCK_FRAMES = 1; // 箱接触直後から閉じ込み�
 const CLAW_PASSIVE_OPEN_BY_BOX_WEIGHT = true;
 // 圧力で開きにくくしたい時の全体つまみ（大きいほど開きにくい）
 // 目安: 0.85=開きやすい / 1.0=標準 / 1.15=少し開きにくい / 1.3=かなり開きにくい
-const CLAW_PRESSURE_OPEN_HARDNESS = 10000;
+const CLAW_PRESSURE_OPEN_HARDNESS = 1.0;
 const CLAW_PASSIVE_OPEN_ACCEL_PER_KG = 2.8 / CLAW_PRESSURE_OPEN_HARDNESS;
 const CLAW_PASSIVE_OPEN_DAMPING = 6.2;
 const CLAW_PASSIVE_OPEN_RESISTANCE = 1.9 * CLAW_PRESSURE_OPEN_HARDNESS;
@@ -752,14 +752,17 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
   const filteredLoad = THREE.MathUtils.lerp(prevLoad, loadInfo.load, filterAlpha);
 
   const effectiveLoad = Math.max(0, filteredLoad - CLAW_LOAD_OPEN_DEADZONE);
+  const hardness = Math.max(0.05, CLAW_PRESSURE_OPEN_HARDNESS);
+  const hardnessOpenScale = 1 / hardness;
+
   let desiredOpen = THREE.MathUtils.clamp(
-    effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST,
+    effectiveLoad * CLAW_LOAD_OPEN_GAIN * CLAW_LOAD_OPEN_CONTACT_BOOST * hardnessOpenScale,
     0,
-    CLAW_LOAD_OPEN_MAX,
+    CLAW_LOAD_OPEN_MAX * hardnessOpenScale,
   );
 
   if (hasBoxPressure && desiredOpen > 0) {
-    desiredOpen = Math.max(desiredOpen, CLAW_LOAD_MIN_VISIBLE_OPEN);
+    desiredOpen = Math.max(desiredOpen, CLAW_LOAD_MIN_VISIBLE_OPEN * hardnessOpenScale);
   }
   if (!hasBoxPressure) {
     desiredOpen = 0;

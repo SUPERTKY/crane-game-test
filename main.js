@@ -752,12 +752,10 @@ function applyPassiveOpenByBoxWeight(currentAngle, targetAngle, level, closedAng
     boxPressFrames >= CLAW_PASSIVE_OPEN_MIN_BOX_PRESS_FRAMES &&
     (level === 2 || boxContactHoldFrames > 0 || (lifting && boxPressFrames > 0));
 
-
   const loadInfo = estimateClawLoadFromContacts(clawBody, level, boxPressFrames, dt);
   const filterRate = loadInfo.load >= prevLoad ? CLAW_LOAD_FILTER_RISE : CLAW_LOAD_FILTER_FALL;
   const filterAlpha = 1 - Math.exp(-filterRate * dt);
   const filteredLoad = THREE.MathUtils.lerp(prevLoad, loadInfo.load, filterAlpha);
-
 
 
   const heldLoad = Math.max(loadInfo.load, prevLoad * Math.exp(-CLAW_LOAD_MEMORY_DECAY * dt));

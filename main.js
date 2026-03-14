@@ -34,7 +34,7 @@ const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
 const OZISAN_MODEL_PATH = "./models/ozisan.glb";
-const OZISAN_POSITION = { x: 0.95, y: 0.5, z: 0.95 };
+const OZISAN_POSITION = { x: -0.6, y: 0, z: 0.95 };
 const OZISAN_SCALE = WORLD_SCALE * 5;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで

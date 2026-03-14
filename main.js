@@ -14,6 +14,7 @@ let CLAW_SIGN = 1;     // 1 か -1 を試す（逆なら -1）
 const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速い）
 const ARM_HOLD_SPEED_X = 1; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 1; // 前移動速度（1秒あたり）
+const BOX_FALL_STOP_Y = -0.45; // この高さより下に落ちたら演出を出して3D停止
 const PHYSICS_FIXED_DT = 1 / 120;
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
@@ -1094,6 +1095,50 @@ document.body.style.margin = "0";
 document.body.style.overflow = "hidden";
 document.body.appendChild(renderer.domElement);
 
+const getOverlayStyle = document.createElement("style");
+getOverlayStyle.textContent = `
+  @keyframes get-pop-bounce {
+    0% { transform: translate(-50%, -50%) scale(0.25); }
+    45% { transform: translate(-50%, -50%) scale(1.16); }
+    58% { transform: translate(-50%, -50%) scale(0.94); }
+    71% { transform: translate(-50%, -50%) scale(1.06); }
+    82% { transform: translate(-50%, -50%) scale(0.97); }
+    90% { transform: translate(-50%, -50%) scale(1.02); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+  }
+
+  @keyframes get-backdrop-fade {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+`;
+document.head.appendChild(getOverlayStyle);
+
+const getBackdrop = document.createElement("div");
+getBackdrop.style.position = "fixed";
+getBackdrop.style.inset = "0";
+getBackdrop.style.background = "rgba(80, 80, 80, 0.66)";
+getBackdrop.style.opacity = "0";
+getBackdrop.style.pointerEvents = "none";
+getBackdrop.style.zIndex = "12000";
+getBackdrop.style.display = "none";
+
+const getImage = document.createElement("img");
+getImage.src = "./assets/get.png";
+getImage.style.position = "fixed";
+getImage.style.left = "50%";
+getImage.style.top = "50%";
+getImage.style.width = "min(48vw, 360px)";
+getImage.style.height = "auto";
+getImage.style.transform = "translate(-50%, -50%) scale(0.25)";
+getImage.style.transformOrigin = "50% 50%";
+getImage.style.pointerEvents = "none";
+getImage.style.zIndex = "12001";
+getImage.style.display = "none";
+
+document.body.appendChild(getBackdrop);
+document.body.appendChild(getImage);
+
 scene.add(new THREE.AmbientLight(0xffffff, 0.75));
 const dir = new THREE.DirectionalLight(0xffffff, 1.0);
 dir.position.set(2, 3, 2);
@@ -1153,6 +1198,34 @@ let boxBody, stick1Body, stick2Body;
 let stick3Mesh, stick4Mesh;
 let stick3Body, stick4Body;
 let craneBody;
+let is3DStoppedByFall = false;
+
+function triggerGetEffect() {
+  if (is3DStoppedByFall) return;
+  is3DStoppedByFall = true;
+
+  holdMove.x = 0;
+  holdMove.z = 0;
+  autoStarted = false;
+  autoStep = 0;
+  autoT = 0;
+
+  arrowBtn1?.setEnabled?.(false);
+  arrowBtn2?.setEnabled?.(false);
+  camBtn.disabled = true;
+  camBtn.style.pointerEvents = "none";
+  camBtn.style.opacity = "0.5";
+
+  getBackdrop.style.display = "block";
+  getBackdrop.style.animation = "none";
+  void getBackdrop.offsetWidth;
+  getBackdrop.style.animation = "get-backdrop-fade 300ms ease-out forwards";
+
+  getImage.style.display = "block";
+  getImage.style.animation = "none";
+  void getImage.offsetWidth;
+  getImage.style.animation = "get-pop-bounce 980ms cubic-bezier(0.2, 0.95, 0.2, 1) forwards";
+}
 
 function getBox3(obj3d) {
   return new THREE.Box3().setFromObject(obj3d);
@@ -2371,6 +2444,13 @@ function animate(t) {
   const dt = Math.min((t - lastT) / 1000, 1 / 30);
 
   lastT = t;
+
+  if (!is3DStoppedByFall && boxBody && boxBody.position.y < BOX_FALL_STOP_Y) {
+    triggerGetEffect();
+  }
+  if (is3DStoppedByFall) {
+    return;
+  }
 
   // ===== 長押し中のアーム移動（Three側）=====
   if (armGroup) {

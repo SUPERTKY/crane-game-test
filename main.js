@@ -444,6 +444,57 @@ const ARM_RISE_SPEED = 0.4;  // 上昇の速さ（1秒あたり）。ゆっく�
 
 let holdMove = { x: 0, z: 0 }; // 押してる間の移動方向
 let phase = 0; // 0:→のみ / 1:↑のみ / 2:→のみ(最後) / 3:全部無効
+let isArrowBeingHeld = false;
+
+const AUDIO_TRACKS = {
+  before: createLoopAudio("./assets/beforegame_music.mp3", 0.45),
+  move: createLoopAudio("./assets/move.mp3", 0.5),
+  play: createLoopAudio("./assets/play.mp3", 0.85),
+};
+let activeAudioKey = null;
+
+function createLoopAudio(src, volume = 1) {
+  const audio = new Audio(src);
+  audio.loop = true;
+  audio.preload = "auto";
+  audio.volume = volume;
+  return audio;
+}
+
+async function tryPlayAudio(audio) {
+  try {
+    await audio.play();
+  } catch {
+    // ブラウザの自動再生制限で弾かれるケースは、次のユーザー操作で再試行する。
+  }
+}
+
+function stopAudio(audio) {
+  audio.pause();
+  audio.currentTime = 0;
+}
+
+function updateBgmState() {
+  const inPlaySequence = autoStarted && autoStep >= 2 && autoStep <= 4;
+  const inBeforeState = !autoStarted && !isArrowBeingHeld && phase === 0;
+  const nextKey = inPlaySequence ? "play" : (isArrowBeingHeld ? "move" : (inBeforeState ? "before" : null));
+
+  if (nextKey === activeAudioKey) return;
+
+  Object.entries(AUDIO_TRACKS).forEach(([key, audio]) => {
+    if (key === nextKey) return;
+    stopAudio(audio);
+  });
+
+  activeAudioKey = nextKey;
+  if (!nextKey) return;
+
+  if (nextKey === "move") {
+    AUDIO_TRACKS.move.currentTime = 1;
+  }
+
+  tryPlayAudio(AUDIO_TRACKS[nextKey]);
+}
 
 
 
@@ -536,6 +587,9 @@ function showGetOverlay() {
   holdMove.z = 0;
   autoStarted = false;
   stop3dRequested = true;
+
+  Object.values(AUDIO_TRACKS).forEach((audio) => stopAudio(audio));
+  activeAudioKey = null;
 
   arrowUI.style.pointerEvents = "none";
   arrowUI.style.opacity = "0.45";
@@ -1283,6 +1337,8 @@ const arrowBtn2 = makeArrowButton(-90);   // ↑（90度回転）
 arrowUI.appendChild(arrowBtn1);
 arrowUI.appendChild(arrowBtn2);
 
+updateBgmState();
+
 // 初期：→だけ押せる
 arrowBtn1.setEnabled(true);
 arrowBtn2.setEnabled(false);
@@ -1290,9 +1346,11 @@ arrowBtn2.setEnabled(false);
 function resetControlArrowsForNextRound() {
   holdMove.x = 0;
   holdMove.z = 0;
+  isArrowBeingHeld = false;
   phase = 0;
   arrowBtn1.setEnabled(true);
   arrowBtn2.setEnabled(false);
+  updateBgmState();
 }
 
 // 長押し開始/終了をまとめる関数
@@ -1311,22 +1369,32 @@ function bindHoldMove(btn, onStart, onEnd) {
     btn._pid = e.pointerId;
     btn.setPointerCapture?.(e.pointerId);
 
+    isArrowBeingHeld = true;
     onStart();
+    updateBgmState();
   });
 
   // 指を離した/外れた/キャンセルされたら止める
   btn.addEventListener("pointerup", (e) => {
     if (btn._pid !== e.pointerId) return;
     stop();
+    isArrowBeingHeld = false;
     onEnd();
+    updateBgmState();
   });
   btn.addEventListener("pointercancel", (e) => {
     if (btn._pid !== e.pointerId) return;
     stop();
+    isArrowBeingHeld = false;
+    updateBgmState();
   });
   btn.addEventListener("pointerleave", () => {
     // captureしてるならleaveは無視でもOKだけど保険で止める
-    if (btn._pid != null) stop();
+    if (btn._pid != null) {
+      stop();
+      isArrowBeingHeld = false;
+      updateBgmState();
+    }
   });
 }
 function startAutoSequence() {
@@ -1336,6 +1404,7 @@ function startAutoSequence() {
 
   autoStep = 1;   // 開くから開始
   autoT = 0;
+  updateBgmState();
   dropStartY = armGroup.position.y;
   clawDropPenetrationT = 0;
   gripLeftFrames = 0;
@@ -2708,6 +2777,7 @@ if (autoStarted) {
   }
 
   const autoSequenceBusy = autoStarted && autoStep > 0;
+  updateBgmState();
   if (
     CLAW_AUTORETURN_TO_CLOSED &&
     !autoSequenceBusy &&

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { ConvexHull } from "three/examples/jsm/math/ConvexHull.js";
 import * as CANNON from "cannon-es";
 
 const WORLD_SCALE = 0.25;
@@ -56,15 +57,10 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
   const posAttr = mesh.geometry?.attributes?.position;
   if (!posAttr || posAttr.count < 4) return null;
 
-  const indexAttr = mesh.geometry.index;
-  const vertices = [];
-  const faces = [];
-
   const worldV = new THREE.Vector3();
   const localV = new THREE.Vector3();
   const keyToNewIndex = new Map();
-  const remap = new Array(posAttr.count);
-
+  const uniquePoints = [];
   const keyFor = (v) => `${v.x.toFixed(5)}|${v.y.toFixed(5)}|${v.z.toFixed(5)}`;
 
   for (let i = 0; i < posAttr.count; i++) {
@@ -72,43 +68,87 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     localV.copy(worldV).sub(bodyWorldPos).applyQuaternion(invBodyWorldQuat);
 
     const k = keyFor(localV);
-    const existing = keyToNewIndex.get(k);
-    if (existing !== undefined) {
-      remap[i] = existing;
-      continue;
-    }
+    if (keyToNewIndex.has(k)) continue;
 
-    const newIndex = vertices.length;
-    keyToNewIndex.set(k, newIndex);
-    remap[i] = newIndex;
-    vertices.push(new CANNON.Vec3(localV.x, localV.y, localV.z));
+    keyToNewIndex.set(k, uniquePoints.length);
+    uniquePoints.push(localV.clone());
   }
 
-  const triCount = indexAttr ? indexAttr.count / 3 : posAttr.count / 3;
-  for (let t = 0; t < triCount; t++) {
-    const ia = indexAttr ? indexAttr.getX(t * 3) : t * 3;
-    const ib = indexAttr ? indexAttr.getX(t * 3 + 1) : t * 3 + 1;
-    const ic = indexAttr ? indexAttr.getX(t * 3 + 2) : t * 3 + 2;
+  if (uniquePoints.length < 4) return null;
 
-    const a = remap[ia];
-    const b = remap[ib];
-    const c = remap[ic];
-    if (a === b || b === c || c === a) continue;
-    faces.push([a, b, c]);
+  const hull = new ConvexHull().setFromPoints(uniquePoints);
+  if (!hull.faces || hull.faces.length < 4) return null;
+
+  const pointToIndex = new Map();
+  uniquePoints.forEach((pt, idx) => pointToIndex.set(pt, idx));
+
+  const faces = [];
+  for (const face of hull.faces) {
+    const indices = [];
+    let edge = face.edge;
+    if (!edge) continue;
+
+    do {
+      const idx = pointToIndex.get(edge.head().point);
+      if (idx === undefined) break;
+      indices.push(idx);
+      edge = edge.next;
+    } while (edge && edge !== face.edge);
+
+    if (indices.length >= 3) faces.push(indices);
   }
 
-  if (vertices.length < 4 || faces.length < 4) return null;
+  if (faces.length < 4) return null;
 
-    const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
+  const vertices = uniquePoints.map((v) => new CANNON.Vec3(v.x, v.y, v.z));
+  orientFacesOutward(vertices, faces);
+
+  const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
   const center = centerConvex(shape);
 
   return {
     shape,
-    offset: center, // ★ ここが重要
+    offset: center,
     orient: new CANNON.Quaternion(0, 0, 0, 1),
   };
-
 }
+
+function orientFacesOutward(vertices, faces) {
+  if (!vertices.length || !faces.length) return;
+
+  const ab = new CANNON.Vec3();
+  const ac = new CANNON.Vec3();
+  const normal = new CANNON.Vec3();
+  const toOther = new CANNON.Vec3();
+  const EPS = 1e-8;
+
+  for (let i = 0; i < faces.length; i++) {
+    const face = faces[i];
+    if (!face || face.length < 3) continue;
+
+    const va = vertices[face[0]];
+    const vb = vertices[face[1]];
+    const vc = vertices[face[2]];
+    if (!va || !vb || !vc) continue;
+
+    vb.vsub(va, ab);
+    vc.vsub(va, ac);
+    ab.cross(ac, normal);
+
+    let maxDot = -Infinity;
+    for (let vi = 0; vi < vertices.length; vi++) {
+      if (face.includes(vi)) continue;
+      vertices[vi].vsub(va, toOther);
+      const d = normal.dot(toOther);
+      if (d > maxDot) maxDot = d;
+    }
+
+    if (maxDot > EPS) {
+      faces[i] = [...face].reverse();
+    }
+  }
+}
+
 function computeClawBoxes(meshRoot, {
   // 小さくして引っかかりを減らす（橋渡しなら有効）
   shrink = 0.98,

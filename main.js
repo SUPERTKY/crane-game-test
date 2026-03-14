@@ -633,7 +633,7 @@ function getClawContactLevel(body) {
     if (c.bi !== body && c.bj !== body) continue;
 
     const other = c.bi === body ? c.bj : c.bi;
-    if (!other || isGripperBody(other)) continue;
+    if (!other || other === armBody) continue;
     if (other === boxBody) return 2;
     level = Math.max(level, 1);
   }
@@ -2259,47 +2259,33 @@ const tmpQuat = new THREE.Quaternion();
 const prevClawL = new CANNON.Vec3();
 const prevClawR = new CANNON.Vec3();
 
-function isGripperBody(body) {
-  return !!body && (
-    body === clawLBody ||
-    body === clawRBody ||
-    body === armBody ||
-    body === stick1Body ||
-    body === stick2Body ||
-    body === stick3Body ||
-    body === stick4Body
-  );
-}
-
-function isAnyGripperContactingBox() {
-  if (!boxBody) return false;
-  for (const c of world.contacts) {
-    const bi = c.bi;
-    const bj = c.bj;
-    if ((isGripperBody(bi) && bj === boxBody) || (isGripperBody(bj) && bi === boxBody)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function isClawPressingSomething() {
   if (!clawLBody || !clawRBody) return false;
 
   for (const c of world.contacts) {
     const bi = c.bi;
     const bj = c.bj;
-    const gripperHit = isGripperBody(bi) || isGripperBody(bj);
-    if (!gripperHit) continue;
+    const clawHit = (bi === clawLBody || bi === clawRBody || bj === clawLBody || bj === clawRBody);
+    if (!clawHit) continue;
 
-    const other = isGripperBody(bi) ? bj : bi;
-    if (other && !isGripperBody(other)) return true;
+    const other = bi === clawLBody || bi === clawRBody ? bj : bi;
+    if (other && other !== armBody) return true;
   }
   return false;
 }
 
 function isClawPressingBox() {
-  return isAnyGripperContactingBox();
+  if (!clawLBody || !clawRBody || !boxBody) return false;
+
+  for (const c of world.contacts) {
+    const bi = c.bi;
+    const bj = c.bj;
+    const isClawBox =
+      ((bi === clawLBody || bi === clawRBody) && bj === boxBody) ||
+      ((bj === clawLBody || bj === clawRBody) && bi === boxBody);
+    if (isClawBox) return true;
+  }
+  return false;
 }
 
 // ===== Fix 1: 侵入方向を除外した kinematic 追従 =====
@@ -2491,7 +2477,7 @@ if (autoStarted) {
     autoT += dt;
     const targetY = dropStartY - ARM_DROP_DIST;
     const pressing = isClawPressingSomething();
-    const boxPressing = isAnyGripperContactingBox();
+    const boxPressing = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
     const dropSpeed = pressing ? ARM_DROP_SPEED * 0.25 : ARM_DROP_SPEED;
 
     const finishDropStep = () => {
@@ -2592,7 +2578,9 @@ if (autoStarted) {
 
     // Step3で圧迫停止していても、上昇フェーズでは閉じ方向の目標を継続する。
     // 圧力判定はヒステリシスを持たせ、解除誤判定によるガタガタした押し込みを防ぐ。
-    const step4ContactingBox = isAnyGripperContactingBox();
+    const step4ContactingBox =
+      getClawContactLevel(clawLBody) === 2 ||
+      getClawContactLevel(clawRBody) === 2;
     const step4DeepPenetration =
       getMaxPenetrationDepth(clawLBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD * 1.25 ||
       getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD * 1.25;
@@ -2712,7 +2700,7 @@ if (autoStarted) {
 }
 
   // 箱接触が切れたあと、一定フレームで爪を完全クローズへ戻す（瞬断対策つき）
-  const boxTouchingNow = isAnyGripperContactingBox();
+  const boxTouchingNow = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
   if (boxTouchingNow) {
     boxContactFrames += 1;
     boxReleaseFrames = 0;

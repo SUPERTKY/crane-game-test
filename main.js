@@ -16,6 +16,15 @@ const ARM_HOLD_SPEED_Z = 1; // 前移動速度（1秒あたり）
 const PHYSICS_FIXED_DT = 1 / 120;
 const BOX_FALL_STOP_Y = -1;
 const SHOW_PHYSICS_DEBUG = true;
+const DEBUG_LAYER_DEFAULTS = {
+  hitbox: true,
+  bodyShape: true,
+  contactPoint: true,
+  centerOfMass: true,
+  forceVector: true,
+  hingePoint: true,
+};
+const debugLayerState = { ...DEBUG_LAYER_DEFAULTS };
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整
 const CLAW_BOX_FRICTION = 0.03;
@@ -1258,6 +1267,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 document.body.style.margin = "0";
 document.body.style.overflow = "hidden";
 document.body.appendChild(renderer.domElement);
+createPhysicsDebugPanel();
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.75));
 const dir = new THREE.DirectionalLight(0xffffff, 1.0);
@@ -1656,7 +1666,7 @@ function createWireframeBoxMesh(halfExtents, color = 0x00ffff) {
 }
 
 function addBodyDebugMeshes(body, color = 0x00ffff) {
-  if (!SHOW_PHYSICS_DEBUG || !body) return;
+  if (!SHOW_PHYSICS_DEBUG || !debugLayerState.bodyShape || !body) return;
 
   for (let i = 0; i < body.shapes.length; i++) {
     const shape = body.shapes[i];
@@ -1755,6 +1765,13 @@ function ensureContactDebugPool(count) {
 function updateContactDebugMarkers() {
   if (!SHOW_PHYSICS_DEBUG) return;
 
+  if (!debugLayerState.contactPoint) {
+    for (let i = 0; i < contactDebugMeshes.length; i++) {
+      contactDebugMeshes[i].visible = false;
+    }
+    return;
+  }
+
   const showCount = Math.min(world.contacts.length, CONTACT_DEBUG_LIMIT);
   ensureContactDebugPool(showCount);
 
@@ -1834,7 +1851,7 @@ function computeBodyLocalCenterOfMassApprox(body) {
 }
 
 function ensureBoxComDebugMesh() {
-  if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh) return;
+  if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh || !debugLayerState.centerOfMass) return;
 
   boxComDebugMesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.022, 16, 16),
@@ -1977,6 +1994,121 @@ function updateForceDebugArrows() {
   }
 }
 
+function ensureForceDebugArrows() {
+  if (!SHOW_PHYSICS_DEBUG || !debugLayerState.forceVector || !scene || boxGravityArrow || boxVelocityArrow) return;
+
+  boxGravityArrow = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 0.2, 0xff3366, 0.04, 0.02);
+  boxVelocityArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.2, 0x33ff99, 0.04, 0.02);
+  boxGravityArrow.renderOrder = 9999;
+  boxVelocityArrow.renderOrder = 9999;
+  scene.add(boxGravityArrow);
+  scene.add(boxVelocityArrow);
+}
+
+function updateForceDebugArrows() {
+  if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
+  if (!debugLayerState.forceVector) {
+    if (boxGravityArrow) boxGravityArrow.visible = false;
+    if (boxVelocityArrow) boxVelocityArrow.visible = false;
+    return;
+  }
+  ensureForceDebugArrows();
+  if (!boxGravityArrow || !boxVelocityArrow) return;
+
+  const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
+  const worldCom = new CANNON.Vec3();
+  boxBody.quaternion.vmult(localCom, worldCom);
+  worldCom.vadd(boxBody.position, worldCom);
+
+  boxGravityArrow.visible = true;
+  boxVelocityArrow.visible = true;
+  boxGravityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
+  boxVelocityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
+
+  const gravityVec = world.gravity.clone();
+  const gravityLen = gravityVec.length();
+  if (gravityLen > 1e-6) {
+    boxGravityArrow.setDirection(new THREE.Vector3(gravityVec.x / gravityLen, gravityVec.y / gravityLen, gravityVec.z / gravityLen));
+    boxGravityArrow.setLength(THREE.MathUtils.clamp(gravityLen * 0.04, 0.12, 0.5), 0.04, 0.02);
+  }
+
+  const v = boxBody.velocity;
+  const velLen = Math.hypot(v.x, v.y, v.z);
+  if (velLen > 1e-5) {
+    boxVelocityArrow.setDirection(new THREE.Vector3(v.x / velLen, v.y / velLen, v.z / velLen));
+    boxVelocityArrow.setLength(THREE.MathUtils.clamp(velLen * 0.12, 0.08, 0.45), 0.04, 0.02);
+  } else {
+    boxVelocityArrow.setDirection(new THREE.Vector3(1, 0, 0));
+    boxVelocityArrow.setLength(0.0001, 0.0001, 0.0001);
+  }
+}
+
+function applyHingeDebugVisibility() {
+  const visible = !!debugLayerState.hingePoint;
+  for (const marker of hingeDebugMarkers) {
+    marker.visible = visible;
+  }
+}
+
+function createPhysicsDebugPanel() {
+  if (!SHOW_PHYSICS_DEBUG) return;
+
+  const panel = document.createElement("div");
+  panel.style.cssText = [
+    "position:fixed",
+    "top:14px",
+    "left:14px",
+    "z-index:12000",
+    "padding:10px 12px",
+    "border-radius:10px",
+    "background:rgba(0,0,0,0.62)",
+    "color:#fff",
+    "font:500 12px/1.35 system-ui,-apple-system,sans-serif",
+    "backdrop-filter:blur(2px)",
+  ].join(";");
+
+  const title = document.createElement("div");
+  title.textContent = "可視化レイヤー";
+  title.style.cssText = "font-weight:700;margin-bottom:6px;";
+  panel.appendChild(title);
+
+  const items = [
+    ["hitbox", "ヒットボックス"],
+    ["bodyShape", "物理シェイプ"],
+    ["contactPoint", "接触点"],
+    ["centerOfMass", "重心"],
+    ["forceVector", "力/速度ベクトル"],
+    ["hingePoint", "ヒンジ点"],
+  ];
+
+  for (const [key, label] of items) {
+    const row = document.createElement("label");
+    row.style.cssText = "display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer;";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!debugLayerState[key];
+    input.addEventListener("change", () => {
+      debugLayerState[key] = input.checked;
+      applyHingeDebugVisibility();
+    });
+
+    const text = document.createElement("span");
+    text.textContent = label;
+
+    row.appendChild(input);
+    row.appendChild(text);
+    panel.appendChild(row);
+  }
+
+  const hint = document.createElement("div");
+  hint.textContent = "※ 初期状態ですべてON";
+  hint.style.cssText = "margin-top:6px;opacity:0.8;font-size:11px;";
+  panel.appendChild(hint);
+
+  document.body.appendChild(panel);
+}
+
 
 // クリック処理（順番制御）
 function createStickBody(stickMesh, stickParams) {
@@ -2041,6 +2173,8 @@ function addDebugDotLocal(parent, localPos, size = 0.03) {
   m.renderOrder = 9999;
   m.position.copy(localPos);   // ★ローカル座標
   parent.add(m);               // ★親にぶら下げる
+  m.visible = !!debugLayerState.hingePoint;
+  hingeDebugMarkers.push(m);
   return m;
 }
 

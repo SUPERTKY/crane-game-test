@@ -449,7 +449,7 @@ let isArrowBeingHeld = false;
 const AUDIO_TRACKS = {
   before: createLoopAudio("./assets/beforegame_music.mp3", 0.45),
   move: createLoopAudio("./assets/move.mp3", 0.5),
-  play: createLoopAudio("./assets/play.mp3", 0.55),
+  play: createLoopAudio("./assets/play.mp3", 0.85),
 };
 let activeAudioKey = null;
 
@@ -476,7 +476,8 @@ function stopAudio(audio) {
 
 function updateBgmState() {
   const inPlaySequence = autoStarted && autoStep >= 2 && autoStep <= 4;
-  const nextKey = inPlaySequence ? "play" : (isArrowBeingHeld ? "move" : "before");
+  const inBeforeState = !autoStarted && !isArrowBeingHeld && phase === 0;
+  const nextKey = inPlaySequence ? "play" : (isArrowBeingHeld ? "move" : (inBeforeState ? "before" : null));
 
   if (nextKey === activeAudioKey) return;
 
@@ -486,6 +487,12 @@ function updateBgmState() {
   });
 
   activeAudioKey = nextKey;
+  if (!nextKey) return;
+
+  if (nextKey === "move") {
+    AUDIO_TRACKS.move.currentTime = 1;
+  }
+
   tryPlayAudio(AUDIO_TRACKS[nextKey]);
 }
 

@@ -43,9 +43,6 @@ const MAX_BOX_ANGULAR_SPEED_FREE = 30.0;
 const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
-const OZISAN_MODEL_PATH = "./models/ozisan.glb";
-const OZISAN_POSITION = { x: 0.95, y: -0.5, z: -4 };
-const OZISAN_SCALE = WORLD_SCALE * 5;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -2119,7 +2116,7 @@ function threeVecToCannon(v) { return new CANNON.Vec3(v.x, v.y, v.z); }
 function threeQuatToCannon(q) { return new CANNON.Quaternion(q.x, q.y, q.z, q.w); }
 
 async function loadScene() {
-  const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf, ozisanGltf] =
+  const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf] =
     await Promise.all([
       loader.loadAsync("./models/Stick.glb"),
       loader.loadAsync("./models/box.glb"),
@@ -2127,7 +2124,6 @@ async function loadScene() {
       loader.loadAsync("./models/Arm_unit.glb"),
       loader.loadAsync("./models/ClawL.glb"),
       loader.loadAsync("./models/ClawR.glb"),
-      loader.loadAsync(OZISAN_MODEL_PATH),
     ]);
 function addDebugDotLocal(parent, localPos, size = 0.03) {
   // 重心マーカー（球）と見分けやすいよう、ヒンジ位置は立方体マーカーで表示
@@ -2285,13 +2281,6 @@ syncKinematicBodiesToVisualNow();
   centerToOriginAndGround(craneMesh);
   craneMesh.position.y -= 2;
   scene.add(craneMesh);
-
-  // ===== おじさん（見た目のみ / 当たり判定なし）=====
-  const ozisanMesh = ozisanGltf.scene;
-  ozisanMesh.scale.setScalar(OZISAN_SCALE);
-  centerToOriginAndGround(ozisanMesh);
-  ozisanMesh.position.set(OZISAN_POSITION.x, OZISAN_POSITION.y, OZISAN_POSITION.z);
-  scene.add(ozisanMesh);
 
   // ===== 物理：クレーン本体（静的・形状自動）=====
   craneMesh.updateMatrixWorld(true);

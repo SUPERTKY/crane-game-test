@@ -2062,7 +2062,7 @@ stick1Mesh.position.set(0, 0, -stickGap / 2);
 stick2Mesh.position.set(0, 0,  stickGap / 2);
 
 const highY = 0.2;      // 高さ
-const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
+const highGap = 0.9;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);
 

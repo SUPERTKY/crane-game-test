@@ -1951,50 +1951,6 @@ function updateClawHitboxVisuals() {
 }
 
 function ensureForceDebugArrows() {
-  if (!SHOW_PHYSICS_DEBUG || !scene || boxGravityArrow || boxVelocityArrow) return;
-
-  boxGravityArrow = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 0.2, 0xff3366, 0.04, 0.02);
-  boxVelocityArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.2, 0x33ff99, 0.04, 0.02);
-  boxGravityArrow.renderOrder = 9999;
-  boxVelocityArrow.renderOrder = 9999;
-  scene.add(boxGravityArrow);
-  scene.add(boxVelocityArrow);
-}
-
-function updateForceDebugArrows() {
-  if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
-  ensureForceDebugArrows();
-  if (!boxGravityArrow || !boxVelocityArrow) return;
-
-  const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
-  const worldCom = new CANNON.Vec3();
-  boxBody.quaternion.vmult(localCom, worldCom);
-  worldCom.vadd(boxBody.position, worldCom);
-
-  boxGravityArrow.visible = true;
-  boxVelocityArrow.visible = true;
-  boxGravityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
-  boxVelocityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
-
-  const gravityVec = world.gravity.clone();
-  const gravityLen = gravityVec.length();
-  if (gravityLen > 1e-6) {
-    boxGravityArrow.setDirection(new THREE.Vector3(gravityVec.x / gravityLen, gravityVec.y / gravityLen, gravityVec.z / gravityLen));
-    boxGravityArrow.setLength(THREE.MathUtils.clamp(gravityLen * 0.04, 0.12, 0.5), 0.04, 0.02);
-  }
-
-  const v = boxBody.velocity;
-  const velLen = Math.hypot(v.x, v.y, v.z);
-  if (velLen > 1e-5) {
-    boxVelocityArrow.setDirection(new THREE.Vector3(v.x / velLen, v.y / velLen, v.z / velLen));
-    boxVelocityArrow.setLength(THREE.MathUtils.clamp(velLen * 0.12, 0.08, 0.45), 0.04, 0.02);
-  } else {
-    boxVelocityArrow.setDirection(new THREE.Vector3(1, 0, 0));
-    boxVelocityArrow.setLength(0.0001, 0.0001, 0.0001);
-  }
-}
-
-function ensureForceDebugArrows() {
   if (!SHOW_PHYSICS_DEBUG || !debugLayerState.forceVector || !scene || boxGravityArrow || boxVelocityArrow) return;
 
   boxGravityArrow = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 0.2, 0xff3366, 0.04, 0.02);

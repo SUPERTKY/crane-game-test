@@ -99,7 +99,9 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
 
   if (vertices.length < 4 || faces.length < 4) return null;
 
-    const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
+  orientFacesOutward(vertices, faces);
+
+  const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
   const center = centerConvex(shape);
 
   return {
@@ -108,6 +110,51 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     orient: new CANNON.Quaternion(0, 0, 0, 1),
   };
 
+}
+
+function orientFacesOutward(vertices, faces) {
+  if (!vertices.length || !faces.length) return;
+
+  const center = new CANNON.Vec3(0, 0, 0);
+  for (const v of vertices) {
+    center.x += v.x;
+    center.y += v.y;
+    center.z += v.z;
+  }
+  center.x /= vertices.length;
+  center.y /= vertices.length;
+  center.z /= vertices.length;
+
+  const ab = new CANNON.Vec3();
+  const ac = new CANNON.Vec3();
+  const normal = new CANNON.Vec3();
+  const toFace = new CANNON.Vec3();
+
+  for (let i = 0; i < faces.length; i++) {
+    const face = faces[i];
+    if (!face || face.length < 3) continue;
+
+    const va = vertices[face[0]];
+    const vb = vertices[face[1]];
+    const vc = vertices[face[2]];
+    if (!va || !vb || !vc) continue;
+
+    vb.vsub(va, ab);
+    vc.vsub(va, ac);
+    ab.cross(ac, normal);
+
+    // 面中心 -> 形状中心 の向きと法線が逆なら頂点順を反転
+    const faceCenter = new CANNON.Vec3(
+      (va.x + vb.x + vc.x) / 3,
+      (va.y + vb.y + vc.y) / 3,
+      (va.z + vb.z + vc.z) / 3,
+    );
+    faceCenter.vsub(center, toFace);
+
+    if (normal.dot(toFace) < 0) {
+      faces[i] = [face[0], face[2], face[1]];
+    }
+  }
 }
 function computeClawBoxes(meshRoot, {
   // 小さくして引っかかりを減らす（橋渡しなら有効）

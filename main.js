@@ -536,6 +536,42 @@ camBtn.appendChild(camImg);
 
 document.body.appendChild(camBtn);
 
+// ===== リセットボタン =====
+const resetBtn = document.createElement("button");
+resetBtn.type = "button";
+resetBtn.title = "リセット";
+resetBtn.style.position = "fixed";
+resetBtn.style.left = "18px";
+resetBtn.style.bottom = "18px";
+resetBtn.style.width = "100px";
+resetBtn.style.height = "100px";
+resetBtn.style.padding = "0";
+resetBtn.style.border = "none";
+resetBtn.style.borderRadius = "12px";
+resetBtn.style.background = "rgba(255,255,255,0.85)";
+resetBtn.style.boxShadow = "0 6px 18px rgba(0,0,0,0.18)";
+resetBtn.style.cursor = "pointer";
+resetBtn.style.display = "grid";
+resetBtn.style.placeItems = "center";
+resetBtn.style.userSelect = "none";
+resetBtn.style.zIndex = "9999";
+
+const resetImg = document.createElement("img");
+resetImg.src = "./assets/Reset.png";
+resetImg.alt = "reset";
+resetImg.style.width = "70%";
+resetImg.style.height = "70%";
+resetImg.style.pointerEvents = "none";
+resetImg.addEventListener("error", () => {
+  resetBtn.textContent = "RESET";
+  resetBtn.style.fontWeight = "700";
+  resetBtn.style.fontSize = "18px";
+  resetBtn.style.color = "#333";
+});
+resetBtn.appendChild(resetImg);
+
+document.body.appendChild(resetBtn);
+
 // ===== カメラ切替ロジック =====
 const FRONT_POS = new THREE.Vector3(0, 2, 3.2);
 const RIGHT_POS = new THREE.Vector3(3.2, 2, 0);
@@ -596,6 +632,8 @@ function showGetOverlay() {
   arrowUI.style.opacity = "0.45";
   camBtn.style.pointerEvents = "none";
   camBtn.style.opacity = "0.6";
+  resetBtn.style.pointerEvents = "none";
+  resetBtn.style.opacity = "0.6";
 
   getOverlay.style.display = "block";
   requestAnimationFrame(() => {
@@ -1204,6 +1242,10 @@ applyCamera();
 camBtn.addEventListener("click", () => {
   camMode = 1 - camMode;
   applyCamera();
+});
+
+resetBtn.addEventListener("click", () => {
+  window.location.reload();
 });
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });

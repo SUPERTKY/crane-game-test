@@ -507,7 +507,7 @@ function updateBgmState({ forceReplay = false } = {}) {
 
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xeeeeee);
+scene.background = new THREE.Color(0x000000);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 100);
 camera.position.set(0, 2, 3.2);

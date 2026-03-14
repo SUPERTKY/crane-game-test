@@ -1,7 +1,3 @@
-
-
-
-
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
@@ -383,11 +379,11 @@ const CLAW_CLOSE_PENETRATION_BLOCK = true;
 const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
 const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
 const POST_LIFT_REOPEN_TARGET_OPEN01 = 0.72;
-const POST_LIFT_REOPEN_DELAY_SEC = 3.0;
+const POST_LIFT_REOPEN_DELAY_SEC = 1.5;
 const POST_LIFT_REOPEN_TIME = 0.26;
-const POST_LIFT_OPEN_HOLD_SEC = 2.0;
+const POST_LIFT_OPEN_HOLD_SEC = 1.0;
 const POST_LIFT_CLOSE_TIME = 0.95;
-const POST_LIFT_CLOSE_HOLD_SEC = 1.0;
+const POST_LIFT_CLOSE_HOLD_SEC = 0.5;
 const POST_LIFT_CLOSE_WAIT_MAX_SEC = POST_LIFT_CLOSE_TIME + POST_LIFT_CLOSE_HOLD_SEC;
 const ARM_RETURN_HOME_SPEED = 1.35;
 const RETURN_READY_DELAY_SEC = 0.45;

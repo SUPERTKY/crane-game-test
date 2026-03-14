@@ -99,7 +99,9 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
 
   if (vertices.length < 4 || faces.length < 4) return null;
 
-    const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
+  orientFacesOutward(vertices, faces);
+
+  const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
   const center = centerConvex(shape);
 
   return {
@@ -108,6 +110,47 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     orient: new CANNON.Quaternion(0, 0, 0, 1),
   };
 
+}
+
+function orientFacesOutward(vertices, faces) {
+  if (!vertices.length || !faces.length) return;
+
+  const ab = new CANNON.Vec3();
+  const ac = new CANNON.Vec3();
+  const normal = new CANNON.Vec3();
+  const toOther = new CANNON.Vec3();
+  const EPS = 1e-8;
+
+  for (let i = 0; i < faces.length; i++) {
+    const face = faces[i];
+    if (!face || face.length < 3) continue;
+
+    const ia = face[0];
+    const ib = face[1];
+    const ic = face[2];
+    const va = vertices[ia];
+    const vb = vertices[ib];
+    const vc = vertices[ic];
+    if (!va || !vb || !vc) continue;
+
+    vb.vsub(va, ab);
+    vc.vsub(va, ac);
+    ab.cross(ac, normal);
+
+    // ConvexPolyhedron の CCW 判定:
+    // 外向き法線なら、面以外の頂点 p について normal・(p - va) <= 0 になる。
+    let maxDot = -Infinity;
+    for (let vi = 0; vi < vertices.length; vi++) {
+      if (vi === ia || vi === ib || vi === ic) continue;
+      vertices[vi].vsub(va, toOther);
+      const d = normal.dot(toOther);
+      if (d > maxDot) maxDot = d;
+    }
+
+    if (maxDot > EPS) {
+      faces[i] = [ia, ic, ib];
+    }
+  }
 }
 function computeClawBoxes(meshRoot, {
   // 小さくして引っかかりを減らす（橋渡しなら有効）

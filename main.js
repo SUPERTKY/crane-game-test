@@ -383,11 +383,12 @@ const CLAW_CLOSE_PENETRATION_BLOCK = true;
 const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
 const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
 const POST_LIFT_REOPEN_TARGET_OPEN01 = 0.72;
-const POST_LIFT_REOPEN_TIME = 0.26;
+const POST_LIFT_REOPEN_TIME = 0.34;
 const POST_LIFT_OPEN_HOLD_SEC = 0.24;
-const POST_LIFT_CLOSE_TIME = 0.95;
+const POST_LIFT_CLOSE_TIME = 1.12;
 const POST_LIFT_CLOSE_WAIT_MAX_SEC = 1.2;
 const ARM_RETURN_HOME_SPEED = 1.35;
+const RETURN_MOVE_START_DELAY_SEC = 0.18;
 const RETURN_READY_DELAY_SEC = 0.45;
 
 let autoStep = 0;     // 0=待機, 1=開く, 2=下げる, 3=閉じる, 4=上げる, 5=持ち上げ後に指定開度まで再オープン, 6=持ち上げ後クローズ, 7=初期位置へ戻る, 8=再開待機
@@ -2668,22 +2669,25 @@ if (autoStarted) {
 
   } else if (autoStep === 7) {
     // ===== ステップ7: 初期位置へ戻る =====
-    if (armHomePosition) {
-      const toHome = armHomePosition.clone().sub(armGroup.position);
-      const dist = toHome.length();
-      if (dist > 1e-6) {
-        const stepDist = Math.min(dist, ARM_RETURN_HOME_SPEED * dt);
-        toHome.normalize().multiplyScalar(stepDist);
-        armGroup.position.add(toHome);
-      }
-      if (dist <= 1e-4) {
-        armGroup.position.copy(armHomePosition);
+    autoT += dt;
+    if (autoT >= RETURN_MOVE_START_DELAY_SEC) {
+      if (armHomePosition) {
+        const toHome = armHomePosition.clone().sub(armGroup.position);
+        const dist = toHome.length();
+        if (dist > 1e-6) {
+          const stepDist = Math.min(dist, ARM_RETURN_HOME_SPEED * dt);
+          toHome.normalize().multiplyScalar(stepDist);
+          armGroup.position.add(toHome);
+        }
+        if (dist <= 1e-4) {
+          armGroup.position.copy(armHomePosition);
+          autoStep = 8;
+          autoT = 0;
+        }
+      } else {
         autoStep = 8;
         autoT = 0;
       }
-    } else {
-      autoStep = 8;
-      autoT = 0;
     }
 
   } else if (autoStep === 8) {

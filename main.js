@@ -465,6 +465,13 @@ const AUDIO_TRACKS = {
   move: createLoopAudio("./assets/move.mp3", 0.5),
   play: createLoopAudio("./assets/play.mp3", 0.9),
 };
+const COMPLETE_AUDIO = (() => {
+  const audio = new Audio("./assets/Complete.mp3");
+  audio.loop = false;
+  audio.preload = "auto";
+  audio.volume = 0.9;
+  return audio;
+})();
 let activeAudioKey = null;
 
 function createLoopAudio(src, volume = 1) {
@@ -641,6 +648,9 @@ function showGetOverlay() {
 
   Object.values(AUDIO_TRACKS).forEach((audio) => stopAudio(audio));
   activeAudioKey = null;
+
+  COMPLETE_AUDIO.currentTime = 0;
+  tryPlayAudio(COMPLETE_AUDIO);
 
   arrowUI.style.pointerEvents = "none";
   arrowUI.style.opacity = "0.45";

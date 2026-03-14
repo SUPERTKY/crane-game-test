@@ -157,9 +157,9 @@ function computeClawBoxes(meshRoot, {
 
   return shapes;
 }
-function makeStickCylinderParamsFixedX(stickMesh, radiusScale = 0.5) {
-  stickMesh.updateWorldMatrix(true, true);
-  const s = getBoxSize(stickMesh);
+function makeCylinderParamsFixedX(Mesh, radiusScale = 0.5) {
+  Mesh.updateWorldMatrix(true, true);
+  const s = getBoxSize(Mesh);
 
   const dims = [s.x, s.y, s.z];
   const longestAxis = dims.indexOf(Math.max(...dims)); // 0=x, 1=y, 2=z
@@ -1177,7 +1177,7 @@ world.allowSleep = false;
 world.defaultContactMaterial.friction = 0.35;
 world.defaultContactMaterial.restitution = 0.0;
 
-const matStick = new CANNON.Material("stick");
+const mat = new CANNON.Material("");
 const matBox = new CANNON.Material("box");
 const matClaw = new CANNON.Material("claw");
 const matCrane = new CANNON.Material("crane");
@@ -1186,7 +1186,7 @@ world.solver.iterations = 20;
 world.solver.tolerance = 0.001;
 
 world.addContactMaterial(
-  new CANNON.ContactMaterial(matStick, matBox, {
+  new CANNON.ContactMaterial(mat, matBox, {
     friction: 0.12,
     restitution: 0.0,
   })
@@ -2059,7 +2059,7 @@ const stickGap = 0.5;   // 低い橋の間隔
 stick1Mesh.position.set(0, 0, -stickGap / 2);
 stick2Mesh.position.set(0, 0,  stickGap / 2);
 
-const highY = 0.3;      // 高さ
+const highY = 0.2;      // 高さ
 const highGap = 1.1;    // ★「幅」= 2本の距離（橋より大きく）
 stick3Mesh.position.set(0, highY, -highGap / 2);
 stick4Mesh.position.set(0, highY,  highGap / 2);

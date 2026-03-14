@@ -461,11 +461,12 @@ function createLoopAudio(src, volume = 1) {
   return audio;
 }
 
-async function tryPlayAudio(audio) {
+async function tryPlayAudio(audio, key = null) {
   try {
     await audio.play();
   } catch {
     // ブラウザの自動再生制限で弾かれるケースは、次のユーザー操作で再試行する。
+    if (key && activeAudioKey === key) activeAudioKey = null;
   }
 }
 
@@ -474,12 +475,12 @@ function stopAudio(audio) {
   audio.currentTime = 0;
 }
 
-function updateBgmState() {
+function updateBgmState({ forceReplay = false } = {}) {
   const inPlaySequence = autoStarted && autoStep >= 2 && autoStep <= 4;
   const inBeforeState = !autoStarted && !isArrowBeingHeld && phase === 0;
   const nextKey = inPlaySequence ? "play" : (isArrowBeingHeld ? "move" : (inBeforeState ? "before" : null));
 
-  if (nextKey === activeAudioKey) return;
+  if (!forceReplay && nextKey === activeAudioKey) return;
 
   Object.entries(AUDIO_TRACKS).forEach(([key, audio]) => {
     if (key === nextKey) return;
@@ -493,7 +494,7 @@ function updateBgmState() {
     AUDIO_TRACKS.move.currentTime = 1;
   }
 
-  tryPlayAudio(AUDIO_TRACKS[nextKey]);
+  tryPlayAudio(AUDIO_TRACKS[nextKey], nextKey);
 }
 
 
@@ -1338,6 +1339,12 @@ arrowUI.appendChild(arrowBtn1);
 arrowUI.appendChild(arrowBtn2);
 
 updateBgmState();
+
+const unlockInitialBgm = () => {
+  updateBgmState({ forceReplay: true });
+};
+window.addEventListener("pointerdown", unlockInitialBgm, { once: true });
+window.addEventListener("keydown", unlockInitialBgm, { once: true });
 
 // 初期：→だけ押せる
 arrowBtn1.setEnabled(true);

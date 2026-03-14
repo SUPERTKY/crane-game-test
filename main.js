@@ -16,6 +16,7 @@ const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速
 const ARM_HOLD_SPEED_X = 1; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 1; // 前移動速度（1秒あたり）
 const PHYSICS_FIXED_DT = 1 / 120;
+const BOX_FALL_STOP_Y = -0.45;
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整
@@ -499,6 +500,69 @@ arrowUI.style.gap = "18px";
 arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
+
+const getOverlay = document.createElement("div");
+getOverlay.style.position = "fixed";
+getOverlay.style.inset = "0";
+getOverlay.style.background = "rgba(80, 80, 80, 0.58)";
+getOverlay.style.opacity = "0";
+getOverlay.style.pointerEvents = "none";
+getOverlay.style.transition = "opacity 260ms ease-out";
+getOverlay.style.zIndex = "12000";
+getOverlay.style.display = "none";
+
+const getImg = document.createElement("img");
+getImg.src = "./assets/get.png";
+getImg.alt = "GET";
+getImg.style.position = "absolute";
+getImg.style.left = "50%";
+getImg.style.top = "50%";
+getImg.style.transform = "translate(-50%, -50%) scale(0.22)";
+getImg.style.width = "min(42vw, 300px)";
+getImg.style.maxWidth = "300px";
+getImg.style.minWidth = "180px";
+getImg.style.opacity = "0";
+getImg.style.filter = "drop-shadow(0 14px 20px rgba(0,0,0,0.30))";
+getOverlay.appendChild(getImg);
+document.body.appendChild(getOverlay);
+
+let hasShownGetOverlay = false;
+let stop3dRequested = false;
+
+function showGetOverlay() {
+  if (hasShownGetOverlay) return;
+  hasShownGetOverlay = true;
+
+  holdMove.x = 0;
+  holdMove.z = 0;
+  autoStarted = false;
+  stop3dRequested = true;
+
+  arrowUI.style.pointerEvents = "none";
+  arrowUI.style.opacity = "0.45";
+  camBtn.style.pointerEvents = "none";
+  camBtn.style.opacity = "0.6";
+
+  getOverlay.style.display = "block";
+  requestAnimationFrame(() => {
+    getOverlay.style.opacity = "1";
+    getImg.animate(
+      [
+        { transform: "translate(-50%, -50%) scale(0.22)", opacity: 0, offset: 0 },
+        { transform: "translate(-50%, -50%) scale(1.1)", opacity: 1, offset: 0.38 },
+        { transform: "translate(-50%, -50%) scale(0.9)", opacity: 1, offset: 0.55 },
+        { transform: "translate(-50%, -50%) scale(1.03)", opacity: 1, offset: 0.72 },
+        { transform: "translate(-50%, -50%) scale(0.97)", opacity: 1, offset: 0.84 },
+        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, offset: 1 },
+      ],
+      {
+        duration: 980,
+        easing: "ease-out",
+        fill: "forwards",
+      }
+    );
+  });
+}
 
 // ===== Fix 1: 爪→箱の接触法線と侵入深度を算出 =====
 function computeContactNormalAgainstBox(body) {
@@ -2366,7 +2430,7 @@ function syncKinematicBodiesToVisualNow() {
 }
 
 function animate(t) {
-  requestAnimationFrame(animate);
+  if (stop3dRequested) return;
 
   if (lastT == null) lastT = t;
   const dt = Math.min((t - lastT) / 1000, 1 / 30);
@@ -2702,11 +2766,19 @@ world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
   if (boxMesh && boxBody) {
     boxMesh.position.copy(boxBody.position);
     boxMesh.quaternion.copy(boxBody.quaternion);
+
+    if (boxBody.position.y <= BOX_FALL_STOP_Y) {
+      showGetOverlay();
+    }
   }
 
 
 
   renderer.render(scene, camera);
+
+  if (!stop3dRequested) {
+    requestAnimationFrame(animate);
+  }
   
 }
 

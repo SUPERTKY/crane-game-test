@@ -16,7 +16,7 @@ const ARM_HOLD_SPEED_X = 1; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 1; // 前移動速度（1秒あたり）
 const PHYSICS_FIXED_DT = 1 / 120;
 const BOX_FALL_STOP_Y = -1;
-const SHOW_PHYSICS_DEBUG = true;
+const SHOW_PHYSICS_DEBUG = false;
 const DEBUG_LAYER_DEFAULTS = {
   hitbox: true,
   bodyShape: true,

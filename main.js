@@ -383,10 +383,11 @@ const CLAW_CLOSE_PENETRATION_BLOCK = true;
 const STEP4_PRESSURE_OPEN_MAX = 0.25;       // 圧迫時に開く上限
 const STEP4_PRESSURE_RECLOSE_DELAY = 0.15;  // 圧迫解消後に閉じ再開するまでの待ち（秒）
 const POST_LIFT_REOPEN_TARGET_OPEN01 = 0.72;
+const POST_LIFT_REOPEN_DELAY_SEC = 3.0;
 const POST_LIFT_REOPEN_TIME = 0.26;
-const POST_LIFT_OPEN_HOLD_SEC = 0.45;
+const POST_LIFT_OPEN_HOLD_SEC = 2.0;
 const POST_LIFT_CLOSE_TIME = 0.95;
-const POST_LIFT_CLOSE_HOLD_SEC = 0.45;
+const POST_LIFT_CLOSE_HOLD_SEC = 1.0;
 const POST_LIFT_CLOSE_WAIT_MAX_SEC = POST_LIFT_CLOSE_TIME + POST_LIFT_CLOSE_HOLD_SEC;
 const ARM_RETURN_HOME_SPEED = 1.35;
 const RETURN_READY_DELAY_SEC = 0.45;
@@ -2626,12 +2627,13 @@ if (autoStarted) {
   } else if (autoStep === 5) {
     // ===== ステップ5: 持ち上げ後に指定開度まで開く =====
     autoT += dt;
-    const reopenT = THREE.MathUtils.clamp(autoT / POST_LIFT_REOPEN_TIME, 0, 1);
+    const reopenElapsed = Math.max(0, autoT - POST_LIFT_REOPEN_DELAY_SEC);
+    const reopenT = THREE.MathUtils.clamp(reopenElapsed / POST_LIFT_REOPEN_TIME, 0, 1);
     const reopenTargetOpen01 = Math.max(step5StartOpen01, POST_LIFT_REOPEN_TARGET_OPEN01);
     const reopenCmdOpen01 = THREE.MathUtils.lerp(step5StartOpen01, reopenTargetOpen01, reopenT);
     setClawOpen01(reopenCmdOpen01, dt);
 
-    if (autoT >= POST_LIFT_REOPEN_TIME + POST_LIFT_OPEN_HOLD_SEC) {
+    if (autoT >= POST_LIFT_REOPEN_DELAY_SEC + POST_LIFT_REOPEN_TIME + POST_LIFT_OPEN_HOLD_SEC) {
       autoStep = 6;
       autoT = 0;
       step6StartOpen01 = clawOpen01;

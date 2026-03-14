@@ -16,7 +16,7 @@ const ARM_MOVE_SPEED = 1.2; // 1秒あたりの移動速度（大きいほど速
 const ARM_HOLD_SPEED_X = 1; // 横移動速度（1秒あたり）
 const ARM_HOLD_SPEED_Z = 1; // 前移動速度（1秒あたり）
 const PHYSICS_FIXED_DT = 1 / 120;
-const BOX_FALL_STOP_Y = -0.45;
+const BOX_FALL_STOP_Y = -1;
 const SHOW_PHYSICS_DEBUG = true;
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整

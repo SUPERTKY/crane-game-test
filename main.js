@@ -463,7 +463,7 @@ let isArrowBeingHeld = false;
 const AUDIO_TRACKS = {
   before: createLoopAudio("./assets/beforegame_music.mp3", 0.45),
   move: createLoopAudio("./assets/move.mp3", 0.5),
-  play: createLoopAudio("./assets/play.mp3", 2),
+  play: createLoopAudio("./assets/play.mp3", 0.9),
 };
 let activeAudioKey = null;
 

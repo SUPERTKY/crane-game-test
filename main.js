@@ -116,11 +116,15 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
 function orientFacesOutward(vertices, faces) {
   if (!vertices.length || !faces.length) return;
 
+  const polyCenter = new CANNON.Vec3();
+  for (const v of vertices) polyCenter.vadd(v, polyCenter);
+  polyCenter.scale(1 / vertices.length, polyCenter);
+
   const ab = new CANNON.Vec3();
   const ac = new CANNON.Vec3();
   const normal = new CANNON.Vec3();
-  const toOther = new CANNON.Vec3();
-  const EPS = 1e-8;
+  const faceCenter = new CANNON.Vec3();
+  const centerDir = new CANNON.Vec3();
 
   for (let i = 0; i < faces.length; i++) {
     const face = faces[i];
@@ -135,15 +139,16 @@ function orientFacesOutward(vertices, faces) {
     vc.vsub(va, ac);
     ab.cross(ac, normal);
 
-    let maxDot = -Infinity;
-    for (let vi = 0; vi < vertices.length; vi++) {
-      if (face.includes(vi)) continue;
-      vertices[vi].vsub(va, toOther);
-      const d = normal.dot(toOther);
-      if (d > maxDot) maxDot = d;
+    faceCenter.set(0, 0, 0);
+    for (const idx of face) {
+      faceCenter.vadd(vertices[idx], faceCenter);
     }
+    faceCenter.scale(1 / face.length, faceCenter);
+    faceCenter.vsub(polyCenter, centerDir);
 
-    if (maxDot > EPS) {
+    // 法線が「重心→面中心」方向と逆を向いているなら面の頂点順を反転
+    // （右手系のCCWで、外向き法線になるようそろえる）
+    if (normal.dot(centerDir) < 0) {
       faces[i] = [...face].reverse();
     }
   }

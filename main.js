@@ -341,6 +341,7 @@ const ENABLE_CLAW_LOAD_DEBUG_LOG = false;
 const CLAW_LOAD_DEBUG_LOG_INTERVAL_FRAMES = 20;
 const STEP2_BOX_PRESS_FRAMES_TO_ABORT = 4;
 const STEP2_LOCK_ON_BOX_PRESS = true;
+const STEP2_DROP_TIMEOUT_SEC = 6.0; // 圧力状態で停止しても無限に降下工程に留まらないための上限時間
 const CONTACT_KINEMATIC_MAX_ANGLE_STEP = 0.022;
 const FREE_KINEMATIC_MAX_ANGLE_STEP = 0.05; // 非接触時の追従回転も抑え、接触復帰直後の過大押し込みを減らす
 const PRESSING_KINEMATIC_MAX_ANGLE_STEP = 0.008; // 箱を押し続けている間は回転追従をさらに絞り、急な食い込みトルクを防ぐ
@@ -2407,6 +2408,7 @@ if (autoStarted) {
 
   } else if (autoStep === 2) {
     // ===== ステップ2: アームを下げる =====
+    autoT += dt;
     const targetY = dropStartY - ARM_DROP_DIST;
     const pressing = isClawPressingSomething();
     const boxPressing = getClawContactLevel(clawLBody) === 2 || getClawContactLevel(clawRBody) === 2;
@@ -2433,6 +2435,10 @@ if (autoStarted) {
       }
     } else {
       step2BoxPressFrames = Math.max(0, step2BoxPressFrames - 1);
+      if (STEP2_LOCK_ON_BOX_PRESS && step2LockYActive && step2BoxPressFrames === 0) {
+        // 接触が解消したらロックを解除し、降下を再開する
+        step2LockYActive = false;
+      }
     }
 
     if (step2LockYActive) {
@@ -2446,7 +2452,11 @@ if (autoStarted) {
     if (boxPressing && pressing) clawDropPenetrationT += dt;
     else clawDropPenetrationT = 0;
 
-    if (clawDropPenetrationT >= CLAW_DROP_PENETRATION_ABORT_SEC || step2BoxPressFrames >= STEP2_BOX_PRESS_FRAMES_TO_ABORT) {
+    if (
+      clawDropPenetrationT >= CLAW_DROP_PENETRATION_ABORT_SEC ||
+      step2BoxPressFrames >= STEP2_BOX_PRESS_FRAMES_TO_ABORT ||
+      autoT >= STEP2_DROP_TIMEOUT_SEC
+    ) {
       finishDropStep();
     } else if (armGroup.position.y <= targetY + 1e-6) {
       finishDropStep();

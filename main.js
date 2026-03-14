@@ -1,4 +1,5 @@
 
+
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
@@ -1648,6 +1649,7 @@ let clawRVis = [];
 const physicsDebugEntries = [];
 const contactDebugMeshes = [];
 let boxComDebugMesh = null;
+const hingeDebugMarkers = [];
 let boxGravityArrow = null;
 let boxVelocityArrow = null;
 
@@ -1742,7 +1744,8 @@ function updateBodyDebugMeshes() {
   if (!SHOW_PHYSICS_DEBUG) return;
 
   for (const entry of physicsDebugEntries) {
-    entry.mesh.visible = true;
+    entry.mesh.visible = debugLayerState.bodyShape;
+    if (!debugLayerState.bodyShape) continue;
     updateHitboxFromBody(entry.body, entry.mesh, entry.shapeOffset, entry.shapeOrient);
   }
 }
@@ -1870,6 +1873,10 @@ function ensureBoxComDebugMesh() {
 
 function updateBoxCenterOfMassDebug() {
   if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
+  if (!debugLayerState.centerOfMass) {
+    if (boxComDebugMesh) boxComDebugMesh.visible = false;
+    return;
+  }
   ensureBoxComDebugMesh();
   if (!boxComDebugMesh) return;
   boxComDebugMesh.visible = true;
@@ -1935,7 +1942,8 @@ function updateClawHitboxVisuals() {
   for (let i = 0; i < clawLHitboxes.length; i++) {
     const vis = clawLVis[i];
     if (!vis) continue; // ★nullガード
-    vis.visible = true;
+    vis.visible = debugLayerState.hitbox;
+    if (!debugLayerState.hitbox) continue;
     const hb = clawLHitboxes[i];
     updateHitboxFromBody(clawLBody, vis, hb.offset, hb.orient);
   }
@@ -1944,7 +1952,8 @@ function updateClawHitboxVisuals() {
   for (let i = 0; i < clawRHitboxes.length; i++) {
     const vis = clawRVis[i];
     if (!vis) continue; // ★nullガード
-    vis.visible = true;
+    vis.visible = debugLayerState.hitbox;
+    if (!debugLayerState.hitbox) continue;
     const hb = clawRHitboxes[i];
     updateHitboxFromBody(clawRBody, vis, hb.offset, hb.orient);
   }
@@ -3048,6 +3057,7 @@ world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
   updateContactDebugMarkers();
   updateBoxCenterOfMassDebug();
   updateForceDebugArrows();
+  applyHingeDebugVisibility();
 
 
 

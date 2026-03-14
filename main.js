@@ -1,6 +1,6 @@
+
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { ConvexHull } from "three/examples/jsm/math/ConvexHull.js";
 import * as CANNON from "cannon-es";
 
 const WORLD_SCALE = 0.25;
@@ -57,10 +57,15 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
   const posAttr = mesh.geometry?.attributes?.position;
   if (!posAttr || posAttr.count < 4) return null;
 
+  const indexAttr = mesh.geometry.index;
+  const vertices = [];
+  const faces = [];
+
   const worldV = new THREE.Vector3();
   const localV = new THREE.Vector3();
   const keyToNewIndex = new Map();
-  const uniquePoints = [];
+  const remap = new Array(posAttr.count);
+
   const keyFor = (v) => `${v.x.toFixed(5)}|${v.y.toFixed(5)}|${v.z.toFixed(5)}`;
 
   for (let i = 0; i < posAttr.count; i++) {
@@ -68,125 +73,43 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     localV.copy(worldV).sub(bodyWorldPos).applyQuaternion(invBodyWorldQuat);
 
     const k = keyFor(localV);
-    if (keyToNewIndex.has(k)) continue;
+    const existing = keyToNewIndex.get(k);
+    if (existing !== undefined) {
+      remap[i] = existing;
+      continue;
+    }
 
-    keyToNewIndex.set(k, uniquePoints.length);
-    uniquePoints.push(localV.clone());
+    const newIndex = vertices.length;
+    keyToNewIndex.set(k, newIndex);
+    remap[i] = newIndex;
+    vertices.push(new CANNON.Vec3(localV.x, localV.y, localV.z));
   }
 
-  if (uniquePoints.length < 4) return null;
+  const triCount = indexAttr ? indexAttr.count / 3 : posAttr.count / 3;
+  for (let t = 0; t < triCount; t++) {
+    const ia = indexAttr ? indexAttr.getX(t * 3) : t * 3;
+    const ib = indexAttr ? indexAttr.getX(t * 3 + 1) : t * 3 + 1;
+    const ic = indexAttr ? indexAttr.getX(t * 3 + 2) : t * 3 + 2;
 
-  const hull = new ConvexHull().setFromPoints(uniquePoints);
-  if (!hull.faces || hull.faces.length < 4) return null;
-
-  const pointToIndex = new Map();
-  uniquePoints.forEach((pt, idx) => pointToIndex.set(pt, idx));
-
-  const faces = [];
-  for (const face of hull.faces) {
-    const indices = [];
-    let edge = face.edge;
-    if (!edge) continue;
-
-    do {
-      const idx = pointToIndex.get(edge.head().point);
-      if (idx === undefined) break;
-      indices.push(idx);
-      edge = edge.next;
-    } while (edge && edge !== face.edge);
-
-    const normalized = normalizeFaceIndices(indices);
-    if (normalized.length >= 3) faces.push(normalized);
+    const a = remap[ia];
+    const b = remap[ib];
+    const c = remap[ic];
+    if (a === b || b === c || c === a) continue;
+    faces.push([a, b, c]);
   }
 
-  if (faces.length < 4) return null;
+  if (vertices.length < 4 || faces.length < 4) return null;
 
-  const vertices = uniquePoints.map((v) => new CANNON.Vec3(v.x, v.y, v.z));
-  orientFacesOutward(vertices, faces);
-
-  const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
+    const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
   const center = centerConvex(shape);
 
   return {
     shape,
-    offset: center,
+    offset: center, // ★ ここが重要
     orient: new CANNON.Quaternion(0, 0, 0, 1),
   };
+
 }
-
-
-function normalizeFaceIndices(indices) {
-  if (!indices || indices.length < 3) return [];
-
-  const out = [];
-  for (const idx of indices) {
-    if (!out.length || out[out.length - 1] !== idx) out.push(idx);
-  }
-
-  // 先頭と末尾が同じ閉ループ表現を除去
-  if (out.length >= 2 && out[0] === out[out.length - 1]) out.pop();
-
-  // 同一頂点だけで構成される退化面を除去
-  if (new Set(out).size < 3) return [];
-  return out;
-}
-
-function computeFaceNormal(vertices, face, target) {
-  const ab = new CANNON.Vec3();
-  const ac = new CANNON.Vec3();
-  const base = vertices[face[0]];
-
-  for (let j = 1; j < face.length - 1; j++) {
-    const vb = vertices[face[j]];
-    const vc = vertices[face[j + 1]];
-    if (!base || !vb || !vc) continue;
-
-    vb.vsub(base, ab);
-    vc.vsub(base, ac);
-    ab.cross(ac, target);
-
-    if (target.lengthSquared() > 1e-16) return true;
-  }
-
-  target.set(0, 0, 0);
-  return false;
-}
-
-function orientFacesOutward(vertices, faces) {
-  if (!vertices.length || !faces.length) return;
-
-  const normal = new CANNON.Vec3();
-  const toOther = new CANNON.Vec3();
-  const EPS = 1e-7;
-
-  // 反転判定を2回まわして収束させる（数値誤差で境界面が揺れるケース対策）
-  for (let pass = 0; pass < 2; pass++) {
-    for (let i = 0; i < faces.length; i++) {
-      const face = faces[i];
-      if (!face || face.length < 3) continue;
-
-      const va = vertices[face[0]];
-      if (!va) continue;
-
-      if (!computeFaceNormal(vertices, face, normal)) continue;
-
-      let maxDot = -Infinity;
-      for (let vi = 0; vi < vertices.length; vi++) {
-        if (face.includes(vi)) continue;
-
-        vertices[vi].vsub(va, toOther);
-        const d = normal.dot(toOther);
-        if (d > maxDot) maxDot = d;
-      }
-
-      // 他頂点が法線方向に出ている = 法線が内向き
-      if (maxDot > EPS) {
-        faces[i] = [...face].reverse();
-      }
-    }
-  }
-}
-
 function computeClawBoxes(meshRoot, {
   // 小さくして引っかかりを減らす（橋渡しなら有効）
   shrink = 0.98,

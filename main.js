@@ -34,9 +34,6 @@ const MAX_BOX_ANGULAR_SPEED_FREE = 30.0;
 const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
-const OZISAN_MODEL_PATH = "./models/ozisan.glb";
-const OZISAN_POSITION = { x: 0.95, y: -0.5, z: -4 };
-const OZISAN_SCALE = WORLD_SCALE * 5;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -1641,6 +1638,8 @@ let clawRVis = [];
 const physicsDebugEntries = [];
 const contactDebugMeshes = [];
 let boxComDebugMesh = null;
+let boxGravityArrow = null;
+let boxVelocityArrow = null;
 
 function createWireframeBoxMesh(halfExtents, color = 0x00ffff) {
   const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
@@ -1733,6 +1732,7 @@ function updateBodyDebugMeshes() {
   if (!SHOW_PHYSICS_DEBUG) return;
 
   for (const entry of physicsDebugEntries) {
+    entry.mesh.visible = true;
     updateHitboxFromBody(entry.body, entry.mesh, entry.shapeOffset, entry.shapeOrient);
   }
 }
@@ -1852,7 +1852,10 @@ function ensureBoxComDebugMesh() {
 }
 
 function updateBoxCenterOfMassDebug() {
-  if (!SHOW_PHYSICS_DEBUG || !boxComDebugMesh || !boxBody) return;
+  if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
+  ensureBoxComDebugMesh();
+  if (!boxComDebugMesh) return;
+  boxComDebugMesh.visible = true;
 
   const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
   const worldCom = new CANNON.Vec3();
@@ -1915,18 +1918,62 @@ function updateClawHitboxVisuals() {
   for (let i = 0; i < clawLHitboxes.length; i++) {
     const vis = clawLVis[i];
     if (!vis) continue; // ★nullガード
+    vis.visible = true;
     const hb = clawLHitboxes[i];
     updateHitboxFromBody(clawLBody, vis, hb.offset, hb.orient);
-    vis.visible = true;
   }
 
   // 右
   for (let i = 0; i < clawRHitboxes.length; i++) {
     const vis = clawRVis[i];
     if (!vis) continue; // ★nullガード
+    vis.visible = true;
     const hb = clawRHitboxes[i];
     updateHitboxFromBody(clawRBody, vis, hb.offset, hb.orient);
-    vis.visible = true;
+  }
+}
+
+function ensureForceDebugArrows() {
+  if (!SHOW_PHYSICS_DEBUG || !scene || boxGravityArrow || boxVelocityArrow) return;
+
+  boxGravityArrow = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 0.2, 0xff3366, 0.04, 0.02);
+  boxVelocityArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.2, 0x33ff99, 0.04, 0.02);
+  boxGravityArrow.renderOrder = 9999;
+  boxVelocityArrow.renderOrder = 9999;
+  scene.add(boxGravityArrow);
+  scene.add(boxVelocityArrow);
+}
+
+function updateForceDebugArrows() {
+  if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
+  ensureForceDebugArrows();
+  if (!boxGravityArrow || !boxVelocityArrow) return;
+
+  const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
+  const worldCom = new CANNON.Vec3();
+  boxBody.quaternion.vmult(localCom, worldCom);
+  worldCom.vadd(boxBody.position, worldCom);
+
+  boxGravityArrow.visible = true;
+  boxVelocityArrow.visible = true;
+  boxGravityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
+  boxVelocityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
+
+  const gravityVec = world.gravity.clone();
+  const gravityLen = gravityVec.length();
+  if (gravityLen > 1e-6) {
+    boxGravityArrow.setDirection(new THREE.Vector3(gravityVec.x / gravityLen, gravityVec.y / gravityLen, gravityVec.z / gravityLen));
+    boxGravityArrow.setLength(THREE.MathUtils.clamp(gravityLen * 0.04, 0.12, 0.5), 0.04, 0.02);
+  }
+
+  const v = boxBody.velocity;
+  const velLen = Math.hypot(v.x, v.y, v.z);
+  if (velLen > 1e-5) {
+    boxVelocityArrow.setDirection(new THREE.Vector3(v.x / velLen, v.y / velLen, v.z / velLen));
+    boxVelocityArrow.setLength(THREE.MathUtils.clamp(velLen * 0.12, 0.08, 0.45), 0.04, 0.02);
+  } else {
+    boxVelocityArrow.setDirection(new THREE.Vector3(1, 0, 0));
+    boxVelocityArrow.setLength(0.0001, 0.0001, 0.0001);
   }
 }
 
@@ -1973,7 +2020,7 @@ function threeVecToCannon(v) { return new CANNON.Vec3(v.x, v.y, v.z); }
 function threeQuatToCannon(q) { return new CANNON.Quaternion(q.x, q.y, q.z, q.w); }
 
 async function loadScene() {
-  const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf, ozisanGltf] =
+  const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf] =
     await Promise.all([
       loader.loadAsync("./models/Stick.glb"),
       loader.loadAsync("./models/box.glb"),
@@ -1981,7 +2028,6 @@ async function loadScene() {
       loader.loadAsync("./models/Arm_unit.glb"),
       loader.loadAsync("./models/ClawL.glb"),
       loader.loadAsync("./models/ClawR.glb"),
-      loader.loadAsync(OZISAN_MODEL_PATH),
     ]);
 function addDebugDotLocal(parent, localPos, size = 0.03) {
   // 重心マーカー（球）と見分けやすいよう、ヒンジ位置は立方体マーカーで表示
@@ -2137,13 +2183,6 @@ syncKinematicBodiesToVisualNow();
   centerToOriginAndGround(craneMesh);
   craneMesh.position.y -= 2;
   scene.add(craneMesh);
-
-  // ===== おじさん（見た目のみ / 当たり判定なし）=====
-  const ozisanMesh = ozisanGltf.scene;
-  ozisanMesh.scale.setScalar(OZISAN_SCALE);
-  centerToOriginAndGround(ozisanMesh);
-  ozisanMesh.position.set(OZISAN_POSITION.x, OZISAN_POSITION.y, OZISAN_POSITION.z);
-  scene.add(ozisanMesh);
 
   // ===== 物理：クレーン本体（静的・形状自動）=====
   craneMesh.updateMatrixWorld(true);
@@ -2918,6 +2957,7 @@ world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();
   updateBoxCenterOfMassDebug();
+  updateForceDebugArrows();
 
 
 

@@ -1648,7 +1648,6 @@ let clawRVis = [];
 const physicsDebugEntries = [];
 const contactDebugMeshes = [];
 let boxComDebugMesh = null;
-const hingeDebugMarkers = [];
 let boxGravityArrow = null;
 let boxVelocityArrow = null;
 
@@ -1743,8 +1742,7 @@ function updateBodyDebugMeshes() {
   if (!SHOW_PHYSICS_DEBUG) return;
 
   for (const entry of physicsDebugEntries) {
-    entry.mesh.visible = debugLayerState.bodyShape;
-    if (!debugLayerState.bodyShape) continue;
+    entry.mesh.visible = true;
     updateHitboxFromBody(entry.body, entry.mesh, entry.shapeOffset, entry.shapeOrient);
   }
 }
@@ -1872,10 +1870,6 @@ function ensureBoxComDebugMesh() {
 
 function updateBoxCenterOfMassDebug() {
   if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
-  if (!debugLayerState.centerOfMass) {
-    if (boxComDebugMesh) boxComDebugMesh.visible = false;
-    return;
-  }
   ensureBoxComDebugMesh();
   if (!boxComDebugMesh) return;
   boxComDebugMesh.visible = true;
@@ -1941,8 +1935,7 @@ function updateClawHitboxVisuals() {
   for (let i = 0; i < clawLHitboxes.length; i++) {
     const vis = clawLVis[i];
     if (!vis) continue; // ★nullガード
-    vis.visible = debugLayerState.hitbox;
-    if (!debugLayerState.hitbox) continue;
+    vis.visible = true;
     const hb = clawLHitboxes[i];
     updateHitboxFromBody(clawLBody, vis, hb.offset, hb.orient);
   }
@@ -1951,10 +1944,53 @@ function updateClawHitboxVisuals() {
   for (let i = 0; i < clawRHitboxes.length; i++) {
     const vis = clawRVis[i];
     if (!vis) continue; // ★nullガード
-    vis.visible = debugLayerState.hitbox;
-    if (!debugLayerState.hitbox) continue;
+    vis.visible = true;
     const hb = clawRHitboxes[i];
     updateHitboxFromBody(clawRBody, vis, hb.offset, hb.orient);
+  }
+}
+
+function ensureForceDebugArrows() {
+  if (!SHOW_PHYSICS_DEBUG || !scene || boxGravityArrow || boxVelocityArrow) return;
+
+  boxGravityArrow = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 0.2, 0xff3366, 0.04, 0.02);
+  boxVelocityArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.2, 0x33ff99, 0.04, 0.02);
+  boxGravityArrow.renderOrder = 9999;
+  boxVelocityArrow.renderOrder = 9999;
+  scene.add(boxGravityArrow);
+  scene.add(boxVelocityArrow);
+}
+
+function updateForceDebugArrows() {
+  if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
+  ensureForceDebugArrows();
+  if (!boxGravityArrow || !boxVelocityArrow) return;
+
+  const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
+  const worldCom = new CANNON.Vec3();
+  boxBody.quaternion.vmult(localCom, worldCom);
+  worldCom.vadd(boxBody.position, worldCom);
+
+  boxGravityArrow.visible = true;
+  boxVelocityArrow.visible = true;
+  boxGravityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
+  boxVelocityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
+
+  const gravityVec = world.gravity.clone();
+  const gravityLen = gravityVec.length();
+  if (gravityLen > 1e-6) {
+    boxGravityArrow.setDirection(new THREE.Vector3(gravityVec.x / gravityLen, gravityVec.y / gravityLen, gravityVec.z / gravityLen));
+    boxGravityArrow.setLength(THREE.MathUtils.clamp(gravityLen * 0.04, 0.12, 0.5), 0.04, 0.02);
+  }
+
+  const v = boxBody.velocity;
+  const velLen = Math.hypot(v.x, v.y, v.z);
+  if (velLen > 1e-5) {
+    boxVelocityArrow.setDirection(new THREE.Vector3(v.x / velLen, v.y / velLen, v.z / velLen));
+    boxVelocityArrow.setLength(THREE.MathUtils.clamp(velLen * 0.12, 0.08, 0.45), 0.04, 0.02);
+  } else {
+    boxVelocityArrow.setDirection(new THREE.Vector3(1, 0, 0));
+    boxVelocityArrow.setLength(0.0001, 0.0001, 0.0001);
   }
 }
 
@@ -3056,7 +3092,6 @@ world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
   updateContactDebugMarkers();
   updateBoxCenterOfMassDebug();
   updateForceDebugArrows();
-  applyHingeDebugVisibility();
 
 
 

@@ -95,7 +95,8 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
       edge = edge.next;
     } while (edge && edge !== face.edge);
 
-    if (indices.length >= 3) faces.push(indices);
+    const normalized = normalizeFaceIndices(indices);
+    if (normalized.length >= 3) faces.push(normalized);
   }
 
   if (faces.length < 4) return null;
@@ -113,38 +114,75 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
   };
 }
 
+
+function normalizeFaceIndices(indices) {
+  if (!indices || indices.length < 3) return [];
+
+  const out = [];
+  for (const idx of indices) {
+    if (!out.length || out[out.length - 1] !== idx) out.push(idx);
+  }
+
+  // 先頭と末尾が同じ閉ループ表現を除去
+  if (out.length >= 2 && out[0] === out[out.length - 1]) out.pop();
+
+  // 同一頂点だけで構成される退化面を除去
+  if (new Set(out).size < 3) return [];
+  return out;
+}
+
+function computeFaceNormal(vertices, face, target) {
+  const ab = new CANNON.Vec3();
+  const ac = new CANNON.Vec3();
+  const base = vertices[face[0]];
+
+  for (let j = 1; j < face.length - 1; j++) {
+    const vb = vertices[face[j]];
+    const vc = vertices[face[j + 1]];
+    if (!base || !vb || !vc) continue;
+
+    vb.vsub(base, ab);
+    vc.vsub(base, ac);
+    ab.cross(ac, target);
+
+    if (target.lengthSquared() > 1e-16) return true;
+  }
+
+  target.set(0, 0, 0);
+  return false;
+}
+
 function orientFacesOutward(vertices, faces) {
   if (!vertices.length || !faces.length) return;
 
-  const ab = new CANNON.Vec3();
-  const ac = new CANNON.Vec3();
   const normal = new CANNON.Vec3();
   const toOther = new CANNON.Vec3();
-  const EPS = 1e-8;
+  const EPS = 1e-7;
 
-  for (let i = 0; i < faces.length; i++) {
-    const face = faces[i];
-    if (!face || face.length < 3) continue;
+  // 反転判定を2回まわして収束させる（数値誤差で境界面が揺れるケース対策）
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < faces.length; i++) {
+      const face = faces[i];
+      if (!face || face.length < 3) continue;
 
-    const va = vertices[face[0]];
-    const vb = vertices[face[1]];
-    const vc = vertices[face[2]];
-    if (!va || !vb || !vc) continue;
+      const va = vertices[face[0]];
+      if (!va) continue;
 
-    vb.vsub(va, ab);
-    vc.vsub(va, ac);
-    ab.cross(ac, normal);
+      if (!computeFaceNormal(vertices, face, normal)) continue;
 
-    let maxDot = -Infinity;
-    for (let vi = 0; vi < vertices.length; vi++) {
-      if (face.includes(vi)) continue;
-      vertices[vi].vsub(va, toOther);
-      const d = normal.dot(toOther);
-      if (d > maxDot) maxDot = d;
-    }
+      let maxDot = -Infinity;
+      for (let vi = 0; vi < vertices.length; vi++) {
+        if (face.includes(vi)) continue;
 
-    if (maxDot > EPS) {
-      faces[i] = [...face].reverse();
+        vertices[vi].vsub(va, toOther);
+        const d = normal.dot(toOther);
+        if (d > maxDot) maxDot = d;
+      }
+
+      // 他頂点が法線方向に出ている = 法線が内向き
+      if (maxDot > EPS) {
+        faces[i] = [...face].reverse();
+      }
     }
   }
 }

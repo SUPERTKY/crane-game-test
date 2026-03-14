@@ -16,6 +16,15 @@ const ARM_HOLD_SPEED_Z = 1; // 前移動速度（1秒あたり）
 const PHYSICS_FIXED_DT = 1 / 120;
 const BOX_FALL_STOP_Y = -1;
 const SHOW_PHYSICS_DEBUG = true;
+const DEBUG_LAYER_DEFAULTS = {
+  hitbox: true,
+  bodyShape: true,
+  contactPoint: true,
+  centerOfMass: true,
+  forceVector: true,
+  hingePoint: true,
+};
+const debugLayerState = { ...DEBUG_LAYER_DEFAULTS };
 const CONTACT_DEBUG_LIMIT = 80;
 // 「持ち上げ成功率」より「ずらし成功率」を優先して調整
 const CLAW_BOX_FRICTION = 0.03;
@@ -34,9 +43,6 @@ const MAX_BOX_ANGULAR_SPEED_FREE = 30.0;
 const SHOW_BOX_INTERNAL_BALLAST_DEBUG = false;
 const STICK_VISUAL_POST_ROT = { x: 0, y: Math.PI / 2, z: 0 };
 const STICK_BODY_POST_ROT = { x: Math.PI / 2, y: 0, z: Math.PI / 2 };
-const OZISAN_MODEL_PATH = "./models/ozisan.glb";
-const OZISAN_POSITION = { x: 0.95, y: -0.5, z: -4 };
-const OZISAN_SCALE = WORLD_SCALE * 5;
 // 例：到達点（好きに調整）
 const ARM_MAX_X = 1.2;   // →でここまで
 const ARM_MIN_Z = -1.0;  // ↑(z-)でここまで
@@ -1261,6 +1267,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 document.body.style.margin = "0";
 document.body.style.overflow = "hidden";
 document.body.appendChild(renderer.domElement);
+createPhysicsDebugPanel();
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.75));
 const dir = new THREE.DirectionalLight(0xffffff, 1.0);
@@ -1641,6 +1648,9 @@ let clawRVis = [];
 const physicsDebugEntries = [];
 const contactDebugMeshes = [];
 let boxComDebugMesh = null;
+const hingeDebugMarkers = [];
+let boxGravityArrow = null;
+let boxVelocityArrow = null;
 
 function createWireframeBoxMesh(halfExtents, color = 0x00ffff) {
   const geo = new THREE.BoxGeometry(halfExtents.x * 2, halfExtents.y * 2, halfExtents.z * 2);
@@ -1657,7 +1667,7 @@ function createWireframeBoxMesh(halfExtents, color = 0x00ffff) {
 }
 
 function addBodyDebugMeshes(body, color = 0x00ffff) {
-  if (!SHOW_PHYSICS_DEBUG || !body) return;
+  if (!SHOW_PHYSICS_DEBUG || !debugLayerState.bodyShape || !body) return;
 
   for (let i = 0; i < body.shapes.length; i++) {
     const shape = body.shapes[i];
@@ -1733,6 +1743,8 @@ function updateBodyDebugMeshes() {
   if (!SHOW_PHYSICS_DEBUG) return;
 
   for (const entry of physicsDebugEntries) {
+    entry.mesh.visible = debugLayerState.bodyShape;
+    if (!debugLayerState.bodyShape) continue;
     updateHitboxFromBody(entry.body, entry.mesh, entry.shapeOffset, entry.shapeOrient);
   }
 }
@@ -1754,6 +1766,13 @@ function ensureContactDebugPool(count) {
 
 function updateContactDebugMarkers() {
   if (!SHOW_PHYSICS_DEBUG) return;
+
+  if (!debugLayerState.contactPoint) {
+    for (let i = 0; i < contactDebugMeshes.length; i++) {
+      contactDebugMeshes[i].visible = false;
+    }
+    return;
+  }
 
   const showCount = Math.min(world.contacts.length, CONTACT_DEBUG_LIMIT);
   ensureContactDebugPool(showCount);
@@ -1834,7 +1853,7 @@ function computeBodyLocalCenterOfMassApprox(body) {
 }
 
 function ensureBoxComDebugMesh() {
-  if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh) return;
+  if (!SHOW_PHYSICS_DEBUG || boxComDebugMesh || !debugLayerState.centerOfMass) return;
 
   boxComDebugMesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.022, 16, 16),
@@ -1852,7 +1871,14 @@ function ensureBoxComDebugMesh() {
 }
 
 function updateBoxCenterOfMassDebug() {
-  if (!SHOW_PHYSICS_DEBUG || !boxComDebugMesh || !boxBody) return;
+  if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
+  if (!debugLayerState.centerOfMass) {
+    if (boxComDebugMesh) boxComDebugMesh.visible = false;
+    return;
+  }
+  ensureBoxComDebugMesh();
+  if (!boxComDebugMesh) return;
+  boxComDebugMesh.visible = true;
 
   const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
   const worldCom = new CANNON.Vec3();
@@ -1915,19 +1941,136 @@ function updateClawHitboxVisuals() {
   for (let i = 0; i < clawLHitboxes.length; i++) {
     const vis = clawLVis[i];
     if (!vis) continue; // ★nullガード
+    vis.visible = debugLayerState.hitbox;
+    if (!debugLayerState.hitbox) continue;
     const hb = clawLHitboxes[i];
     updateHitboxFromBody(clawLBody, vis, hb.offset, hb.orient);
-    vis.visible = true;
   }
 
   // 右
   for (let i = 0; i < clawRHitboxes.length; i++) {
     const vis = clawRVis[i];
     if (!vis) continue; // ★nullガード
+    vis.visible = debugLayerState.hitbox;
+    if (!debugLayerState.hitbox) continue;
     const hb = clawRHitboxes[i];
     updateHitboxFromBody(clawRBody, vis, hb.offset, hb.orient);
-    vis.visible = true;
   }
+}
+
+function ensureForceDebugArrows() {
+  if (!SHOW_PHYSICS_DEBUG || !debugLayerState.forceVector || !scene || boxGravityArrow || boxVelocityArrow) return;
+
+  boxGravityArrow = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 0.2, 0xff3366, 0.04, 0.02);
+  boxVelocityArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.2, 0x33ff99, 0.04, 0.02);
+  boxGravityArrow.renderOrder = 9999;
+  boxVelocityArrow.renderOrder = 9999;
+  scene.add(boxGravityArrow);
+  scene.add(boxVelocityArrow);
+}
+
+function updateForceDebugArrows() {
+  if (!SHOW_PHYSICS_DEBUG || !boxBody) return;
+  if (!debugLayerState.forceVector) {
+    if (boxGravityArrow) boxGravityArrow.visible = false;
+    if (boxVelocityArrow) boxVelocityArrow.visible = false;
+    return;
+  }
+  ensureForceDebugArrows();
+  if (!boxGravityArrow || !boxVelocityArrow) return;
+
+  const localCom = computeBodyLocalCenterOfMassApprox(boxBody);
+  const worldCom = new CANNON.Vec3();
+  boxBody.quaternion.vmult(localCom, worldCom);
+  worldCom.vadd(boxBody.position, worldCom);
+
+  boxGravityArrow.visible = true;
+  boxVelocityArrow.visible = true;
+  boxGravityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
+  boxVelocityArrow.position.set(worldCom.x, worldCom.y, worldCom.z);
+
+  const gravityVec = world.gravity.clone();
+  const gravityLen = gravityVec.length();
+  if (gravityLen > 1e-6) {
+    boxGravityArrow.setDirection(new THREE.Vector3(gravityVec.x / gravityLen, gravityVec.y / gravityLen, gravityVec.z / gravityLen));
+    boxGravityArrow.setLength(THREE.MathUtils.clamp(gravityLen * 0.04, 0.12, 0.5), 0.04, 0.02);
+  }
+
+  const v = boxBody.velocity;
+  const velLen = Math.hypot(v.x, v.y, v.z);
+  if (velLen > 1e-5) {
+    boxVelocityArrow.setDirection(new THREE.Vector3(v.x / velLen, v.y / velLen, v.z / velLen));
+    boxVelocityArrow.setLength(THREE.MathUtils.clamp(velLen * 0.12, 0.08, 0.45), 0.04, 0.02);
+  } else {
+    boxVelocityArrow.setDirection(new THREE.Vector3(1, 0, 0));
+    boxVelocityArrow.setLength(0.0001, 0.0001, 0.0001);
+  }
+}
+
+function applyHingeDebugVisibility() {
+  const visible = !!debugLayerState.hingePoint;
+  for (const marker of hingeDebugMarkers) {
+    marker.visible = visible;
+  }
+}
+
+function createPhysicsDebugPanel() {
+  if (!SHOW_PHYSICS_DEBUG) return;
+
+  const panel = document.createElement("div");
+  panel.style.cssText = [
+    "position:fixed",
+    "top:14px",
+    "left:14px",
+    "z-index:12000",
+    "padding:10px 12px",
+    "border-radius:10px",
+    "background:rgba(0,0,0,0.62)",
+    "color:#fff",
+    "font:500 12px/1.35 system-ui,-apple-system,sans-serif",
+    "backdrop-filter:blur(2px)",
+  ].join(";");
+
+  const title = document.createElement("div");
+  title.textContent = "可視化レイヤー";
+  title.style.cssText = "font-weight:700;margin-bottom:6px;";
+  panel.appendChild(title);
+
+  const items = [
+    ["hitbox", "ヒットボックス"],
+    ["bodyShape", "物理シェイプ"],
+    ["contactPoint", "接触点"],
+    ["centerOfMass", "重心"],
+    ["forceVector", "力/速度ベクトル"],
+    ["hingePoint", "ヒンジ点"],
+  ];
+
+  for (const [key, label] of items) {
+    const row = document.createElement("label");
+    row.style.cssText = "display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer;";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!debugLayerState[key];
+    input.addEventListener("change", () => {
+      debugLayerState[key] = input.checked;
+      applyHingeDebugVisibility();
+    });
+
+    const text = document.createElement("span");
+    text.textContent = label;
+
+    row.appendChild(input);
+    row.appendChild(text);
+    panel.appendChild(row);
+  }
+
+  const hint = document.createElement("div");
+  hint.textContent = "※ 初期状態ですべてON";
+  hint.style.cssText = "margin-top:6px;opacity:0.8;font-size:11px;";
+  panel.appendChild(hint);
+
+  document.body.appendChild(panel);
 }
 
 
@@ -1973,7 +2116,7 @@ function threeVecToCannon(v) { return new CANNON.Vec3(v.x, v.y, v.z); }
 function threeQuatToCannon(q) { return new CANNON.Quaternion(q.x, q.y, q.z, q.w); }
 
 async function loadScene() {
-  const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf, ozisanGltf] =
+  const [stickGltf, boxGltf, craneGltf, armGltf, clawLGltf, clawRGltf] =
     await Promise.all([
       loader.loadAsync("./models/Stick.glb"),
       loader.loadAsync("./models/box.glb"),
@@ -1981,7 +2124,6 @@ async function loadScene() {
       loader.loadAsync("./models/Arm_unit.glb"),
       loader.loadAsync("./models/ClawL.glb"),
       loader.loadAsync("./models/ClawR.glb"),
-      loader.loadAsync(OZISAN_MODEL_PATH),
     ]);
 function addDebugDotLocal(parent, localPos, size = 0.03) {
   // 重心マーカー（球）と見分けやすいよう、ヒンジ位置は立方体マーカーで表示
@@ -1995,6 +2137,8 @@ function addDebugDotLocal(parent, localPos, size = 0.03) {
   m.renderOrder = 9999;
   m.position.copy(localPos);   // ★ローカル座標
   parent.add(m);               // ★親にぶら下げる
+  m.visible = !!debugLayerState.hingePoint;
+  hingeDebugMarkers.push(m);
   return m;
 }
 
@@ -2137,13 +2281,6 @@ syncKinematicBodiesToVisualNow();
   centerToOriginAndGround(craneMesh);
   craneMesh.position.y -= 2;
   scene.add(craneMesh);
-
-  // ===== おじさん（見た目のみ / 当たり判定なし）=====
-  const ozisanMesh = ozisanGltf.scene;
-  ozisanMesh.scale.setScalar(OZISAN_SCALE);
-  centerToOriginAndGround(ozisanMesh);
-  ozisanMesh.position.set(OZISAN_POSITION.x, OZISAN_POSITION.y, OZISAN_POSITION.z);
-  scene.add(ozisanMesh);
 
   // ===== 物理：クレーン本体（静的・形状自動）=====
   craneMesh.updateMatrixWorld(true);
@@ -2918,6 +3055,8 @@ world.step(PHYSICS_FIXED_DT, dt, MAX_SUB);
   updateBodyDebugMeshes();
   updateContactDebugMarkers();
   updateBoxCenterOfMassDebug();
+  updateForceDebugArrows();
+  applyHingeDebugVisibility();
 
 
 

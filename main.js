@@ -357,6 +357,9 @@ const BOX_CONTACT_ANGULAR_DAMPING = 0.36;
 const BOX_RELEASE_SETTLE_SECONDS = 0.22;
 const BOX_RELEASE_EXTRA_LINEAR_DAMPING = 0.42;
 const BOX_RELEASE_MAX_UPWARD_SPEED = 0.05;
+const BOX_SUPPORT_LINEAR_DAMPING = 0.62;
+const BOX_SUPPORT_MAX_UPWARD_SPEED = 0.015;
+const BOX_SUPPORT_CONTACT_MIN_NORMAL_Y = 0.5;
 
 const GRIP_CONTACT_DEBOUNCE_FRAMES = 8;
 const GRIP_MAX_UPWARD_NORMAL_Y = 0.45;
@@ -2353,6 +2356,31 @@ function stabilizePrizeBody(body) {
     body.linearDamping = Math.max(body.linearDamping, BOX_RELEASE_EXTRA_LINEAR_DAMPING);
     if (body.velocity.y > BOX_RELEASE_MAX_UPWARD_SPEED) {
       body.velocity.y = BOX_RELEASE_MAX_UPWARD_SPEED;
+    }
+  }
+
+  // 着地しているのに上方向へ跳ねる挙動を抑える
+  let supportedByStaticBody = false;
+  for (const c of world.contacts) {
+    let normalTowardBodyY = 0;
+    if (c.bi === body && c.bj.mass === 0) {
+      normalTowardBodyY = c.ni.y;
+    } else if (c.bj === body && c.bi.mass === 0) {
+      normalTowardBodyY = -c.ni.y;
+    } else {
+      continue;
+    }
+
+    if (normalTowardBodyY >= BOX_SUPPORT_CONTACT_MIN_NORMAL_Y) {
+      supportedByStaticBody = true;
+      break;
+    }
+  }
+
+  if (supportedByStaticBody && !clawContact) {
+    body.linearDamping = Math.max(body.linearDamping, BOX_SUPPORT_LINEAR_DAMPING);
+    if (body.velocity.y > BOX_SUPPORT_MAX_UPWARD_SPEED) {
+      body.velocity.y = BOX_SUPPORT_MAX_UPWARD_SPEED;
     }
   }
 

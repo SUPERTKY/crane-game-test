@@ -73,8 +73,10 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
   const keyToNewIndex = new Map();
   const remap = new Array(posAttr.count);
 
-  const keyFor = (v) => `${v.x.toFixed(5)}|${v.y.toFixed(5)}|${v.z.toFixed(5)}`;
+  const keyFor = (v) =>
+    `${v.x.toFixed(5)}|${v.y.toFixed(5)}|${v.z.toFixed(5)}`;
 
+  // 1) 頂点を body ローカルへ変換しつつ重複統合
   for (let i = 0; i < posAttr.count; i++) {
     worldV.fromBufferAttribute(posAttr, i).applyMatrix4(mesh.matrixWorld);
     localV.copy(worldV).sub(bodyWorldPos).applyQuaternion(invBodyWorldQuat);
@@ -92,30 +94,87 @@ function geometryToBodyLocalConvex(mesh, bodyWorldPos, invBodyWorldQuat) {
     vertices.push(new CANNON.Vec3(localV.x, localV.y, localV.z));
   }
 
+  if (vertices.length < 4) return null;
+
+  // 形状中心
+  const center = new THREE.Vector3();
+  for (const v of vertices) {
+    center.x += v.x;
+    center.y += v.y;
+    center.z += v.z;
+  }
+  center.divideScalar(vertices.length);
+
+  const a3 = new THREE.Vector3();
+  const b3 = new THREE.Vector3();
+  const c3 = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const faceCenter = new THREE.Vector3();
+  const outward = new THREE.Vector3();
+
+  const faceSet = new Set();
+
   const triCount = indexAttr ? indexAttr.count / 3 : posAttr.count / 3;
+
+  // 2) 三角形を face 化しつつ、退化面除去・winding 修正
   for (let t = 0; t < triCount; t++) {
     const ia = indexAttr ? indexAttr.getX(t * 3) : t * 3;
     const ib = indexAttr ? indexAttr.getX(t * 3 + 1) : t * 3 + 1;
     const ic = indexAttr ? indexAttr.getX(t * 3 + 2) : t * 3 + 2;
 
-    const a = remap[ia];
-    const b = remap[ib];
-    const c = remap[ic];
+    let a = remap[ia];
+    let b = remap[ib];
+    let c = remap[ic];
+
     if (a === b || b === c || c === a) continue;
+
+    a3.set(vertices[a].x, vertices[a].y, vertices[a].z);
+    b3.set(vertices[b].x, vertices[b].y, vertices[b].z);
+    c3.set(vertices[c].x, vertices[c].y, vertices[c].z);
+
+    ab.subVectors(b3, a3);
+    ac.subVectors(c3, a3);
+    normal.crossVectors(ab, ac);
+
+    // 面積ほぼ0の三角形は捨てる
+    if (normal.lengthSq() < 1e-10) continue;
+
+    faceCenter.copy(a3).add(b3).add(c3).divideScalar(3);
+    outward.subVectors(faceCenter, center);
+
+    // 外向きじゃなければ反転
+    if (normal.dot(outward) < 0) {
+      [b, c] = [c, b];
+    }
+
+    // 重複 face 除去（向き込みで判定）
+    const key = `${a},${b},${c}`;
+    const revKey = `${a},${c},${b}`;
+    if (faceSet.has(key) || faceSet.has(revKey)) continue;
+
+    faceSet.add(key);
     faces.push([a, b, c]);
   }
 
-  if (vertices.length < 4 || faces.length < 4) return null;
+  if (faces.length < 4) return null;
 
-    const shape = new CANNON.ConvexPolyhedron({ vertices, faces });
-  const center = centerConvex(shape);
+  let shape;
+  try {
+    shape = new CANNON.ConvexPolyhedron({ vertices, faces });
+  } catch (e) {
+    console.warn("ConvexPolyhedron build failed:", mesh.name, e);
+    return null;
+  }
+
+  const offset = centerConvex(shape);
 
   return {
     shape,
-    offset: center, // ★ ここが重要
+    offset,
     orient: new CANNON.Quaternion(0, 0, 0, 1),
   };
-
 }
 function computeClawBoxes(meshRoot, {
   // 小さくして引っかかりを減らす（橋渡しなら有効）

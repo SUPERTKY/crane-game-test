@@ -347,6 +347,7 @@ const ARM_DROP_DIST  = 1.0;  // 下げる距離（Y方向）
 const ARM_DROP_SPEED = 0.22;   // 下げる速さ（1秒あたり）
 const CLAW_CLOSE_TIME = 2.0;  // 閉じるのにかける秒（見た目上の閉じ切り目安）
 const CLAW_CLOSE_WAIT_MAX_SEC = 3.0; // 閉じ工程の最短待機秒（この秒数未満では上昇へ移行しない）
+const CLAW_CLOSE_STOP_DELAY_SEC = 0.5; // 回転停止信号を検出してから実際に停止するまでの遅延
 const CLAW_FULLY_CLOSED_EPS = 0.02;  // ほぼ閉じ切りとみなす閾値（open01）
 const CLAW_CONTACT_HOLD_FRAMES = 4; // 接触判定の瞬断でガタつかないよう保持
 const CLAW_CLOSE_DAMP_BOX = 0.18;   // 箱接触中も少しだけ閉じを許可（閉じ切れない問題を軽減）
@@ -466,9 +467,11 @@ let autoT = 0;
 let step3WaitT = 0;
 let step3StartOpen01 = 0;
 let step3CloseStopOpen01 = null;
+let step3CloseStopSignalT = 0;
 let step5StartOpen01 = 0;
 let step6StartOpen01 = 0;
 let step6CloseStopOpen01 = null;
+let step6CloseStopSignalT = 0;
 let dropStartY = 0;
 let autoStarted = false;
 let clawDropPenetrationT = 0;
@@ -1565,9 +1568,13 @@ function startAutoSequence() {
   // Fix 4: ラッチ状態リセット
   step4PressureLatched = false;
   step4PressureReleasedT = 0;
+  step3StartOpen01 = 0;
+  step3CloseStopOpen01 = null;
+  step3CloseStopSignalT = 0;
   step5StartOpen01 = 0;
   step6StartOpen01 = 0;
   step6CloseStopOpen01 = null;
+  step6CloseStopSignalT = 0;
 }
 
 
@@ -2850,6 +2857,7 @@ if (autoStarted) {
       step3WaitT = 0;
       step3StartOpen01 = clawOpen01;
       step3CloseStopOpen01 = null;
+      step3CloseStopSignalT = 0;
       clawDropPenetrationT = 0;
       step2BoxPressFrames = 0;
       step2LockYActive = false;
@@ -2908,7 +2916,12 @@ if (autoStarted) {
       getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
 
     if (closeOverPressure && step3CloseStopOpen01 == null) {
-      step3CloseStopOpen01 = clawOpen01;
+      step3CloseStopSignalT += dt;
+      if (step3CloseStopSignalT >= CLAW_CLOSE_STOP_DELAY_SEC) {
+        step3CloseStopOpen01 = clawOpen01;
+      }
+    } else {
+      step3CloseStopSignalT = 0;
     }
 
     const closeCmdOpen01 = step3CloseStopOpen01 == null
@@ -2999,6 +3012,7 @@ if (autoStarted) {
       autoT = 0;
       step6StartOpen01 = clawOpen01;
       step6CloseStopOpen01 = null;
+      step6CloseStopSignalT = 0;
     }
 
   } else if (autoStep === 6) {
@@ -3014,7 +3028,12 @@ if (autoStarted) {
       getMaxPenetrationDepth(clawRBody, boxBody) > CLAW_CLOSE_PENETRATION_THRESHOLD;
 
     if (closeOverPressure && step6CloseStopOpen01 == null) {
-      step6CloseStopOpen01 = clawOpen01;
+      step6CloseStopSignalT += dt;
+      if (step6CloseStopSignalT >= CLAW_CLOSE_STOP_DELAY_SEC) {
+        step6CloseStopOpen01 = clawOpen01;
+      }
+    } else {
+      step6CloseStopSignalT = 0;
     }
 
     const closeCmdOpen01 = step6CloseStopOpen01 == null

@@ -2195,23 +2195,6 @@ async function loadScene() {
       loader.loadAsync("./models/ClawL.glb"),
       loader.loadAsync("./models/ClawR.glb"),
     ]);
-function addDebugDotLocal(parent, localPos, size = 0.03) {
-  // 重心マーカー（球）と見分けやすいよう、ヒンジ位置は立方体マーカーで表示
-  const geo = new THREE.BoxGeometry(size * 1.4, size * 1.4, size * 1.4);
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0x00ffff,
-    depthTest: false,
-    depthWrite: false,
-  });
-  const m = new THREE.Mesh(geo, mat);
-  m.renderOrder = 9999;
-  m.position.copy(localPos);   // ★ローカル座標
-  parent.add(m);               // ★親にぶら下げる
-  m.visible = !!debugLayerState.hingePoint;
-  hingeDebugMarkers.push(m);
-  return m;
-}
-
 
 function getBoxWorld(obj) {
   obj.updateWorldMatrix(true, true);
@@ -2299,14 +2282,7 @@ const hingeR_world = boxTopCenterWorld(boxR);
 placePivotAtWorld(clawLPivot, clawPivot, hingeL_world);
 placePivotAtWorld(clawRPivot, clawPivot, hingeR_world);
 
-const hingeL_local = clawPivot.worldToLocal(hingeL_world.clone());
-const hingeR_local = clawPivot.worldToLocal(hingeR_world.clone());
-
-addDebugDotLocal(clawPivot, hingeL_local, 0.03);
-addDebugDotLocal(clawPivot, hingeR_local, 0.03);
-
-
-
+// 爪の回転軸（ヒンジ点）可視化マーカーは非表示化。
 
 // ★爪の原点がヒンジに無い場合の補正（要調整）
 clawLMesh.position.set(0, -1.95, -0.2);

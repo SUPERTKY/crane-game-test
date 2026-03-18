@@ -556,7 +556,19 @@ function stopAudio(audio) {
   audio.currentTime = 0;
 }
 
+let isPauseOverlayActive = false;
+
+function pauseAudio(audio) {
+  if (!audio) return;
+  audio.pause();
+}
+
 function updateBgmState({ forceReplay = false } = {}) {
+  if (isPauseOverlayActive) {
+    Object.values(AUDIO_TRACKS).forEach((audio) => pauseAudio(audio));
+    return;
+  }
+
   const inPlaySequence = autoStarted && autoStep >= 2 && autoStep <= 4;
   const inBeforeState = !autoStarted && !isArrowBeingHeld && phase === 0;
   const nextKey = inPlaySequence ? "play" : (isArrowBeingHeld ? "move" : (inBeforeState ? "before" : null));
@@ -588,24 +600,28 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 1
 camera.position.set(0, 2, 3.2);
 camera.lookAt(0, 0.4, 0);
 // ===== カメラ切替ボタン =====
+function applyRoundButtonStyle(btn) {
+  btn.style.position = "fixed";
+  btn.style.width = "100px";
+  btn.style.height = "100px";
+  btn.style.padding = "0";
+  btn.style.border = "none";
+  btn.style.borderRadius = "12px";
+  btn.style.background = "rgba(255,255,255,0.85)";
+  btn.style.boxShadow = "0 6px 18px rgba(0,0,0,0.18)";
+  btn.style.cursor = "pointer";
+  btn.style.display = "grid";
+  btn.style.placeItems = "center";
+  btn.style.userSelect = "none";
+  btn.style.zIndex = "9999";
+}
+
 const camBtn = document.createElement("button");
 camBtn.type = "button";
 camBtn.title = "カメラ切替";
-camBtn.style.position = "fixed";
 camBtn.style.right = "18px";
 camBtn.style.bottom = "18px";
-camBtn.style.width = "100px";
-camBtn.style.height = "100px";
-camBtn.style.padding = "0";
-camBtn.style.border = "none";
-camBtn.style.borderRadius = "12px";
-camBtn.style.background = "rgba(255,255,255,0.85)";
-camBtn.style.boxShadow = "0 6px 18px rgba(0,0,0,0.18)";
-camBtn.style.cursor = "pointer";
-camBtn.style.display = "grid";
-camBtn.style.placeItems = "center";
-camBtn.style.userSelect = "none";
-camBtn.style.zIndex = "9999";
+applyRoundButtonStyle(camBtn);
 
 const camImg = document.createElement("img");
 camImg.src = "./assets/camera.png";
@@ -618,24 +634,35 @@ camBtn.appendChild(camImg);
 document.body.appendChild(camBtn);
 
 // ===== リセットボタン =====
+const stopBtn = document.createElement("button");
+stopBtn.type = "button";
+stopBtn.title = "一時停止";
+stopBtn.style.left = "18px";
+stopBtn.style.bottom = "136px";
+applyRoundButtonStyle(stopBtn);
+
+const stopImg = document.createElement("img");
+stopImg.src = "./assets/Stop.png";
+stopImg.alt = "stop";
+stopImg.style.width = "70%";
+stopImg.style.height = "70%";
+stopImg.style.pointerEvents = "none";
+stopImg.addEventListener("error", () => {
+  stopBtn.textContent = "STOP";
+  stopBtn.style.fontWeight = "700";
+  stopBtn.style.fontSize = "18px";
+  stopBtn.style.color = "#333";
+});
+stopBtn.appendChild(stopImg);
+
+document.body.appendChild(stopBtn);
+
 const resetBtn = document.createElement("button");
 resetBtn.type = "button";
 resetBtn.title = "リセット";
-resetBtn.style.position = "fixed";
 resetBtn.style.left = "18px";
 resetBtn.style.bottom = "18px";
-resetBtn.style.width = "100px";
-resetBtn.style.height = "100px";
-resetBtn.style.padding = "0";
-resetBtn.style.border = "none";
-resetBtn.style.borderRadius = "12px";
-resetBtn.style.background = "rgba(255,255,255,0.85)";
-resetBtn.style.boxShadow = "0 6px 18px rgba(0,0,0,0.18)";
-resetBtn.style.cursor = "pointer";
-resetBtn.style.display = "grid";
-resetBtn.style.placeItems = "center";
-resetBtn.style.userSelect = "none";
-resetBtn.style.zIndex = "9999";
+applyRoundButtonStyle(resetBtn);
 
 const resetImg = document.createElement("img");
 resetImg.src = "./assets/Reset.png";
@@ -669,6 +696,25 @@ arrowUI.style.zIndex = "9999";
 
 document.body.appendChild(arrowUI);
 
+const pauseOverlay = document.createElement("div");
+pauseOverlay.style.position = "fixed";
+pauseOverlay.style.inset = "0";
+pauseOverlay.style.display = "none";
+pauseOverlay.style.alignItems = "center";
+pauseOverlay.style.justifyContent = "center";
+pauseOverlay.style.background = "rgba(120, 120, 120, 0.68)";
+pauseOverlay.style.color = "#ffffff";
+pauseOverlay.style.fontSize = "clamp(28px, 4vw, 52px)";
+pauseOverlay.style.fontWeight = "700";
+pauseOverlay.style.letterSpacing = "0.08em";
+pauseOverlay.style.textShadow = "0 6px 18px rgba(0,0,0,0.35)";
+pauseOverlay.style.opacity = "0";
+pauseOverlay.style.pointerEvents = "none";
+pauseOverlay.style.transition = "opacity 180ms ease-out";
+pauseOverlay.style.zIndex = "11000";
+pauseOverlay.textContent = "タップして再開";
+document.body.appendChild(pauseOverlay);
+
 const getOverlay = document.createElement("div");
 getOverlay.style.position = "fixed";
 getOverlay.style.inset = "0";
@@ -697,6 +743,50 @@ document.body.appendChild(getOverlay);
 let hasShownGetOverlay = false;
 let stop3dRequested = false;
 
+function setButtonsInteractive(enabled) {
+  const pointerEvents = enabled ? "auto" : "none";
+  const arrowEnabled = enabled ? "1" : "0.45";
+  const roundEnabled = enabled ? "1" : "0.6";
+
+  arrowUI.style.pointerEvents = pointerEvents;
+  arrowUI.style.opacity = arrowEnabled;
+  camBtn.style.pointerEvents = pointerEvents;
+  camBtn.style.opacity = roundEnabled;
+  stopBtn.style.pointerEvents = pointerEvents;
+  stopBtn.style.opacity = roundEnabled;
+  resetBtn.style.pointerEvents = pointerEvents;
+  resetBtn.style.opacity = roundEnabled;
+}
+
+function openPauseOverlay() {
+  if (isPauseOverlayActive || hasShownGetOverlay) return;
+  isPauseOverlayActive = true;
+  holdMove.x = 0;
+  holdMove.z = 0;
+  isArrowBeingHeld = false;
+  setButtonsInteractive(false);
+  pauseOverlay.style.display = "flex";
+  pauseOverlay.style.pointerEvents = "auto";
+  requestAnimationFrame(() => {
+    pauseOverlay.style.opacity = "1";
+  });
+  Object.values(AUDIO_TRACKS).forEach((audio) => pauseAudio(audio));
+  pauseAudio(COMPLETE_AUDIO);
+}
+
+function closePauseOverlay() {
+  if (!isPauseOverlayActive) return;
+  isPauseOverlayActive = false;
+  pauseOverlay.style.opacity = "0";
+  pauseOverlay.style.pointerEvents = "none";
+  setButtonsInteractive(true);
+  window.setTimeout(() => {
+    if (isPauseOverlayActive) return;
+    pauseOverlay.style.display = "none";
+  }, 180);
+  updateBgmState({ forceReplay: true });
+}
+
 function showGetOverlay() {
   if (hasShownGetOverlay) return;
   hasShownGetOverlay = true;
@@ -712,12 +802,7 @@ function showGetOverlay() {
   COMPLETE_AUDIO.currentTime = 0;
   tryPlayAudio(COMPLETE_AUDIO);
 
-  arrowUI.style.pointerEvents = "none";
-  arrowUI.style.opacity = "0.45";
-  camBtn.style.pointerEvents = "none";
-  camBtn.style.opacity = "0.6";
-  resetBtn.style.pointerEvents = "none";
-  resetBtn.style.opacity = "0.6";
+  setButtonsInteractive(false);
 
   getOverlay.style.display = "block";
   requestAnimationFrame(() => {
@@ -1324,11 +1409,21 @@ function applyCamera() {
 applyCamera();
 
 camBtn.addEventListener("click", () => {
+  if (isPauseOverlayActive) return;
   camMode = 1 - camMode;
   applyCamera();
 });
 
+stopBtn.addEventListener("click", () => {
+  openPauseOverlay();
+});
+
+pauseOverlay.addEventListener("click", () => {
+  closePauseOverlay();
+});
+
 resetBtn.addEventListener("click", () => {
+  if (isPauseOverlayActive) return;
   window.location.reload();
 });
 
@@ -1497,7 +1592,7 @@ function bindHoldMove(btn, onStart, onEnd) {
   };
 
   btn.addEventListener("pointerdown", (e) => {
-    if (btn.disabled) return;
+    if (btn.disabled || isPauseOverlayActive) return;
     e.preventDefault();
 
     btn._pid = e.pointerId;
